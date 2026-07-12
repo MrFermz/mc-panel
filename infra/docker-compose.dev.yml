@@ -1,0 +1,53 @@
+# dev infra เท่านั้น (postgres/redis/nats) — service หลักรันนอก docker ด้วย make run-*
+# ทุก port bind 127.0.0.1 เท่านั้น ห้ามเปิด 0.0.0.0 แม้จะเป็น dev
+# secret มาจาก ../.env (สร้างด้วย make env ก่อน)
+name: mcpanel-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?run 'make env' first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run 'make env' first}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    environment:
+      NATS_CONTROL_USER: ${NATS_CONTROL_USER}
+      NATS_CONTROL_PASSWORD: ${NATS_CONTROL_PASSWORD}
+      NATS_AGENT_USER: ${NATS_AGENT_USER}
+      NATS_AGENT_PASSWORD: ${NATS_AGENT_PASSWORD}
+    volumes:
+      - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - natsdata:/data
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222" # monitoring
+
+  # adminer เปิดเฉพาะตอน debug: docker compose --profile debug up -d
+  adminer:
+    image: adminer
+    profiles: ["debug"]
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  pgdata:
+  natsdata:

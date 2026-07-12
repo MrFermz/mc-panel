@@ -1,0 +1,205 @@
+// Package events เป็น fan-out realtime ฝั่ง browser (WS /ws/events) — push
+// server_status/server_stats/node_stats/server_jobs จาก hook ใน agenthub/jobs
+// ไปหน้าเว็บ เพื่อเลิก poll REST. คนละ hub กับ console (console เป็น per-server
+// stream + ring history; อันนี้เป็น panel-wide event ที่ filter ต่อ subscriber
+// ตามสิทธิ์). ห้าม import httpapi เพื่อกัน import cycle — payload struct นิยามเอง
+// ให้ตรง JSON shape ของ REST ทุกตัว
+package events
+
+import (
+	"encoding/json"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/mc-panel/control-plane/internal/store"
+)
+
+// ServerStatsPayload มิเรอร์ httpapi.serverStatsView field-for-field
+type ServerStatsPayload struct {
+	CPUPercent    float64   `json:"cpu_percent"`
+	MemoryUsedMB  int64     `json:"memory_used_mb"`
+	MemoryLimitMB int64     `json:"memory_limit_mb"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// NodePayload มิเรอร์ httpapi.nodeView field-for-field (หนึ่ง item ของ GET /api/nodes)
+type NodePayload struct {
+	ID              uuid.UUID  `json:"id"`
+	Name            string     `json:"name"`
+	Status          string     `json:"status"`
+	AgentVersion    string     `json:"agent_version"`
+	OS              string     `json:"os"`
+	Arch            string     `json:"arch"`
+	CPUPercent      float64    `json:"cpu_percent"`
+	MemoryUsedMB    int64      `json:"memory_used_mb"`
+	MemoryTotalMB   int64      `json:"memory_total_mb"`
+	DiskUsedMB      int64      `json:"disk_used_mb"`
+	DiskTotalMB     int64      `json:"disk_total_mb"`
+	LastHeartbeatAt *time.Time `json:"last_heartbeat_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
+// NewNodePayload สร้าง payload จาก store.Node — จุดเดียวที่ map field เพื่อกัน drift
+// กับ nodeView (ทั้งคู่ต้องตรง shape เดียวกันตาม docs/api.md)
+func NewNodePayload(n *store.Node) NodePayload {
+	return NodePayload{
+		ID:              n.ID,
+		Name:            n.Name,
+		Status:          n.Status,
+		AgentVersion:    n.AgentVersion,
+		OS:              n.OS,
+		Arch:            n.Arch,
+		CPUPercent:      n.CPUPercent,
+		MemoryUsedMB:    n.MemoryUsedMB,
+		MemoryTotalMB:   n.MemoryTotalMB,
+		DiskUsedMB:      n.DiskUsedMB,
+		DiskTotalMB:     n.DiskTotalMB,
+		LastHeartbeatAt: n.LastHeartbeatAt,
+		CreatedAt:       n.CreatedAt,
+	}
+}
+
+// message* struct — marshal ครั้งเดียวที่ broadcast แล้ว fan-out เป็น json.RawMessage
+// (Stats ไม่มี omitempty เพราะ contract บังคับ null เมื่อ server ไม่ได้ running)
+type serverStatsMsg struct {
+	Type     string              `json:"type"`
+	ServerID uuid.UUID           `json:"server_id"`
+	Stats    *ServerStatsPayload `json:"stats"`
+}
+
+type serverStatusMsg struct {
+	Type     string    `json:"type"`
+	ServerID uuid.UUID `json:"server_id"`
+	Status   string    `json:"status"`
+}
+
+type serverJobsMsg struct {
+	Type     string    `json:"type"`
+	ServerID uuid.UUID `json:"server_id"`
+}
+
+type nodeStatsMsg struct {
+	Type string      `json:"type"`
+	Node NodePayload `json:"node"`
+}
+
+// subscriber คือ browser connection หนึ่งตัว — write loop อ่านจาก ch
+type subscriber struct {
+	ch chan json.RawMessage
+	// seeAllServers: is_admin หรือ servers.view_all → เห็น server event ทุกตัว
+	seeAllServers bool
+	// seeNodes: is_admin หรือ nodes.manage → เห็น node_stats
+	seeNodes bool
+
+	// allowed คือ set ของ server ที่ subscriber นี้เข้าถึงได้ (owner/permission)
+	// handler refresh ทุก ~15s ผ่าน setAllowed → broadcast อ่านภายใต้ mu เดียวกัน
+	mu      sync.Mutex
+	allowed map[uuid.UUID]bool
+}
+
+func (s *subscriber) canSeeServer(serverID uuid.UUID) bool {
+	if s.seeAllServers {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.allowed[serverID]
+}
+
+func (s *subscriber) setAllowed(allowed map[uuid.UUID]bool) {
+	s.mu.Lock()
+	s.allowed = allowed
+	s.mu.Unlock()
+}
+
+// Hub fan-out ไป browser subscribers ทั้งหมด โดย filter ต่อ subscriber ตามสิทธิ์
+type Hub struct {
+	mu   sync.Mutex
+	subs map[*subscriber]struct{}
+}
+
+func NewHub() *Hub {
+	return &Hub{subs: make(map[*subscriber]struct{})}
+}
+
+// subscribe register connection ใหม่ (buffer ลึกเท่า console hub = 128)
+func (h *Hub) subscribe(seeAllServers, seeNodes bool, allowed map[uuid.UUID]bool) *subscriber {
+	sub := &subscriber{
+		ch:            make(chan json.RawMessage, 128),
+		seeAllServers: seeAllServers,
+		seeNodes:      seeNodes,
+		allowed:       allowed,
+	}
+	h.mu.Lock()
+	h.subs[sub] = struct{}{}
+	h.mu.Unlock()
+	return sub
+}
+
+func (h *Hub) unsubscribe(sub *subscriber) {
+	h.mu.Lock()
+	delete(h.subs, sub)
+	h.mu.Unlock()
+}
+
+// ServerStats push stats ของ server หนึ่งตัว — stat=nil → JSON stats:null
+// (mirror statsViewFor: emit ตัวเลขเฉพาะตอน running & มี cache)
+func (h *Hub) ServerStats(serverID uuid.UUID, stat *ServerStatsPayload) {
+	data, err := json.Marshal(serverStatsMsg{Type: "server_stats", ServerID: serverID, Stats: stat})
+	if err != nil {
+		return
+	}
+	h.fanoutServer(serverID, data)
+}
+
+func (h *Hub) ServerStatus(serverID uuid.UUID, status string) {
+	data, err := json.Marshal(serverStatusMsg{Type: "server_status", ServerID: serverID, Status: status})
+	if err != nil {
+		return
+	}
+	h.fanoutServer(serverID, data)
+}
+
+func (h *Hub) ServerJobs(serverID uuid.UUID) {
+	data, err := json.Marshal(serverJobsMsg{Type: "server_jobs", ServerID: serverID})
+	if err != nil {
+		return
+	}
+	h.fanoutServer(serverID, data)
+}
+
+func (h *Hub) NodeStats(node NodePayload) {
+	data, err := json.Marshal(nodeStatsMsg{Type: "node_stats", Node: node})
+	if err != nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for sub := range h.subs {
+		if sub.seeNodes {
+			send(sub, data)
+		}
+	}
+}
+
+// fanoutServer ส่งไปเฉพาะ subscriber ที่เห็น server นี้ได้ (view_all/admin หรือมีสิทธิ์)
+func (h *Hub) fanoutServer(serverID uuid.UUID, data json.RawMessage) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for sub := range h.subs {
+		if sub.canSeeServer(serverID) {
+			send(sub, data)
+		}
+	}
+}
+
+// send non-blocking: subscriber ที่อ่านช้าจน buffer เต็มยอมให้ event หล่นหาย
+// (เหมือน console hub) — ดีกว่า block fan-out ของทุก connection
+func send(sub *subscriber, data json.RawMessage) {
+	select {
+	case sub.ch <- data:
+	default:
+	}
+}

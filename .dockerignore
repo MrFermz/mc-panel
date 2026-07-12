@@ -1,0 +1,16 @@
+# build context ของ control-plane/node-agent คือ repo root — กันไฟล์ที่ไม่เกี่ยว
+# และที่สำคัญที่สุด: ห้าม .env หลุดเข้า image เด็ดขาด
+.env
+.env.*
+data/
+bin/
+apps/web/node_modules/
+apps/web/.next/
+docs/
+scripts/
+infra/
+Makefile
+README.md
+CLAUDE.md
+.gitignore
+.gitattributes

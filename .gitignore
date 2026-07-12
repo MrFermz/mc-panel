@@ -1,0 +1,25 @@
+# build artifacts
+/bin/
+
+# หมายเหตุ: packages/proto/gen และ packages/shared-types/gen ไม่ gitignore
+# ตาม design decision ที่ตกลงไว้ — generated proto code ต้อง commit เข้า repo
+# เพื่อให้ build ได้ทันทีหลัง clone โดยไม่ต้องมี buf ติดตั้งก่อน
+
+# frontend
+apps/web/node_modules/
+apps/web/.next/
+
+# go
+*.test
+*.out
+
+# os
+.DS_Store
+Thumbs.db
+
+# env
+.env
+.env.local
+
+# ข้อมูล MC servers ตอนรัน local (MC_DATA_DIR default)
+/data/

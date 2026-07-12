@@ -1,0 +1,31 @@
+# Reverse proxy หน้าสุดของ mc-panel — ทำให้ web กับ API อยู่ origin เดียวกัน
+# (httpOnly cookie ใช้ได้ตรง ๆ ไม่ต้องเปิด CORS)
+#
+# Production ที่มี domain จริง: เปลี่ยน :80 เป็น domain แล้วลบ auto_https off
+# Caddy จะจัดการ TLS ให้เอง จากนั้นตั้ง COOKIE_SECURE=true ที่ control-plane
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# API + WebSocket ไป control-plane (reverse_proxy ของ caddy รองรับ ws upgrade ในตัว)
+	@backend path /api/* /ws/* /healthz
+	handle @backend {
+		reverse_proxy control-plane:8080
+	}
+
+	# ที่เหลือทั้งหมดไป Next.js
+	handle {
+		reverse_proxy web:3000
+	}
+}

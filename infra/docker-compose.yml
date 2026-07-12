@@ -1,0 +1,135 @@
+# ============================================================
+# mc-panel full stack — ทุก service รันบน docker ทั้งหมด
+#
+# แยก 3 network ชัดเจน:
+#   edge            caddy <-> web/control-plane (+ egress ของ service ที่ต้องออก internet)
+#   core (internal) control-plane <-> postgres/redis/nats <-> node-agent — ไม่มีทางออก internet
+#   mcpanel-servers Minecraft containers ที่ node-agent สร้าง (แยกขาดจาก core,
+#                   velocity คุยกับ backend servers ในวงนี้)
+#
+# ใช้งาน:  make env && make runtime-images && make up
+# secret ทั้งหมดมาจาก .env ที่ root (สร้างด้วย make env) — ห้าม hardcode ในไฟล์นี้
+# ============================================================
+name: mcpanel
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${PANEL_HTTP_PORT:-8000}:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [edge]
+    depends_on:
+      web:
+        condition: service_started
+      control-plane:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../apps/web
+    restart: unless-stopped
+    networks: [edge]
+
+  control-plane:
+    build:
+      context: ..
+      dockerfile: apps/control-plane/Dockerfile
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: ":8080"
+      GRPC_ADDR: ":9090"
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      NATS_URL: nats://${NATS_CONTROL_USER}:${NATS_CONTROL_PASSWORD}@nats:4222
+      JWT_SECRET: ${JWT_SECRET:?run 'make env' first}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      NODE_TOKEN: ${NODE_TOKEN}
+      # อยู่หลัง caddy ที่ terminate http — ถ้า front ด้วย TLS แล้วให้เปลี่ยนเป็น true
+      COOKIE_SECURE: "false"
+    networks: [edge, core]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      nats:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/control-plane", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  node-agent:
+    build:
+      context: ..
+      dockerfile: apps/node-agent/Dockerfile
+    restart: unless-stopped
+    environment:
+      AGENT_TOKEN: ${NODE_TOKEN}
+      CONTROL_PLANE_GRPC: control-plane:9090
+      NATS_URL: nats://${NATS_AGENT_USER}:${NATS_AGENT_PASSWORD}@nats:4222
+      MC_DATA_DIR: ${MC_DATA_DIR}
+      MC_NETWORK: mcpanel-servers
+      MC_RUNTIME_IMAGE_PREFIX: mcpanel/mc-runtime
+    volumes:
+      # จำเป็น: agent สร้าง sibling container ผ่าน docker daemon ของ host
+      # นี่คือ attack surface ที่ใหญ่ที่สุดของระบบ — ดู docs/architecture.md หัวข้อ security
+      - /var/run/docker.sock:/var/run/docker.sock
+      # ต้อง mount ด้วย path เดียวกันทั้งสองฝั่ง เพราะ agent ใช้ path นี้
+      # ทั้งเขียนไฟล์เองและสั่ง bind mount ให้ MC container (docker daemon มองจาก host)
+      - ${MC_DATA_DIR:?run 'make env' first}:${MC_DATA_DIR}
+    networks: [edge, core]
+    depends_on:
+      control-plane:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?run 'make env' first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    networks: [core]
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    environment:
+      NATS_CONTROL_USER: ${NATS_CONTROL_USER}
+      NATS_CONTROL_PASSWORD: ${NATS_CONTROL_PASSWORD}
+      NATS_AGENT_USER: ${NATS_AGENT_USER}
+      NATS_AGENT_PASSWORD: ${NATS_AGENT_PASSWORD}
+    volumes:
+      - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - natsdata:/data
+    networks: [core]
+
+# หมายเหตุ: วง mcpanel-servers ของ MC container ไม่ได้ประกาศที่นี่ —
+# node-agent เป็นคน ensure ตอน boot เอง (compose สร้างเฉพาะ network ที่มี service ใช้)
+networks:
+  edge:
+  core:
+    internal: true
+
+volumes:
+  pgdata:
+  natsdata:

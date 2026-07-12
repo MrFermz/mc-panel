@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package mcpanel.agent.v1;
+
+option go_package = "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1;agentv1";
+
+// AgentService คือ RPC หลักที่ node-agent เปิด bidirectional stream ค้างไว้กับ
+// control-plane ตั้งแต่ boot จนกว่าจะ disconnect
+//
+// ช่องทางนี้ใช้เฉพาะข้อมูล realtime: heartbeat, console I/O, server status
+// ส่วน "คำสั่ง" (start/stop/create/delete) ต้องผ่าน NATS JetStream เสมอ (ดู job/v1)
+//
+// Auth: agent แนบ metadata `authorization: Bearer <node-token>` ตอนเปิด stream
+// control-plane resolve node id จาก token เอง — ห้ามเชื่อ node_id ที่ client ส่งมา
+service AgentService {
+  rpc Connect(stream AgentMessage) returns (stream ControlMessage);
+}
+
+// ---------- agent -> control plane ----------
+
+message AgentMessage {
+  oneof payload {
+    Hello hello = 1; // ต้องเป็น message แรกของ stream เสมอ
+    Heartbeat heartbeat = 2;
+    ConsoleOutput console_output = 3;
+    ServerStatus server_status = 4;
+    ServerStats server_stats = 5;
+    FileResponse file_response = 6;
+  }
+}
+
+// Hello ส่งครั้งเดียวตอนเปิด stream เพื่อรายงานข้อมูลเครื่อง
+message Hello {
+  string agent_version = 1;
+  string os = 2;   // linux เท่านั้นใน scope ปัจจุบัน
+  string arch = 3; // amd64 / arm64
+  int64 total_ram_mb = 4;
+  int64 total_disk_mb = 5;
+}
+
+// Heartbeat ส่งทุก 10 วินาที — ไม่มี node_id เพราะ identity มาจาก token
+message Heartbeat {
+  double cpu_percent = 1;
+  int64 memory_used_mb = 2;
+  int64 memory_total_mb = 3;
+  int64 disk_used_mb = 4;
+  int64 disk_total_mb = 5;
+  repeated string running_server_ids = 6; // server ที่ container กำลังรันอยู่จริง
+}
+
+message ConsoleOutput {
+  string server_id = 1;
+  repeated string lines = 2; // batch เสมอ (flush ทุก ~100ms หรือ 50 บรรทัด) ไม่ส่งทีละบรรทัด
+}
+
+// ServerStatus รายงานเมื่อ state ของ container เปลี่ยนจริง (จาก docker events / reconcile)
+message ServerStatus {
+  string server_id = 1;
+  ServerState state = 2;
+  int32 exit_code = 3; // มีความหมายเฉพาะตอน state = STOPPED/ERRORED
+}
+
+enum ServerState {
+  SERVER_STATE_UNSPECIFIED = 0;
+  SERVER_STATE_STARTING = 1;
+  SERVER_STATE_RUNNING = 2;
+  SERVER_STATE_STOPPING = 3;
+  SERVER_STATE_STOPPED = 4;
+  SERVER_STATE_ERRORED = 5;
+}
+
+// ServerStats คือ resource usage ต่อ instance ที่ agent วัดจาก container stats
+// เป็นข้อมูล realtime/ephemeral (ไม่เก็บลง DB) — agent ส่งเป็นระยะสำหรับ container ที่รันอยู่
+message ServerStats {
+  string server_id = 1;
+  double cpu_percent = 2;      // 0-100 * จำนวน core (เทียบกับ 1 core = 100%)
+  int64 memory_used_mb = 3;
+  int64 memory_limit_mb = 4;   // limit ที่ตั้งให้ container (heap + overhead)
+}
+
+// ---------- control plane -> agent ----------
+
+message ControlMessage {
+  oneof payload {
+    Welcome welcome = 1;
+    ConsoleInput console_input = 2;
+    FileRequest file_request = 3;
+  }
+}
+
+// ---------- file manager (request/response ผ่าน stream, correlate ด้วย request_id) ----------
+// interactive ไม่ใช่ lifecycle job — จึงไม่ผ่าน NATS แต่ใช้ gRPC stream เดิม (agent ไม่เปิด port)
+// ทุก path ฝั่ง agent ต้องผ่าน SafeJoin (jail = {MC_DATA_DIR}/{server_id}) ก่อนแตะ filesystem เสมอ
+
+message FileRequest {
+  string request_id = 1; // control-plane สร้าง เพื่อจับคู่กับ FileResponse
+  string server_id = 2;
+  oneof op {
+    FileList list = 10;
+    FileRead read = 11;
+    FileWrite write = 12;
+    FileMkdir mkdir = 13;
+    FileDelete delete = 14;
+    FileRename rename = 15;
+  }
+}
+
+message FileList { string path = 1; }   // path relative ต่อ root ของ server ("" = root)
+message FileRead { string path = 1; }
+message FileWrite {
+  string path = 1;
+  bytes content = 2;
+}
+message FileMkdir { string path = 1; }
+message FileDelete { string path = 1; }
+message FileRename {
+  string from = 1;
+  string to = 2;
+}
+
+message FileEntry {
+  string name = 1;
+  bool is_dir = 2;
+  int64 size = 3;
+  int64 mod_time_unix = 4;
+}
+
+message FileResponse {
+  string request_id = 1;
+  bool success = 2;
+  string error = 3;              // ว่างถ้า success
+  repeated FileEntry entries = 4; // สำหรับ list
+  bytes content = 5;             // สำหรับ read
+  bool truncated = 6;            // read เกิน size limit → ตัด
+}
+
+// Welcome คือ message แรกที่ control-plane ตอบกลับหลัง auth + Hello สำเร็จ
+// agent ใช้ node_id นี้ไปเปิด NATS consumer (agent-{node_id}) และ subject ของตัวเอง
+// — เป็นทางเดียวที่ agent จะรู้ identity ตัวเอง (config มีแค่ token)
+message Welcome {
+  string node_id = 1;
+}
+
+// ConsoleInput คือคำสั่งจาก user ที่ผ่าน permission check (can_console_write) มาแล้ว
+// agent เขียนต่อเข้า stdin ของ container ได้เลย
+message ConsoleInput {
+  string server_id = 1;
+  string command = 2;
+}
