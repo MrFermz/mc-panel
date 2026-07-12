@@ -169,9 +169,18 @@ control-plane เก็บ ring buffer 500 บรรทัด + broadcast WS →
 ไม่ผ่าน NATS (ไม่ใช่ lifecycle job) และ agent ไม่เปิด port. ทุก path ผ่าน `SafeJoin` (jail = dir ของ server)
 ก่อนแตะ filesystem. ต้องมี `can_manage_files` (หรือ owner/admin). REST อยู่ `/api/servers/{id}/files*` (ดู docs/api.md)
 
+**Whitelist/players**: control-plane verify username กับ Mojang (`internal/mojang`, egress ผ่าน edge) →
+เก็บใน DB `server_players` (source of truth) → rebuild `whitelist.json` ที่ root ของ server แล้วเขียนผ่าน
+agent FileWrite (stream เดียวกับ file manager, SafeJoin ที่ agent) → ถ้า running ส่ง `whitelist reload`
+เข้า console (best-effort). สิทธิ์เท่า file manager. REST `/api/servers/{id}/players*`. ⚠️ ต้อง `white-list=true`
+ใน server.properties ถึงจะ enforce จริง; UUID จาก Mojang ใช้กับ `online-mode=true` เท่านั้น (offline-mode คนละ UUID)
+
+**Default host port**: `GET /api/meta/next-port?node_id=` คืน host_port ว่างต่ำสุดบน node (เริ่ม 25565)
+ให้ web prefill ฟอร์มสร้าง server — suggestion เท่านั้น ไม่ reserve (create ยัง enforce UNIQUE (node_id, host_port))
+
 ## สิ่งที่ยังไม่มี (อย่าเข้าใจผิดว่ามีแล้ว)
 
 - File manager: อัปโหลด/ดาวน์โหลดไฟล์ใหญ่แบบ binary (jar/mod) — ตอนนี้รองรับ browse/แก้ไฟล์ text/mkdir/rename/delete
-- Backup/restore, scheduler, player list/query, mod/plugin browser
+- Backup/restore, scheduler, online-player list/query (มี whitelist management แล้ว), mod/plugin browser
 - OIDC (Discord/Google), quota ต่อ user, multi-node TLS
 - Metrics/alerting ระยะยาว (มี resource monitoring ต่อ instance แบบ realtime แล้ว แต่ไม่เก็บ history/ไม่มี alert)

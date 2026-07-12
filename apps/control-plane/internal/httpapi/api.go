@@ -108,11 +108,16 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.Get("/servers/{id}/properties", a.handleGetProperties)
 				pr.Put("/servers/{id}/properties", a.handleUpdateProperties)
 
+				pr.Get("/servers/{id}/players", a.handleListPlayers)
+				pr.Post("/servers/{id}/players", a.handleAddPlayer)
+				pr.Delete("/servers/{id}/players/{uuid}", a.handleRemovePlayer)
+
 				pr.Get("/jobs/{id}", a.handleGetJob)
 
 			pr.Get("/meta/server-types", a.handleServerTypes)
 			pr.Get("/meta/versions", a.handleVersions)
 			pr.Get("/meta/nodes", a.handleMetaNodes)
+			pr.Get("/meta/next-port", a.handleMetaNextPort)
 			pr.Get("/meta/capabilities", a.handleCapabilities)
 		})
 	})

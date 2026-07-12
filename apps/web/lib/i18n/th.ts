@@ -126,6 +126,7 @@ export const th: Dictionary = {
   "tab.settings": "ตั้งค่า",
   "tab.access": "สิทธิ์เข้าถึง",
   "tab.files": "ไฟล์",
+  "tab.players": "ผู้เล่น",
   "tab.jobs": "งาน",
 
   // ---------- console ----------
@@ -262,6 +263,7 @@ export const th: Dictionary = {
   "new.hostPort": "พอร์ตโฮสต์ (ไม่บังคับ)",
   "new.hostPortHint":
     "เว้นว่างไว้เพื่อให้เข้าถึงเซิร์ฟเวอร์ได้ผ่านเครือข่าย Velocity เท่านั้น (ไม่เปิดพอร์ตบนโหนด)",
+  "new.hostPortEmptyHint": "เว้นว่าง = ไม่เปิดพอร์ต (ใช้กับ Velocity)",
   "new.eulaAccept": "ฉันยอมรับ",
   "new.eulaLink": "Minecraft EULA",
   "new.create": "สร้างเซิร์ฟเวอร์",
@@ -274,6 +276,34 @@ export const th: Dictionary = {
   "new.viewServer": "ดูเซิร์ฟเวอร์",
   "new.created": "สร้างเซิร์ฟเวอร์ \"{name}\" แล้ว",
   "new.failedCreate": "สร้างเซิร์ฟเวอร์ไม่สำเร็จ",
+
+  // ---------- players / whitelist tab ----------
+  "players.add": "เพิ่ม",
+  "players.addPlaceholder": "ชื่อผู้ใช้ Minecraft",
+  "players.added": "เพิ่ม \"{name}\" แล้ว",
+  "players.removed": "นำผู้เล่นออกแล้ว",
+  "players.username": "ชื่อผู้ใช้",
+  "players.addedAt": "เพิ่มเมื่อ",
+  "players.actions": "การกระทำ",
+  "players.empty": "ยังไม่มีผู้เล่นใน whitelist",
+  "players.failedLoad": "โหลดรายชื่อผู้เล่นไม่สำเร็จ",
+  "players.removeTitle": "นำผู้เล่นออก?",
+  "players.removeDesc": "\"{name}\" จะถูกนำออกจาก whitelist",
+  "players.whitelistOn": "เปิดใช้งาน whitelist อยู่",
+  "players.whitelistOff":
+    "whitelist ปิดอยู่ — ผู้เล่นที่เพิ่มที่นี่จะยังไม่ถูกบังคับใช้จนกว่าจะเปิด whitelist",
+  "players.whitelistApplyHint":
+    "การเปลี่ยนแปลงจะมีผลเมื่อรีสตาร์ทครั้งถัดไป หรือเมื่อเซิร์ฟเวอร์โหลดค่าใหม่แบบสด",
+  "players.enableWhitelist": "เปิด whitelist",
+  "players.whitelistEnabled": "เปิด whitelist แล้ว (มีผลเมื่อรีสตาร์ทครั้งถัดไป)",
+  "players.errNotFound": "ไม่พบผู้เล่นนี้ใน Mojang",
+  "players.errExists": "ผู้เล่นนี้อยู่ในรายชื่อแล้ว",
+  "players.errMojang": "ตรวจสอบกับ Mojang ไม่สำเร็จ",
+  "players.errInvalid": "ชื่อผู้ใช้ Minecraft ไม่ถูกต้อง",
+  "players.errForbidden": "คุณไม่มีสิทธิ์จัดการผู้เล่น",
+  "players.errNodeOffline": "โหนดออฟไลน์อยู่",
+  "players.errAgentTimeout": "เอเจนต์ไม่ตอบสนองภายในเวลาที่กำหนด",
+  "players.errGeneric": "ดำเนินการกับผู้เล่นไม่สำเร็จ",
 
   // ---------- admin: users ----------
   "users.title": "ผู้ใช้",

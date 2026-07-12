@@ -47,6 +47,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { MemoryPresets } from "@/components/server/memory-presets";
 
 export default function SettingsTab({ server }: { server: Server }) {
   const t = useT();
@@ -101,7 +102,7 @@ export default function SettingsTab({ server }: { server: Server }) {
   const valid =
     name.trim().length > 0 &&
     Number.isInteger(memory) &&
-    memory >= 256 &&
+    memory >= 512 &&
     (port === null || (Number.isInteger(port) && port >= 1024 && port <= 65535));
 
   return (
@@ -134,11 +135,11 @@ export default function SettingsTab({ server }: { server: Server }) {
               <Input
                 id="s-memory"
                 type="number"
-                min={256}
-                step={256}
+                min={512}
                 value={memoryMb}
                 onChange={(e) => setMemoryMb(e.target.value)}
               />
+              <MemoryPresets value={memoryMb} onChange={setMemoryMb} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="s-port">{t("sset.hostPort")}</Label>

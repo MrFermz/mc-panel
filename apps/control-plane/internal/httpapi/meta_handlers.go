@@ -117,3 +117,30 @@ func (a *API) handleMetaNodes(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"nodes": views})
 }
+
+// handleMetaNextPort: suggestion เท่านั้น — host_port ว่างต่ำสุดบน node (เริ่ม 25565)
+// สำหรับ prefill ฟอร์มสร้าง server. ไม่ reserve จริง (create เป็นคน enforce UNIQUE)
+func (a *API) handleMetaNextPort(w http.ResponseWriter, r *http.Request) {
+	nodeID, err := uuid.Parse(r.URL.Query().Get("node_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "node_id must be a valid UUID")
+		return
+	}
+	if _, err := a.st.GetNodeByID(r.Context(), nodeID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "node_not_found", "node not found")
+			return
+		}
+		a.log.Error("load node failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+
+	port, err := a.st.NextFreeHostPort(r.Context(), nodeID)
+	if err != nil {
+		a.log.Error("next free host port failed", "node_id", nodeID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"port": port})
+}

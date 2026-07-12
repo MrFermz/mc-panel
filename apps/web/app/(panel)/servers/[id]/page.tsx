@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SettingsTab from "@/components/server/settings-tab";
 import AccessTab from "@/components/server/access-tab";
 import FilesTab from "@/components/server/files-tab";
+import PlayersTab from "@/components/server/players-tab";
 import JobsTab from "@/components/server/jobs-tab";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
 
@@ -137,7 +138,10 @@ function ServerDetailPage() {
       tabs.push({ value: "settings", labelKey: "tab.settings" });
       tabs.push({ value: "access", labelKey: "tab.access" });
     }
-    if (canManageFiles) tabs.push({ value: "files", labelKey: "tab.files" });
+    if (canManageFiles) {
+      tabs.push({ value: "files", labelKey: "tab.files" });
+      tabs.push({ value: "players", labelKey: "tab.players" });
+    }
     tabs.push({ value: "jobs", labelKey: "tab.jobs" });
     return tabs;
   }, [isOwner, canManageFiles]);
@@ -190,7 +194,8 @@ function ServerDetailPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* ยึด header (ชื่อ + สถานะ + ปุ่มสั่งงาน) ให้ค้างใต้ top bar เวลาเลื่อน — z-30 อยู่ใต้ top bar (z-40) */}
+      <div className="sticky top-14 z-30 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b bg-background/85 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="truncate text-xl font-semibold">{server.name}</h1>
           <StatusBadge status={server.status} />
@@ -282,6 +287,9 @@ function ServerDetailPage() {
             {canManageFiles && (
               <TabsTrigger value="files">{t("tab.files")}</TabsTrigger>
             )}
+            {canManageFiles && (
+              <TabsTrigger value="players">{t("tab.players")}</TabsTrigger>
+            )}
             <TabsTrigger value="jobs">{t("tab.jobs")}</TabsTrigger>
           </TabsList>
         </div>
@@ -301,6 +309,11 @@ function ServerDetailPage() {
         {canManageFiles && (
           <TabsContent value="files" className="mt-2">
             <FilesTab serverId={server.id} />
+          </TabsContent>
+        )}
+        {canManageFiles && (
+          <TabsContent value="players" className="mt-2">
+            <PlayersTab serverId={server.id} />
           </TabsContent>
         )}
         <TabsContent value="jobs" className="mt-2">

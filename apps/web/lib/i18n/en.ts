@@ -124,6 +124,7 @@ export const en = {
   "tab.settings": "Settings",
   "tab.access": "Access",
   "tab.files": "Files",
+  "tab.players": "Players",
   "tab.jobs": "Jobs",
 
   // ---------- console ----------
@@ -261,6 +262,7 @@ export const en = {
   "new.hostPort": "Host port (optional)",
   "new.hostPortHint":
     "Leave empty to keep the server reachable only through the Velocity network (no port exposed on the node).",
+  "new.hostPortEmptyHint": "Leave empty = no port (for Velocity)",
   "new.eulaAccept": "I accept the",
   "new.eulaLink": "Minecraft EULA",
   "new.create": "Create server",
@@ -274,6 +276,34 @@ export const en = {
   "new.viewServer": "View server",
   "new.created": "Server \"{name}\" created",
   "new.failedCreate": "Failed to create server",
+
+  // ---------- players / whitelist tab ----------
+  "players.add": "Add",
+  "players.addPlaceholder": "Minecraft username",
+  "players.added": "Added \"{name}\"",
+  "players.removed": "Player removed",
+  "players.username": "Username",
+  "players.addedAt": "Added",
+  "players.actions": "Actions",
+  "players.empty": "No players on the whitelist yet.",
+  "players.failedLoad": "Failed to load players.",
+  "players.removeTitle": "Remove player?",
+  "players.removeDesc": "\"{name}\" will be removed from the whitelist.",
+  "players.whitelistOn": "Whitelist is enabled.",
+  "players.whitelistOff":
+    "Whitelist is disabled — players added here are not enforced until you enable it.",
+  "players.whitelistApplyHint":
+    "Changes apply on the next restart, or are reloaded live by the server.",
+  "players.enableWhitelist": "Enable whitelist",
+  "players.whitelistEnabled": "Whitelist enabled (applies on next restart)",
+  "players.errNotFound": "No such player found on Mojang.",
+  "players.errExists": "That player is already on the list.",
+  "players.errMojang": "Could not verify the player with Mojang.",
+  "players.errInvalid": "Invalid Minecraft username.",
+  "players.errForbidden": "You do not have permission to manage players.",
+  "players.errNodeOffline": "The node is offline.",
+  "players.errAgentTimeout": "The agent did not respond in time.",
+  "players.errGeneric": "Player operation failed.",
 
   // ---------- admin: users ----------
   "users.title": "Users",

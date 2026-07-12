@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2Icon } from "lucide-react";
-import { apiGet, apiSend, ApiError } from "@/lib/api";
+import { apiGet, apiSend, getNextPort, ApiError } from "@/lib/api";
+import { MemoryPresets } from "@/components/server/memory-presets";
 import {
   createServerResponseSchema,
   jobResponseSchema,
@@ -115,12 +116,29 @@ function NewServerForm({
   const [mcVersion, setMcVersion] = React.useState("");
   const [memoryMb, setMemoryMb] = React.useState("2048");
   const [hostPort, setHostPort] = React.useState("");
+  // จำว่า user แตะช่อง port เองหรือยัง — ถ้าแตะแล้วห้าม auto-prefill ทับ
+  const [portEdited, setPortEdited] = React.useState(false);
   const [acceptEula, setAcceptEula] = React.useState(false);
 
   const nodesQuery = useQuery({
     queryKey: ["meta", "nodes"],
     queryFn: () => apiGet("/api/meta/nodes", metaNodesResponseSchema),
   });
+
+  // แนะนำ host port ว่างของ node ที่เลือก — พังก็ปล่อยช่องว่างไว้เฉย ๆ (ไม่ crash)
+  const nextPortQuery = useQuery({
+    queryKey: ["meta", "next-port", nodeId],
+    queryFn: () => getNextPort(nodeId),
+    enabled: nodeId !== "",
+    retry: false,
+  });
+
+  const suggestedPort = nextPortQuery.data;
+  React.useEffect(() => {
+    if (!portEdited && suggestedPort !== undefined) {
+      setHostPort(String(suggestedPort));
+    }
+  }, [portEdited, suggestedPort]);
   const typesQuery = useQuery({
     queryKey: ["meta", "server-types"],
     queryFn: () => apiGet("/api/meta/server-types", metaServerTypesResponseSchema),
@@ -168,7 +186,7 @@ function NewServerForm({
     serverType !== "" &&
     mcVersion !== "" &&
     Number.isInteger(memory) &&
-    memory >= 256 &&
+    memory >= 512 &&
     (port === null || (Number.isInteger(port) && port >= 1024 && port <= 65535)) &&
     (!needsEula || acceptEula);
 
@@ -283,12 +301,12 @@ function NewServerForm({
           <Input
             id="new-memory"
             type="number"
-            min={256}
-            step={256}
+            min={512}
             required
             value={memoryMb}
             onChange={(e) => setMemoryMb(e.target.value)}
           />
+          <MemoryPresets value={memoryMb} onChange={setMemoryMb} />
         </div>
 
         <div className="grid gap-2">
@@ -300,9 +318,14 @@ function NewServerForm({
             max={65535}
             placeholder="25565"
             value={hostPort}
-            onChange={(e) => setHostPort(e.target.value)}
+            onChange={(e) => {
+              setPortEdited(true);
+              setHostPort(e.target.value);
+            }}
           />
-          <p className="text-muted-foreground text-xs">{t("new.hostPortHint")}</p>
+          <p className="text-muted-foreground text-xs">
+            {t("new.hostPortEmptyHint")}
+          </p>
         </div>
 
         {needsEula && (

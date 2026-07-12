@@ -195,6 +195,28 @@ export const metaServerTypeSchema = z.object({
 });
 export type MetaServerType = z.infer<typeof metaServerTypeSchema>;
 
+// GET /api/meta/next-port — free host port ที่แนะนำสำหรับ node ที่เลือก
+export const nextPortResponseSchema = z.object({ port: z.number() });
+
+// ---------- players / whitelist (docs/api.md หัวข้อ Players) ----------
+
+export const serverPlayerSchema = z.object({
+  uuid: z.string(),
+  username: z.string(),
+  added_at: z.string(),
+});
+export type ServerPlayer = z.infer<typeof serverPlayerSchema>;
+
+export const playersResponseSchema = z.object({
+  players: z.array(serverPlayerSchema),
+});
+export type PlayersResponse = z.infer<typeof playersResponseSchema>;
+
+export const addPlayerResponseSchema = z.object({
+  player: serverPlayerSchema,
+});
+export type AddPlayerResponse = z.infer<typeof addPlayerResponseSchema>;
+
 // ---------- response wrappers ----------
 
 export const userResponseSchema = z.object({ user: userSchema });

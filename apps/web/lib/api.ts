@@ -1,11 +1,16 @@
 import type { z } from "zod";
 import {
+  addPlayerResponseSchema,
   errorBodySchema,
   fileContentResponseSchema,
   fileListResponseSchema,
+  nextPortResponseSchema,
+  playersResponseSchema,
   serverPropertiesResponseSchema,
+  type AddPlayerResponse,
   type FileContentResponse,
   type FileListResponse,
+  type PlayersResponse,
   type ServerPropertiesResponse,
 } from "@/lib/types";
 
@@ -177,6 +182,40 @@ export function saveServerProperties(
   values: Record<string, string>,
 ): Promise<void> {
   return apiSendVoid("PUT", `/api/servers/${serverId}/properties`, { values });
+}
+
+// ---------- meta ----------
+
+export function getNextPort(nodeId: string): Promise<number> {
+  return apiGet(
+    `/api/meta/next-port?node_id=${encodeURIComponent(nodeId)}`,
+    nextPortResponseSchema,
+  ).then((r) => r.port);
+}
+
+// ---------- players / whitelist ----------
+
+export function listPlayers(serverId: string): Promise<PlayersResponse> {
+  return apiGet(`/api/servers/${serverId}/players`, playersResponseSchema);
+}
+
+export function addPlayer(
+  serverId: string,
+  username: string,
+): Promise<AddPlayerResponse> {
+  return apiSend(
+    "POST",
+    `/api/servers/${serverId}/players`,
+    { username },
+    addPlayerResponseSchema,
+  );
+}
+
+export function removePlayer(serverId: string, uuid: string): Promise<void> {
+  return apiSendVoid(
+    "DELETE",
+    `/api/servers/${serverId}/players/${encodeURIComponent(uuid)}`,
+  );
 }
 
 // ---------- users ----------
