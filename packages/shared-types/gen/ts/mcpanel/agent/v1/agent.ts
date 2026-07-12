@@ -261,6 +261,12 @@ export interface FileRequest {
          */
         rename: FileRename;
     } | {
+        oneofKind: "writeChunk";
+        /**
+         * @generated from protobuf field: mcpanel.agent.v1.FileWriteChunk write_chunk = 16
+         */
+        writeChunk: FileWriteChunk;
+    } | {
         oneofKind: undefined;
     };
 }
@@ -294,6 +300,31 @@ export interface FileWrite {
      * @generated from protobuf field: bytes content = 2
      */
     content: Uint8Array;
+}
+/**
+ * FileWriteChunk = append-write ทีละก้อนสำหรับไฟล์ใหญ่ (เช่น zip ตอน import server)
+ * ก้อนแต่ละอันยังจำกัด ≤1MiB ต่อ message แต่ไฟล์รวมใหญ่ได้ — first=true สร้าง/truncate ไฟล์ก่อน,
+ * ก้อนถัดไป append ตามลำดับ (ส่งแบบ synchronous request/response จึงรับประกันลำดับ), last=true → chown ปิดท้าย
+ *
+ * @generated from protobuf message mcpanel.agent.v1.FileWriteChunk
+ */
+export interface FileWriteChunk {
+    /**
+     * @generated from protobuf field: string path = 1
+     */
+    path: string;
+    /**
+     * @generated from protobuf field: bytes content = 2
+     */
+    content: Uint8Array;
+    /**
+     * @generated from protobuf field: bool first = 3
+     */
+    first: boolean;
+    /**
+     * @generated from protobuf field: bool last = 4
+     */
+    last: boolean;
 }
 /**
  * @generated from protobuf message mcpanel.agent.v1.FileMkdir
@@ -970,7 +1001,8 @@ class FileRequest$Type extends MessageType<FileRequest> {
             { no: 12, name: "write", kind: "message", oneof: "op", T: () => FileWrite },
             { no: 13, name: "mkdir", kind: "message", oneof: "op", T: () => FileMkdir },
             { no: 14, name: "delete", kind: "message", oneof: "op", T: () => FileDelete },
-            { no: 15, name: "rename", kind: "message", oneof: "op", T: () => FileRename }
+            { no: 15, name: "rename", kind: "message", oneof: "op", T: () => FileRename },
+            { no: 16, name: "write_chunk", kind: "message", oneof: "op", T: () => FileWriteChunk }
         ]);
     }
     create(value?: PartialMessage<FileRequest>): FileRequest {
@@ -1029,6 +1061,12 @@ class FileRequest$Type extends MessageType<FileRequest> {
                         rename: FileRename.internalBinaryRead(reader, reader.uint32(), options, (message.op as any).rename)
                     };
                     break;
+                case /* mcpanel.agent.v1.FileWriteChunk write_chunk */ 16:
+                    message.op = {
+                        oneofKind: "writeChunk",
+                        writeChunk: FileWriteChunk.internalBinaryRead(reader, reader.uint32(), options, (message.op as any).writeChunk)
+                    };
+                    break;
                 default:
                     let u = options.readUnknownField;
                     if (u === "throw")
@@ -1065,6 +1103,9 @@ class FileRequest$Type extends MessageType<FileRequest> {
         /* mcpanel.agent.v1.FileRename rename = 15; */
         if (message.op.oneofKind === "rename")
             FileRename.internalBinaryWrite(message.op.rename, writer.tag(15, WireType.LengthDelimited).fork(), options).join();
+        /* mcpanel.agent.v1.FileWriteChunk write_chunk = 16; */
+        if (message.op.oneofKind === "writeChunk")
+            FileWriteChunk.internalBinaryWrite(message.op.writeChunk, writer.tag(16, WireType.LengthDelimited).fork(), options).join();
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -1224,6 +1265,77 @@ class FileWrite$Type extends MessageType<FileWrite> {
  * @generated MessageType for protobuf message mcpanel.agent.v1.FileWrite
  */
 export const FileWrite = new FileWrite$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class FileWriteChunk$Type extends MessageType<FileWriteChunk> {
+    constructor() {
+        super("mcpanel.agent.v1.FileWriteChunk", [
+            { no: 1, name: "path", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "content", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 3, name: "first", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 4, name: "last", kind: "scalar", T: 8 /*ScalarType.BOOL*/ }
+        ]);
+    }
+    create(value?: PartialMessage<FileWriteChunk>): FileWriteChunk {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.path = "";
+        message.content = new Uint8Array(0);
+        message.first = false;
+        message.last = false;
+        if (value !== undefined)
+            reflectionMergePartial<FileWriteChunk>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: FileWriteChunk): FileWriteChunk {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string path */ 1:
+                    message.path = reader.string();
+                    break;
+                case /* bytes content */ 2:
+                    message.content = reader.bytes();
+                    break;
+                case /* bool first */ 3:
+                    message.first = reader.bool();
+                    break;
+                case /* bool last */ 4:
+                    message.last = reader.bool();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: FileWriteChunk, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string path = 1; */
+        if (message.path !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.path);
+        /* bytes content = 2; */
+        if (message.content.length)
+            writer.tag(2, WireType.LengthDelimited).bytes(message.content);
+        /* bool first = 3; */
+        if (message.first !== false)
+            writer.tag(3, WireType.Varint).bool(message.first);
+        /* bool last = 4; */
+        if (message.last !== false)
+            writer.tag(4, WireType.Varint).bool(message.last);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message mcpanel.agent.v1.FileWriteChunk
+ */
+export const FileWriteChunk = new FileWriteChunk$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class FileMkdir$Type extends MessageType<FileMkdir> {
     constructor() {

@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import {
   addPlayerResponseSchema,
+  createServerResponseSchema,
   errorBodySchema,
   fileContentResponseSchema,
   fileListResponseSchema,
@@ -8,6 +9,7 @@ import {
   playersResponseSchema,
   serverPropertiesResponseSchema,
   type AddPlayerResponse,
+  type CreateServerResponse,
   type FileContentResponse,
   type FileListResponse,
   type PlayersResponse,
@@ -191,6 +193,62 @@ export function getNextPort(nodeId: string): Promise<number> {
     `/api/meta/next-port?node_id=${encodeURIComponent(nodeId)}`,
     nextPortResponseSchema,
   ).then((r) => r.port);
+}
+
+// ---------- import existing server (multipart upload) ----------
+
+// ใช้ XHR ไม่ใช่ fetch เพราะต้องการ upload progress (archive อาจใหญ่ถึง ~2 GiB)
+// ห้าม set Content-Type เอง — browser จะใส่ multipart boundary ให้ FormData เอง
+export function importServer(
+  form: FormData,
+  onProgress?: (pct: number) => void,
+): Promise<CreateServerResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/servers/import");
+    xhr.withCredentials = true; // cookie auth (same-origin)
+
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      let body: unknown;
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : undefined;
+      } catch {
+        body = undefined;
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(createServerResponseSchema.parse(body));
+        } catch (err) {
+          reject(err);
+        }
+        return;
+      }
+
+      const parsed = errorBodySchema.safeParse(body);
+      const code = parsed.success ? parsed.data.code : "unknown_error";
+      const message = parsed.success
+        ? parsed.data.message
+        : `Request failed (HTTP ${xhr.status})`;
+      void handleAuthRedirect(code);
+      reject(new ApiError(xhr.status, code, message));
+    };
+
+    xhr.onerror = () =>
+      reject(new ApiError(0, "network_error", "Upload failed."));
+    xhr.onabort = () =>
+      reject(new ApiError(0, "aborted", "Upload aborted."));
+
+    xhr.send(form);
+  });
 }
 
 // ---------- players / whitelist ----------

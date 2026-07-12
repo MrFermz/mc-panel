@@ -20,6 +20,10 @@ const (
 	// ต้องเป็นของ user นี้ ไม่งั้น process ใน container แก้ต่อไม่ได้
 	mcUID = 1000
 	mcGID = 1000
+
+	// maxImportSize จำกัดขนาดรวมของไฟล์ staged ที่เขียนแบบ chunk (เช่น import.zip)
+	// per-chunk ยังคุมด้วย maxFileSize (1 MiB) — ตัวนี้กันไม่ให้ต่อ chunk ไปเรื่อย ๆ จน disk เต็ม
+	maxImportSize = 2 << 30 // 2 GiB
 )
 
 // Manager ทำ file operation ต่อ server โดย jail = filepath.Join(mcDataDir, serverID)
@@ -141,6 +145,69 @@ func (m *Manager) Write(serverID, path string, content []byte) error {
 		return err
 	}
 	chownBestEffort(full)
+	return nil
+}
+
+// WriteChunk ต่อไฟล์ staged แบบทีละ chunk (ใช้ stream zip ของ import เข้ามาใน jail)
+// first=สร้างใหม่ (truncate) / ไม่ first=append (ไฟล์ต้องมีอยู่แล้ว) / last=chown ปิดท้าย
+// เขียนแบบ sequential เท่านั้น เปิด-ปิด handle ทุก call เพื่อความง่ายและปลอดภัย
+func (m *Manager) WriteChunk(serverID, path string, content []byte, first, last bool) error {
+	if len(content) > maxFileSize {
+		return fmt.Errorf("chunk too large: %d bytes exceeds limit of %d", len(content), maxFileSize)
+	}
+	// import stage zip ก่อนที่ create/import job จะสร้าง server dir — jail root อาจยังไม่มี
+	// SafeJoin EvalSymlinks jail root ก่อน จึงต้องสร้าง dir ให้มีก่อน (เฉพาะ chunk แรก)
+	if first {
+		if err := os.MkdirAll(m.jail(serverID), 0o755); err != nil {
+			return err
+		}
+		chownBestEffort(m.jail(serverID))
+	}
+	full, err := SafeJoin(m.jail(serverID), path)
+	if err != nil {
+		return err
+	}
+	if info, statErr := os.Stat(full); statErr == nil && info.IsDir() {
+		return errors.New("is a directory")
+	}
+
+	var f *os.File
+	if first {
+		parent := filepath.Dir(full)
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return err
+		}
+		chownBestEffort(parent)
+		f, err = os.OpenFile(full, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+	} else {
+		// ไฟล์ต้องถูกสร้างไว้แล้วจาก chunk แรก — append ต่อท้าย
+		info, statErr := os.Stat(full)
+		if statErr != nil {
+			return wrapStatErr(statErr)
+		}
+		// กัน disk-fill: ขนาดปัจจุบัน + chunk นี้ต้องไม่เกิน maxImportSize
+		if info.Size()+int64(len(content)) > maxImportSize {
+			return errors.New("import too large")
+		}
+		f, err = os.OpenFile(full, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+	}
+
+	if _, err := f.Write(content); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if last {
+		chownBestEffort(full)
+	}
 	return nil
 }
 

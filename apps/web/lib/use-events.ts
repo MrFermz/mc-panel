@@ -33,6 +33,19 @@ function toStatPoint(stats: NonNullable<Server["stats"]>): StatPoint {
   };
 }
 
+// node metrics เข้ารูป StatPoint เดียวกับ instance — key ด้วย node.id (UUID ไม่ชนกับ server.id)
+function toNodeStatPoint(node: Node): StatPoint {
+  const ts = node.last_heartbeat_at
+    ? new Date(node.last_heartbeat_at).getTime()
+    : Date.now();
+  return {
+    t: ts || Date.now(),
+    cpu: node.cpu_percent,
+    memUsed: node.memory_used_mb,
+    memLimit: node.memory_total_mb,
+  };
+}
+
 function applyEvent(
   qc: QueryClient,
   stats: StatsHistoryApi,
@@ -87,6 +100,9 @@ function applyEvent(
             }
           : old,
       );
+      // ป้อน history ให้กราฟ per-node เหมือน server_stats — online เท่านั้นถึงมีค่าจริง
+      if (msg.node.status === "online") stats.push(msg.node.id, toNodeStatPoint(msg.node));
+      else stats.reset(msg.node.id);
       break;
     }
     case "server_jobs": {

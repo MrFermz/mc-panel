@@ -30,6 +30,13 @@ func (h *Handler) Process(ctx context.Context, env *jobv1.JobEnvelope) (detail s
 			MCVersion:  p.CreateServer.McVersion,
 			AcceptEULA: p.CreateServer.AcceptEula,
 		})
+	case *jobv1.JobEnvelope_ImportServer:
+		return "", h.prov.ImportServer(ctx, env.ServerId, provision.ImportSpec{
+			ServerType:  p.ImportServer.ServerType,
+			MCVersion:   p.ImportServer.McVersion,
+			AcceptEULA:  p.ImportServer.AcceptEula,
+			ArchivePath: p.ImportServer.ArchivePath,
+		})
 	case *jobv1.JobEnvelope_StartServer:
 		return "", h.runner.Start(ctx, runner.ServerConfig{
 			ID:       env.ServerId,

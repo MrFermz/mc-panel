@@ -66,6 +66,12 @@ export interface JobEnvelope {
          */
         deleteServer: DeleteServer;
     } | {
+        oneofKind: "importServer";
+        /**
+         * @generated from protobuf field: mcpanel.job.v1.ImportServer import_server = 15
+         */
+        importServer: ImportServer;
+    } | {
         oneofKind: undefined;
     };
 }
@@ -88,6 +94,31 @@ export interface CreateServer {
      * @generated from protobuf field: bool accept_eula = 3
      */
     acceptEula: boolean; // user ต้องติ๊กยอมรับเองตอนสร้าง ระบบห้าม default เป็น true
+}
+/**
+ * ImportServer = เหมือน CreateServer แต่ไม่โหลด jar — แตก zip ที่ upload มา (staged ไว้ที่
+ * archive_path ใน jail ผ่าน chunked file write) เข้า server dir แล้ว provision (eula/meta/launch) ต่อ
+ * ทุก entry ใน zip ต้องผ่าน SafeJoin ก่อนเขียน (กัน zip-slip) + chown 1000:1000
+ *
+ * @generated from protobuf message mcpanel.job.v1.ImportServer
+ */
+export interface ImportServer {
+    /**
+     * @generated from protobuf field: string server_type = 1
+     */
+    serverType: string; // vanilla | paper | fabric | forge | velocity
+    /**
+     * @generated from protobuf field: string mc_version = 2
+     */
+    mcVersion: string;
+    /**
+     * @generated from protobuf field: bool accept_eula = 3
+     */
+    acceptEula: boolean;
+    /**
+     * @generated from protobuf field: string archive_path = 4
+     */
+    archivePath: string; // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".mcpanel/import.zip"
 }
 /**
  * @generated from protobuf message mcpanel.job.v1.StartServer
@@ -163,7 +194,8 @@ class JobEnvelope$Type extends MessageType<JobEnvelope> {
             { no: 11, name: "start_server", kind: "message", oneof: "payload", T: () => StartServer },
             { no: 12, name: "stop_server", kind: "message", oneof: "payload", T: () => StopServer },
             { no: 13, name: "kill_server", kind: "message", oneof: "payload", T: () => KillServer },
-            { no: 14, name: "delete_server", kind: "message", oneof: "payload", T: () => DeleteServer }
+            { no: 14, name: "delete_server", kind: "message", oneof: "payload", T: () => DeleteServer },
+            { no: 15, name: "import_server", kind: "message", oneof: "payload", T: () => ImportServer }
         ]);
     }
     create(value?: PartialMessage<JobEnvelope>): JobEnvelope {
@@ -216,6 +248,12 @@ class JobEnvelope$Type extends MessageType<JobEnvelope> {
                         deleteServer: DeleteServer.internalBinaryRead(reader, reader.uint32(), options, (message.payload as any).deleteServer)
                     };
                     break;
+                case /* mcpanel.job.v1.ImportServer import_server */ 15:
+                    message.payload = {
+                        oneofKind: "importServer",
+                        importServer: ImportServer.internalBinaryRead(reader, reader.uint32(), options, (message.payload as any).importServer)
+                    };
+                    break;
                 default:
                     let u = options.readUnknownField;
                     if (u === "throw")
@@ -249,6 +287,9 @@ class JobEnvelope$Type extends MessageType<JobEnvelope> {
         /* mcpanel.job.v1.DeleteServer delete_server = 14; */
         if (message.payload.oneofKind === "deleteServer")
             DeleteServer.internalBinaryWrite(message.payload.deleteServer, writer.tag(14, WireType.LengthDelimited).fork(), options).join();
+        /* mcpanel.job.v1.ImportServer import_server = 15; */
+        if (message.payload.oneofKind === "importServer")
+            ImportServer.internalBinaryWrite(message.payload.importServer, writer.tag(15, WireType.LengthDelimited).fork(), options).join();
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -322,6 +363,77 @@ class CreateServer$Type extends MessageType<CreateServer> {
  * @generated MessageType for protobuf message mcpanel.job.v1.CreateServer
  */
 export const CreateServer = new CreateServer$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ImportServer$Type extends MessageType<ImportServer> {
+    constructor() {
+        super("mcpanel.job.v1.ImportServer", [
+            { no: 1, name: "server_type", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "mc_version", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "accept_eula", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 4, name: "archive_path", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ImportServer>): ImportServer {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.serverType = "";
+        message.mcVersion = "";
+        message.acceptEula = false;
+        message.archivePath = "";
+        if (value !== undefined)
+            reflectionMergePartial<ImportServer>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ImportServer): ImportServer {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string server_type */ 1:
+                    message.serverType = reader.string();
+                    break;
+                case /* string mc_version */ 2:
+                    message.mcVersion = reader.string();
+                    break;
+                case /* bool accept_eula */ 3:
+                    message.acceptEula = reader.bool();
+                    break;
+                case /* string archive_path */ 4:
+                    message.archivePath = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ImportServer, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string server_type = 1; */
+        if (message.serverType !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.serverType);
+        /* string mc_version = 2; */
+        if (message.mcVersion !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.mcVersion);
+        /* bool accept_eula = 3; */
+        if (message.acceptEula !== false)
+            writer.tag(3, WireType.Varint).bool(message.acceptEula);
+        /* string archive_path = 4; */
+        if (message.archivePath !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.archivePath);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message mcpanel.job.v1.ImportServer
+ */
+export const ImportServer = new ImportServer$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class StartServer$Type extends MessageType<StartServer> {
     constructor() {

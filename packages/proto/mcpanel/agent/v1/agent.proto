@@ -102,6 +102,7 @@ message FileRequest {
     FileMkdir mkdir = 13;
     FileDelete delete = 14;
     FileRename rename = 15;
+    FileWriteChunk write_chunk = 16;
   }
 }
 
@@ -110,6 +111,15 @@ message FileRead { string path = 1; }
 message FileWrite {
   string path = 1;
   bytes content = 2;
+}
+// FileWriteChunk = append-write ทีละก้อนสำหรับไฟล์ใหญ่ (เช่น zip ตอน import server)
+// ก้อนแต่ละอันยังจำกัด ≤1MiB ต่อ message แต่ไฟล์รวมใหญ่ได้ — first=true สร้าง/truncate ไฟล์ก่อน,
+// ก้อนถัดไป append ตามลำดับ (ส่งแบบ synchronous request/response จึงรับประกันลำดับ), last=true → chown ปิดท้าย
+message FileWriteChunk {
+  string path = 1;
+  bytes content = 2;
+  bool first = 3;
+  bool last = 4;
 }
 message FileMkdir { string path = 1; }
 message FileDelete { string path = 1; }

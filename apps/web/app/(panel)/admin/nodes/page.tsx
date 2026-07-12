@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { ActivityIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { apiGet, apiSend, apiSendVoid, ApiError } from "@/lib/api";
 import {
   createNodeResponseSchema,
@@ -37,12 +37,18 @@ import {
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SecretDialog } from "@/components/secret-dialog";
+import { NodeStatsChart } from "@/components/node/node-stats-chart";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
 import { cn } from "@/lib/utils";
 
 export default function AdminNodesPage() {
   const t = useT();
-  useSetBreadcrumbs(React.useMemo(() => [{ label: t("nodes.title") }], [t]));
+  useSetBreadcrumbs(
+    React.useMemo(
+      () => [{ label: t("nav.admin") }, { label: t("nodes.title") }],
+      [t],
+    ),
+  );
   const queryClient = useQueryClient();
   const { data: meData } = useMe();
   const me = meData?.user;
@@ -53,6 +59,16 @@ export default function AdminNodesPage() {
     null,
   );
   const [deleteTarget, setDeleteTarget] = React.useState<Node | null>(null);
+  // node id ที่กางกราฟ resource อยู่ (หลาย node พร้อมกันได้)
+  const [chartOpen, setChartOpen] = React.useState<Set<string>>(new Set());
+
+  const toggleChart = (id: string) =>
+    setChartOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const nodes = useQuery({
     // realtime updates มาจาก events WS (node_stats) — ไม่ poll
@@ -141,15 +157,17 @@ export default function AdminNodesPage() {
               <TableHead>{t("nodes.colDisk")}</TableHead>
               <TableHead>{t("nodes.colServers")}</TableHead>
               <TableHead>{t("nodes.colHeartbeat")}</TableHead>
-              <TableHead className="w-16" />
+              <TableHead className="w-24" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {nodes.data.nodes.map((node) => {
               const serverCount = serverCountByNode.get(node.id) ?? 0;
               const online = node.status === "online";
+              const showChart = chartOpen.has(node.id);
               return (
-                <TableRow key={node.id}>
+                <React.Fragment key={node.id}>
+                <TableRow>
                   <TableCell className="font-medium">{node.name}</TableCell>
                   <TableCell>
                     <Badge
@@ -184,21 +202,47 @@ export default function AdminNodesPage() {
                     {formatRelative(node.last_heartbeat_at)}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive"
-                      disabled={serverCount > 0 || servers.isPending}
-                      title={
-                        serverCount > 0 ? t("nodes.deleteAllFirst") : undefined
-                      }
-                      onClick={() => setDeleteTarget(node)}
-                      aria-label={t("nodes.deleteAria", { name: node.name })}
-                    >
-                      <Trash2Icon />
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("nodes.viewChart", { name: node.name })}
+                        aria-expanded={showChart}
+                        className={cn(showChart && "text-foreground bg-accent")}
+                        onClick={() => toggleChart(node.id)}
+                      >
+                        <ActivityIcon />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive"
+                        disabled={serverCount > 0 || servers.isPending}
+                        title={
+                          serverCount > 0 ? t("nodes.deleteAllFirst") : undefined
+                        }
+                        onClick={() => setDeleteTarget(node)}
+                        aria-label={t("nodes.deleteAria", { name: node.name })}
+                      >
+                        <Trash2Icon />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
+                {showChart && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={9} className="bg-muted/30">
+                      {online ? (
+                        <NodeStatsChart node={node} />
+                      ) : (
+                        <p className="text-muted-foreground text-xs">
+                          {t("nodes.offlineNoStats")}
+                        </p>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )}
+                </React.Fragment>
               );
             })}
           </TableBody>

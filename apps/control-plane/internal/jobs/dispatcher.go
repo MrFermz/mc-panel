@@ -38,6 +38,21 @@ func (d *Dispatcher) CreateServer(ctx context.Context, srv *store.Server, accept
 	return d.dispatch(ctx, srv, requestedBy, "create_server", "", env, false)
 }
 
+// ImportServer เหมือน CreateServer แต่ไม่โหลด jar — agent แตก zip ที่ staged ไว้ที่ archivePath
+// (relative ต่อ jail เช่น ".mcpanel/import.zip") ด้วย SafeJoin/zip-slip guard. success → stopped
+// เหมือน create ทุกประการ (statusAfter "" ให้ค้าง provisioning จน JobResult พา stopped)
+func (d *Dispatcher) ImportServer(ctx context.Context, srv *store.Server, acceptEula bool, archivePath string, requestedBy uuid.UUID) (*store.Job, error) {
+	env := &jobv1.JobEnvelope{
+		Payload: &jobv1.JobEnvelope_ImportServer{ImportServer: &jobv1.ImportServer{
+			ServerType:  srv.ServerType,
+			McVersion:   srv.MCVersion,
+			AcceptEula:  acceptEula,
+			ArchivePath: archivePath,
+		}},
+	}
+	return d.dispatch(ctx, srv, requestedBy, "import_server", "", env, false)
+}
+
 func (d *Dispatcher) StartServer(ctx context.Context, srv *store.Server, requestedBy uuid.UUID) (*store.Job, error) {
 	hostPort := 0
 	if srv.HostPort != nil {

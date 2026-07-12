@@ -17,7 +17,9 @@ const userCols = `id, email, username, password_hash, display_name, is_admin, is
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.PasswordHash, &u.DisplayName, &u.IsAdmin,
+	// email เป็น NULL ได้ (username-only account) — scan ผ่าน *string แล้วแปลง NULL เป็น ""
+	var email *string
+	err := row.Scan(&u.ID, &email, &u.Username, &u.PasswordHash, &u.DisplayName, &u.IsAdmin,
 		&u.IsActive, &u.MustChangePassword, &u.TokenVersion, &u.Capabilities, &u.LastLoginAt,
 		&u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -25,6 +27,9 @@ func scanUser(row pgx.Row) (*User, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if email != nil {
+		u.Email = *email
 	}
 	return &u, nil
 }
@@ -106,12 +111,17 @@ func (s *Store) CreateUser(ctx context.Context, email string, username *string, 
 	if capabilities == nil {
 		capabilities = []string{}
 	}
+	// email ว่าง -> NULL (username-only account) — unique index บน lower(email) อนุญาต NULL ซ้ำได้
+	var emailArg any
+	if email != "" {
+		emailArg = email
+	}
 	// username nil -> NULL (partial unique index มองข้ามแถว username IS NULL)
 	return scanUser(s.pool.QueryRow(ctx, `
 		INSERT INTO users (email, username, password_hash, display_name, is_admin, capabilities, must_change_password)
 		VALUES ($1, $2, $3, $4, $5, $6, TRUE)
 		RETURNING `+userCols,
-		email, username, passwordHash, displayName, isAdmin, capabilities))
+		emailArg, username, passwordHash, displayName, isAdmin, capabilities))
 }
 
 // UpdateUser: capabilities = nil หมายถึงไม่เปลี่ยน (ต่างจาก []string{} = ล้างทิ้ง)

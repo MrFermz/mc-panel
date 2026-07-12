@@ -680,6 +680,7 @@ type FileRequest struct {
 	//	*FileRequest_Mkdir
 	//	*FileRequest_Delete
 	//	*FileRequest_Rename
+	//	*FileRequest_WriteChunk
 	Op            isFileRequest_Op `protobuf_oneof:"op"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -790,6 +791,15 @@ func (x *FileRequest) GetRename() *FileRename {
 	return nil
 }
 
+func (x *FileRequest) GetWriteChunk() *FileWriteChunk {
+	if x != nil {
+		if x, ok := x.Op.(*FileRequest_WriteChunk); ok {
+			return x.WriteChunk
+		}
+	}
+	return nil
+}
+
 type isFileRequest_Op interface {
 	isFileRequest_Op()
 }
@@ -818,6 +828,10 @@ type FileRequest_Rename struct {
 	Rename *FileRename `protobuf:"bytes,15,opt,name=rename,proto3,oneof"`
 }
 
+type FileRequest_WriteChunk struct {
+	WriteChunk *FileWriteChunk `protobuf:"bytes,16,opt,name=write_chunk,json=writeChunk,proto3,oneof"`
+}
+
 func (*FileRequest_List) isFileRequest_Op() {}
 
 func (*FileRequest_Read) isFileRequest_Op() {}
@@ -829,6 +843,8 @@ func (*FileRequest_Mkdir) isFileRequest_Op() {}
 func (*FileRequest_Delete) isFileRequest_Op() {}
 
 func (*FileRequest_Rename) isFileRequest_Op() {}
+
+func (*FileRequest_WriteChunk) isFileRequest_Op() {}
 
 type FileList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -970,6 +986,77 @@ func (x *FileWrite) GetContent() []byte {
 	return nil
 }
 
+// FileWriteChunk = append-write ทีละก้อนสำหรับไฟล์ใหญ่ (เช่น zip ตอน import server)
+// ก้อนแต่ละอันยังจำกัด ≤1MiB ต่อ message แต่ไฟล์รวมใหญ่ได้ — first=true สร้าง/truncate ไฟล์ก่อน,
+// ก้อนถัดไป append ตามลำดับ (ส่งแบบ synchronous request/response จึงรับประกันลำดับ), last=true → chown ปิดท้าย
+type FileWriteChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	First         bool                   `protobuf:"varint,3,opt,name=first,proto3" json:"first,omitempty"`
+	Last          bool                   `protobuf:"varint,4,opt,name=last,proto3" json:"last,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileWriteChunk) Reset() {
+	*x = FileWriteChunk{}
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileWriteChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileWriteChunk) ProtoMessage() {}
+
+func (x *FileWriteChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileWriteChunk.ProtoReflect.Descriptor instead.
+func (*FileWriteChunk) Descriptor() ([]byte, []int) {
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *FileWriteChunk) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FileWriteChunk) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *FileWriteChunk) GetFirst() bool {
+	if x != nil {
+		return x.First
+	}
+	return false
+}
+
+func (x *FileWriteChunk) GetLast() bool {
+	if x != nil {
+		return x.Last
+	}
+	return false
+}
+
 type FileMkdir struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
@@ -979,7 +1066,7 @@ type FileMkdir struct {
 
 func (x *FileMkdir) Reset() {
 	*x = FileMkdir{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -991,7 +1078,7 @@ func (x *FileMkdir) String() string {
 func (*FileMkdir) ProtoMessage() {}
 
 func (x *FileMkdir) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1004,7 +1091,7 @@ func (x *FileMkdir) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileMkdir.ProtoReflect.Descriptor instead.
 func (*FileMkdir) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *FileMkdir) GetPath() string {
@@ -1023,7 +1110,7 @@ type FileDelete struct {
 
 func (x *FileDelete) Reset() {
 	*x = FileDelete{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +1122,7 @@ func (x *FileDelete) String() string {
 func (*FileDelete) ProtoMessage() {}
 
 func (x *FileDelete) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1135,7 @@ func (x *FileDelete) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileDelete.ProtoReflect.Descriptor instead.
 func (*FileDelete) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FileDelete) GetPath() string {
@@ -1068,7 +1155,7 @@ type FileRename struct {
 
 func (x *FileRename) Reset() {
 	*x = FileRename{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1080,7 +1167,7 @@ func (x *FileRename) String() string {
 func (*FileRename) ProtoMessage() {}
 
 func (x *FileRename) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1093,7 +1180,7 @@ func (x *FileRename) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileRename.ProtoReflect.Descriptor instead.
 func (*FileRename) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *FileRename) GetFrom() string {
@@ -1122,7 +1209,7 @@ type FileEntry struct {
 
 func (x *FileEntry) Reset() {
 	*x = FileEntry{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1134,7 +1221,7 @@ func (x *FileEntry) String() string {
 func (*FileEntry) ProtoMessage() {}
 
 func (x *FileEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1147,7 +1234,7 @@ func (x *FileEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileEntry.ProtoReflect.Descriptor instead.
 func (*FileEntry) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *FileEntry) GetName() string {
@@ -1192,7 +1279,7 @@ type FileResponse struct {
 
 func (x *FileResponse) Reset() {
 	*x = FileResponse{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1204,7 +1291,7 @@ func (x *FileResponse) String() string {
 func (*FileResponse) ProtoMessage() {}
 
 func (x *FileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1217,7 +1304,7 @@ func (x *FileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileResponse.ProtoReflect.Descriptor instead.
 func (*FileResponse) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *FileResponse) GetRequestId() string {
@@ -1274,7 +1361,7 @@ type Welcome struct {
 
 func (x *Welcome) Reset() {
 	*x = Welcome{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1373,7 @@ func (x *Welcome) String() string {
 func (*Welcome) ProtoMessage() {}
 
 func (x *Welcome) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1386,7 @@ func (x *Welcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Welcome.ProtoReflect.Descriptor instead.
 func (*Welcome) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Welcome) GetNodeId() string {
@@ -1321,7 +1408,7 @@ type ConsoleInput struct {
 
 func (x *ConsoleInput) Reset() {
 	*x = ConsoleInput{}
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1333,7 +1420,7 @@ func (x *ConsoleInput) String() string {
 func (*ConsoleInput) ProtoMessage() {}
 
 func (x *ConsoleInput) ProtoReflect() protoreflect.Message {
-	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_mcpanel_agent_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1346,7 +1433,7 @@ func (x *ConsoleInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsoleInput.ProtoReflect.Descriptor instead.
 func (*ConsoleInput) Descriptor() ([]byte, []int) {
-	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_mcpanel_agent_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ConsoleInput) GetServerId() string {
@@ -1409,7 +1496,7 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\awelcome\x18\x01 \x01(\v2\x19.mcpanel.agent.v1.WelcomeH\x00R\awelcome\x12E\n" +
 	"\rconsole_input\x18\x02 \x01(\v2\x1e.mcpanel.agent.v1.ConsoleInputH\x00R\fconsoleInput\x12B\n" +
 	"\ffile_request\x18\x03 \x01(\v2\x1d.mcpanel.agent.v1.FileRequestH\x00R\vfileRequestB\t\n" +
-	"\apayload\"\x8d\x03\n" +
+	"\apayload\"\xd2\x03\n" +
 	"\vFileRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
@@ -1420,7 +1507,9 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\x05write\x18\f \x01(\v2\x1b.mcpanel.agent.v1.FileWriteH\x00R\x05write\x123\n" +
 	"\x05mkdir\x18\r \x01(\v2\x1b.mcpanel.agent.v1.FileMkdirH\x00R\x05mkdir\x126\n" +
 	"\x06delete\x18\x0e \x01(\v2\x1c.mcpanel.agent.v1.FileDeleteH\x00R\x06delete\x126\n" +
-	"\x06rename\x18\x0f \x01(\v2\x1c.mcpanel.agent.v1.FileRenameH\x00R\x06renameB\x04\n" +
+	"\x06rename\x18\x0f \x01(\v2\x1c.mcpanel.agent.v1.FileRenameH\x00R\x06rename\x12C\n" +
+	"\vwrite_chunk\x18\x10 \x01(\v2 .mcpanel.agent.v1.FileWriteChunkH\x00R\n" +
+	"writeChunkB\x04\n" +
 	"\x02op\"\x1e\n" +
 	"\bFileList\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\"\x1e\n" +
@@ -1428,7 +1517,12 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\"9\n" +
 	"\tFileWrite\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\"\x1f\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"h\n" +
+	"\x0eFileWriteChunk\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\x12\x14\n" +
+	"\x05first\x18\x03 \x01(\bR\x05first\x12\x12\n" +
+	"\x04last\x18\x04 \x01(\bR\x04last\"\x1f\n" +
 	"\tFileMkdir\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\" \n" +
 	"\n" +
@@ -1479,7 +1573,7 @@ func file_mcpanel_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_mcpanel_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_mcpanel_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_mcpanel_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_mcpanel_agent_v1_agent_proto_goTypes = []any{
 	(ServerState)(0),       // 0: mcpanel.agent.v1.ServerState
 	(*AgentMessage)(nil),   // 1: mcpanel.agent.v1.AgentMessage
@@ -1493,13 +1587,14 @@ var file_mcpanel_agent_v1_agent_proto_goTypes = []any{
 	(*FileList)(nil),       // 9: mcpanel.agent.v1.FileList
 	(*FileRead)(nil),       // 10: mcpanel.agent.v1.FileRead
 	(*FileWrite)(nil),      // 11: mcpanel.agent.v1.FileWrite
-	(*FileMkdir)(nil),      // 12: mcpanel.agent.v1.FileMkdir
-	(*FileDelete)(nil),     // 13: mcpanel.agent.v1.FileDelete
-	(*FileRename)(nil),     // 14: mcpanel.agent.v1.FileRename
-	(*FileEntry)(nil),      // 15: mcpanel.agent.v1.FileEntry
-	(*FileResponse)(nil),   // 16: mcpanel.agent.v1.FileResponse
-	(*Welcome)(nil),        // 17: mcpanel.agent.v1.Welcome
-	(*ConsoleInput)(nil),   // 18: mcpanel.agent.v1.ConsoleInput
+	(*FileWriteChunk)(nil), // 12: mcpanel.agent.v1.FileWriteChunk
+	(*FileMkdir)(nil),      // 13: mcpanel.agent.v1.FileMkdir
+	(*FileDelete)(nil),     // 14: mcpanel.agent.v1.FileDelete
+	(*FileRename)(nil),     // 15: mcpanel.agent.v1.FileRename
+	(*FileEntry)(nil),      // 16: mcpanel.agent.v1.FileEntry
+	(*FileResponse)(nil),   // 17: mcpanel.agent.v1.FileResponse
+	(*Welcome)(nil),        // 18: mcpanel.agent.v1.Welcome
+	(*ConsoleInput)(nil),   // 19: mcpanel.agent.v1.ConsoleInput
 }
 var file_mcpanel_agent_v1_agent_proto_depIdxs = []int32{
 	2,  // 0: mcpanel.agent.v1.AgentMessage.hello:type_name -> mcpanel.agent.v1.Hello
@@ -1507,25 +1602,26 @@ var file_mcpanel_agent_v1_agent_proto_depIdxs = []int32{
 	4,  // 2: mcpanel.agent.v1.AgentMessage.console_output:type_name -> mcpanel.agent.v1.ConsoleOutput
 	5,  // 3: mcpanel.agent.v1.AgentMessage.server_status:type_name -> mcpanel.agent.v1.ServerStatus
 	6,  // 4: mcpanel.agent.v1.AgentMessage.server_stats:type_name -> mcpanel.agent.v1.ServerStats
-	16, // 5: mcpanel.agent.v1.AgentMessage.file_response:type_name -> mcpanel.agent.v1.FileResponse
+	17, // 5: mcpanel.agent.v1.AgentMessage.file_response:type_name -> mcpanel.agent.v1.FileResponse
 	0,  // 6: mcpanel.agent.v1.ServerStatus.state:type_name -> mcpanel.agent.v1.ServerState
-	17, // 7: mcpanel.agent.v1.ControlMessage.welcome:type_name -> mcpanel.agent.v1.Welcome
-	18, // 8: mcpanel.agent.v1.ControlMessage.console_input:type_name -> mcpanel.agent.v1.ConsoleInput
+	18, // 7: mcpanel.agent.v1.ControlMessage.welcome:type_name -> mcpanel.agent.v1.Welcome
+	19, // 8: mcpanel.agent.v1.ControlMessage.console_input:type_name -> mcpanel.agent.v1.ConsoleInput
 	8,  // 9: mcpanel.agent.v1.ControlMessage.file_request:type_name -> mcpanel.agent.v1.FileRequest
 	9,  // 10: mcpanel.agent.v1.FileRequest.list:type_name -> mcpanel.agent.v1.FileList
 	10, // 11: mcpanel.agent.v1.FileRequest.read:type_name -> mcpanel.agent.v1.FileRead
 	11, // 12: mcpanel.agent.v1.FileRequest.write:type_name -> mcpanel.agent.v1.FileWrite
-	12, // 13: mcpanel.agent.v1.FileRequest.mkdir:type_name -> mcpanel.agent.v1.FileMkdir
-	13, // 14: mcpanel.agent.v1.FileRequest.delete:type_name -> mcpanel.agent.v1.FileDelete
-	14, // 15: mcpanel.agent.v1.FileRequest.rename:type_name -> mcpanel.agent.v1.FileRename
-	15, // 16: mcpanel.agent.v1.FileResponse.entries:type_name -> mcpanel.agent.v1.FileEntry
-	1,  // 17: mcpanel.agent.v1.AgentService.Connect:input_type -> mcpanel.agent.v1.AgentMessage
-	7,  // 18: mcpanel.agent.v1.AgentService.Connect:output_type -> mcpanel.agent.v1.ControlMessage
-	18, // [18:19] is the sub-list for method output_type
-	17, // [17:18] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	13, // 13: mcpanel.agent.v1.FileRequest.mkdir:type_name -> mcpanel.agent.v1.FileMkdir
+	14, // 14: mcpanel.agent.v1.FileRequest.delete:type_name -> mcpanel.agent.v1.FileDelete
+	15, // 15: mcpanel.agent.v1.FileRequest.rename:type_name -> mcpanel.agent.v1.FileRename
+	12, // 16: mcpanel.agent.v1.FileRequest.write_chunk:type_name -> mcpanel.agent.v1.FileWriteChunk
+	16, // 17: mcpanel.agent.v1.FileResponse.entries:type_name -> mcpanel.agent.v1.FileEntry
+	1,  // 18: mcpanel.agent.v1.AgentService.Connect:input_type -> mcpanel.agent.v1.AgentMessage
+	7,  // 19: mcpanel.agent.v1.AgentService.Connect:output_type -> mcpanel.agent.v1.ControlMessage
+	19, // [19:20] is the sub-list for method output_type
+	18, // [18:19] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_mcpanel_agent_v1_agent_proto_init() }
@@ -1553,6 +1649,7 @@ func file_mcpanel_agent_v1_agent_proto_init() {
 		(*FileRequest_Mkdir)(nil),
 		(*FileRequest_Delete)(nil),
 		(*FileRequest_Rename)(nil),
+		(*FileRequest_WriteChunk)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1560,7 +1657,7 @@ func file_mcpanel_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcpanel_agent_v1_agent_proto_rawDesc), len(file_mcpanel_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

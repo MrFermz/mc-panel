@@ -284,6 +284,10 @@ func handleFileRequest(files *filemanager.Manager, req *agentv1.FileRequest) *ag
 		if err := files.Write(serverID, op.Write.GetPath(), op.Write.GetContent()); err != nil {
 			return fail(err)
 		}
+	case *agentv1.FileRequest_WriteChunk:
+		if err := files.WriteChunk(serverID, op.WriteChunk.GetPath(), op.WriteChunk.GetContent(), op.WriteChunk.GetFirst(), op.WriteChunk.GetLast()); err != nil {
+			return fail(err)
+		}
 	case *agentv1.FileRequest_Mkdir:
 		if err := files.Mkdir(serverID, op.Mkdir.GetPath()); err != nil {
 			return fail(err)

@@ -124,7 +124,7 @@ func planTransition(job *store.Job, success bool) (store.TransitionPlan, bool) {
 	}
 
 	switch job.Type {
-	case "create_server":
+	case "create_server", "import_server":
 		if success {
 			return store.TransitionPlan{NewStatus: "stopped", GuardNotDeleting: true}, false
 		}
@@ -269,7 +269,7 @@ func (rc *ResultConsumer) reapOnce(ctx context.Context) {
 // reap ไปเป็น errored/stopped ถ้าจริง ๆ ยังรันอยู่ heartbeat reconcile (#3) จะพากลับ running
 func reapPlan(job *store.Job) store.TransitionPlan {
 	switch job.Type {
-	case "create_server":
+	case "create_server", "import_server":
 		return store.TransitionPlan{NewStatus: "errored", OnlyFromStatus: "provisioning"}
 	case "start_server":
 		return store.TransitionPlan{NewStatus: "errored", OnlyFromStatus: "starting"}

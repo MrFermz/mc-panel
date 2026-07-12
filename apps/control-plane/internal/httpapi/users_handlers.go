@@ -52,7 +52,12 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
 
-	if len(req.Email) < 3 || len(req.Email) > 255 || !strings.Contains(req.Email, "@") {
+	// ต้องมี email หรือ username อย่างน้อยหนึ่งอย่าง (username-only account ได้)
+	if req.Email == "" && req.Username == "" {
+		writeError(w, http.StatusBadRequest, "identifier_required", "provide an email or a username")
+		return
+	}
+	if req.Email != "" && (len(req.Email) > 255 || !strings.Contains(req.Email, "@")) {
 		writeError(w, http.StatusBadRequest, "invalid_email", "a valid email is required")
 		return
 	}

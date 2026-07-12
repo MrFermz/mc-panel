@@ -247,6 +247,7 @@ export const createServerResponseSchema = z.object({
   server: serverSchema,
   job: jobSchema,
 });
+export type CreateServerResponse = z.infer<typeof createServerResponseSchema>;
 
 export const jobResponseSchema = z.object({ job: jobSchema });
 export const jobsResponseSchema = z.object({ jobs: z.array(jobSchema) });

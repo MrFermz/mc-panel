@@ -4,6 +4,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   CpuIcon,
+  DownloadIcon,
   HardDriveIcon,
   LayoutGridIcon,
   ListIcon,
@@ -133,6 +134,7 @@ export default function DashboardPage() {
   const view = useSettingsStore((s) => s.serverView);
   const setView = useSettingsStore((s) => s.setServerView);
   const openNewServer = useUiStore((s) => s.openNewServer);
+  const openImportServer = useUiStore((s) => s.openImportServer);
 
   const pushStats = useStatsHistoryStore((s) => s.push);
   const resetStats = useStatsHistoryStore((s) => s.reset);
@@ -228,10 +230,16 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <ViewToggle view={view} onChange={changeView} />
             {canCreateServer && (
-              <Button size="sm" onClick={openNewServer}>
-                <PlusIcon />
-                {t("nav.newServer")}
-              </Button>
+              <>
+                <Button size="sm" variant="outline" onClick={openImportServer}>
+                  <DownloadIcon />
+                  {t("import.button")}
+                </Button>
+                <Button size="sm" onClick={openNewServer}>
+                  <PlusIcon />
+                  {t("nav.newServer")}
+                </Button>
+              </>
             )}
           </div>
         </div>

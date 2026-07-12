@@ -70,6 +70,14 @@ function capLabel(t: TranslateFn, key: string, fallback: string): string {
   return tk ? t(tk) : fallback;
 }
 
+// identifier ที่แสดงต่อ user — email มาก่อน, ถ้าไม่มี (user แบบ username-only) ตกไปที่ username
+function userIdent(u: Pick<User, "email" | "username" | "display_name">): string {
+  return u.email || u.username || u.display_name || "user";
+}
+
+// username: 3-64 ตัว [A-Za-z0-9_.-] — ตรงกับ backend
+const USERNAME_RE = /^[A-Za-z0-9_.-]{3,64}$/;
+
 function CapabilityCheckboxes({
   catalog,
   selected,
@@ -117,7 +125,12 @@ function CapabilityCheckboxes({
 
 export default function AdminUsersPage() {
   const t = useT();
-  useSetBreadcrumbs(React.useMemo(() => [{ label: t("users.title") }], [t]));
+  useSetBreadcrumbs(
+    React.useMemo(
+      () => [{ label: t("nav.admin") }, { label: t("users.title") }],
+      [t],
+    ),
+  );
   const queryClient = useQueryClient();
   const { data: meData } = useMe();
   const me = meData?.user;
@@ -191,22 +204,20 @@ export default function AdminUsersPage() {
       );
 
   const createUser = useMutation({
-    mutationFn: () => {
-      const uname = username.trim();
-      return apiSend(
+    mutationFn: () =>
+      apiSend(
         "POST",
         "/api/users",
         {
+          // ส่งทั้งคู่เสมอ — backend ต้องมีอย่างน้อยหนึ่ง, string ว่าง = "ไม่ระบุ"
           email: email.trim(),
-          // ส่ง username เฉพาะเมื่อกรอก (optional) — ไม่งั้นเว้นไว้ให้ backend ตัดสินใจ
-          ...(uname ? { username: uname } : {}),
+          username: username.trim(),
           display_name: displayName.trim(),
           is_admin: isAdmin,
           capabilities: createCaps,
         },
         createUserResponseSchema,
-      );
-    },
+      ),
     onSuccess: (data) => {
       setCreateOpen(false);
       setEmail("");
@@ -215,12 +226,20 @@ export default function AdminUsersPage() {
       setIsAdmin(false);
       setCreateCaps([]);
       setSecret({
-        title: t("users.initialPasswordFor", { email: data.user.email }),
+        title: t("users.initialPasswordFor", { email: userIdent(data.user) }),
         password: data.initial_password,
       });
       invalidate();
     },
     onError: (err) => {
+      if (err instanceof ApiError && err.code === "identifier_required") {
+        toast.error(t("users.identifierRequired"));
+        return;
+      }
+      if (err instanceof ApiError && err.code === "email_exists") {
+        toast.error(t("users.emailExists"));
+        return;
+      }
       if (err instanceof ApiError && err.code === "username_exists") {
         toast.error(t("users.usernameExists"));
         return;
@@ -296,7 +315,9 @@ export default function AdminUsersPage() {
       const target = users.data?.users.find((u) => u.id === id);
       setResetTarget(null);
       setSecret({
-        title: t("users.newPasswordFor", { email: target?.email ?? "user" }),
+        title: t("users.newPasswordFor", {
+          email: target ? userIdent(target) : "user",
+        }),
         password: data.initial_password,
       });
     },
@@ -309,6 +330,11 @@ export default function AdminUsersPage() {
     setEditTarget(user);
     setEditCaps(user.capabilities);
   };
+
+  // ต้องมี email (มี "@") หรือ username (ตรง pattern) อย่างน้อยหนึ่ง ถึงจะ submit ได้
+  const emailValid = email.trim().includes("@");
+  const usernameValid = USERNAME_RE.test(username.trim());
+  const canCreate = emailValid || usernameValid;
 
   // กันเข้าตรง URL — menu ซ่อนอยู่แล้วแต่ต้องกันซ้ำ
   if (me && !canManage) {
@@ -392,7 +418,7 @@ export default function AdminUsersPage() {
                   <TableCell>
                     <div className="grid">
                       <span className="flex items-center gap-2">
-                        {user.display_name || user.email}
+                        {user.display_name || user.email || user.username}
                         {self && (
                           <Badge variant="secondary">{t("users.you")}</Badge>
                         )}
@@ -406,12 +432,10 @@ export default function AdminUsersPage() {
                         )}
                       </span>
                       <span className="text-muted-foreground text-xs">
-                        {user.email}
+                        {user.email && <span>{user.email}</span>}
+                        {user.email && user.username && " · "}
                         {user.username && (
-                          <>
-                            {" · "}
-                            <span className="font-mono">@{user.username}</span>
-                          </>
+                          <span className="font-mono">@{user.username}</span>
                         )}
                       </span>
                     </div>
@@ -481,7 +505,7 @@ export default function AdminUsersPage() {
                           size="icon"
                           className="text-destructive"
                           onClick={() => setDeleteTarget(user)}
-                          aria-label={`${t("users.delete")} ${user.email}`}
+                          aria-label={`${t("users.delete")} ${userIdent(user)}`}
                         >
                           <Trash2Icon />
                         </Button>
@@ -505,15 +529,18 @@ export default function AdminUsersPage() {
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!createUser.isPending) createUser.mutate();
+              if (!createUser.isPending && canCreate) createUser.mutate();
             }}
           >
+            <p className="text-muted-foreground text-sm">
+              {t("users.identifierHint")}
+            </p>
             <div className="grid gap-2">
-              <Label htmlFor="u-email">{t("users.email")}</Label>
+              <Label htmlFor="u-email">{t("users.emailOptional")}</Label>
               <Input
                 id="u-email"
                 type="email"
-                required
+                autoComplete="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -568,7 +595,7 @@ export default function AdminUsersPage() {
               >
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" disabled={createUser.isPending}>
+              <Button type="submit" disabled={createUser.isPending || !canCreate}>
                 {createUser.isPending
                   ? t("users.creating")
                   : t("users.create.submit")}
@@ -629,7 +656,9 @@ export default function AdminUsersPage() {
         onOpenChange={(open) => {
           if (!open) setResetTarget(null);
         }}
-        title={t("users.resetTitle", { email: resetTarget?.email ?? "" })}
+        title={t("users.resetTitle", {
+          email: resetTarget ? userIdent(resetTarget) : "",
+        })}
         description={t("users.resetDesc")}
         confirmLabel={t("users.resetConfirm")}
         destructive
@@ -644,7 +673,9 @@ export default function AdminUsersPage() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        title={t("users.deleteTitle", { email: deleteTarget?.email ?? "" })}
+        title={t("users.deleteTitle", {
+          email: deleteTarget ? userIdent(deleteTarget) : "",
+        })}
         description={t("users.deleteConfirm")}
         confirmLabel={t("users.delete")}
         destructive

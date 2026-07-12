@@ -35,6 +35,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { NewServerDialog } from "@/components/server/new-server-dialog";
+import { ImportServerDialog } from "@/components/server/import-server-dialog";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -206,6 +207,7 @@ export default function PanelLayout({
       </div>
 
       <NewServerDialog />
+      <ImportServerDialog />
       <ChangePasswordDialog
         open={changePasswordOpen}
         onOpenChange={setChangePasswordOpen}

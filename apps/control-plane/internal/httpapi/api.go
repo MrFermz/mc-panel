@@ -88,6 +88,7 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 
 			pr.Get("/servers", a.handleListServers)
 			pr.With(a.requireCap(capCreateServers)).Post("/servers", a.handleCreateServer)
+			pr.With(a.requireCap(capCreateServers)).Post("/servers/import", a.handleImportServer)
 			pr.Get("/servers/{id}", a.handleGetServer)
 			pr.Patch("/servers/{id}", a.handleUpdateServer)
 			pr.Delete("/servers/{id}", a.handleDeleteServer)

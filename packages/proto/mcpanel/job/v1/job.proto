@@ -23,6 +23,7 @@ message JobEnvelope {
     StopServer stop_server = 12;
     KillServer kill_server = 13;
     DeleteServer delete_server = 14;
+    ImportServer import_server = 15;
   }
 }
 
@@ -32,6 +33,16 @@ message CreateServer {
   string server_type = 1; // vanilla | paper | fabric | forge | velocity
   string mc_version = 2;  // เช่น "1.21.4" (สำหรับ velocity = velocity version)
   bool accept_eula = 3;   // user ต้องติ๊กยอมรับเองตอนสร้าง ระบบห้าม default เป็น true
+}
+
+// ImportServer = เหมือน CreateServer แต่ไม่โหลด jar — แตก zip ที่ upload มา (staged ไว้ที่
+// archive_path ใน jail ผ่าน chunked file write) เข้า server dir แล้ว provision (eula/meta/launch) ต่อ
+// ทุก entry ใน zip ต้องผ่าน SafeJoin ก่อนเขียน (กัน zip-slip) + chown 1000:1000
+message ImportServer {
+  string server_type = 1; // vanilla | paper | fabric | forge | velocity
+  string mc_version = 2;
+  bool accept_eula = 3;
+  string archive_path = 4; // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".mcpanel/import.zip"
 }
 
 message StartServer {
