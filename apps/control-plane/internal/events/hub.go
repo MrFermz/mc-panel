@@ -88,6 +88,14 @@ type serverJobsMsg struct {
 	ServerID uuid.UUID `json:"server_id"`
 }
 
+// serverListMsg = server_added/server_removed — แจ้ง browser ว่า list ของ server
+// เปลี่ยน (create/import/delete) ให้ refetch ["servers"]. carry แค่ server_id จึง
+// broadcast แบบ unfiltered ได้ (ไม่มีข้อมูลรั่ว — refetch ฝั่ง web เช็คสิทธิ์เอง)
+type serverListMsg struct {
+	Type     string    `json:"type"`
+	ServerID uuid.UUID `json:"server_id"`
+}
+
 type nodeStatsMsg struct {
 	Type string      `json:"type"`
 	Node NodePayload `json:"node"`
@@ -178,6 +186,25 @@ func (h *Hub) ServerJobs(serverID uuid.UUID) {
 	h.fanoutServer(serverID, data)
 }
 
+// ServerAdded/ServerRemoved broadcast แบบ unfiltered ไปทุก subscriber — payload มีแค่
+// server_id ไม่ใช่ข้อมูล server จริง จึงไม่ผ่าน per-subscriber auth filter (ต่างจาก
+// server_stats/status): web รับแล้ว invalidate ["servers"] → refetch ที่เช็คสิทธิ์อีกที
+func (h *Hub) ServerAdded(serverID uuid.UUID) {
+	data, err := json.Marshal(serverListMsg{Type: "server_added", ServerID: serverID})
+	if err != nil {
+		return
+	}
+	h.fanoutAll(data)
+}
+
+func (h *Hub) ServerRemoved(serverID uuid.UUID) {
+	data, err := json.Marshal(serverListMsg{Type: "server_removed", ServerID: serverID})
+	if err != nil {
+		return
+	}
+	h.fanoutAll(data)
+}
+
 func (h *Hub) NodeStats(node NodePayload) {
 	data, err := json.Marshal(nodeStatsMsg{Type: "node_stats", Node: node})
 	if err != nil {
@@ -200,6 +227,16 @@ func (h *Hub) fanoutServer(serverID uuid.UUID, data json.RawMessage) {
 		if sub.canSeeServer(serverID) {
 			send(sub, data)
 		}
+	}
+}
+
+// fanoutAll ส่งไปทุก subscriber โดยไม่ filter (สำหรับ event ที่ปลอดภัยกับทุกคน เช่น
+// server_added/server_removed ที่ carry แค่ server_id)
+func (h *Hub) fanoutAll(data json.RawMessage) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for sub := range h.subs {
+		send(sub, data)
 	}
 }
 

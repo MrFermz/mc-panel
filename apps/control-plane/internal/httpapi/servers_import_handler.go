@@ -267,6 +267,10 @@ func (a *API) streamImportArchive(w http.ResponseWriter, r *http.Request, user *
 		"node_id": srv.NodeID.String(), "archive_bytes": total,
 	})
 
+	// staging สำเร็จ row คงอยู่แน่ (cleanup path ที่ลบ row อยู่ก่อนหน้านี้แล้ว)
+	// → แจ้ง browser refetch server list
+	a.events.ServerAdded(srv.ID)
+
 	job, err := a.disp.ImportServer(r.Context(), srv, v.acceptEula, importArchivePath, user.ID)
 	if err != nil {
 		// zip staged แล้วแต่ dispatch ล้ม — mark errored เหมือน create (row เป็น server ที่ provision ไม่สำเร็จ)

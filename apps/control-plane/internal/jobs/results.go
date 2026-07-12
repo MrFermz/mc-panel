@@ -188,6 +188,8 @@ func (rc *ResultConsumer) afterCommit(ctx context.Context, job *store.Job, plan 
 		if err := rc.st.InsertAudit(ctx, job.RequestedBy, &serverID, "server_deleted", detail, ""); err != nil {
 			rc.log.Error("audit server_deleted failed", "server_id", serverID, "error", err)
 		}
+		// row ถูกลบจริงแล้ว → แจ้ง browser refetch server list (dashboard เอา instance ออก)
+		rc.events.ServerRemoved(serverID)
 		rc.log.Info("server deleted", "server_id", serverID, "job_id", job.ID)
 		return
 	}

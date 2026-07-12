@@ -250,7 +250,7 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	}
 	// httpapi.clientIP อ่านค่านี้ — set ครั้งเดียวก่อน server รับ request (ไม่มี race)
 	httpapi.SetTrustedProxyCount(cfg.TrustedProxyCount)
-	api := httpapi.New(st, am, disp, vs, rings, statsCache, hub, js, log)
+	api := httpapi.New(st, am, disp, vs, rings, statsCache, hub, eventsHub, js, log)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

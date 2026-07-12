@@ -79,8 +79,8 @@ function NodeSummary({ node }: { node: Node }) {
             {formatMb(node.disk_total_mb)}
           </div>
         </div>
-        <NodeStatsAccordion node={node} />
       </CardContent>
+      <NodeStatsAccordion node={node} className="-mb-4 px-4" />
     </Card>
   );
 }

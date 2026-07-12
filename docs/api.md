@@ -239,6 +239,9 @@ Authorization scope (filter ต่อ event ตาม connection):
   set เดียวกับ `GET /api/servers`). set นี้ refresh ทุก ~15s อัตโนมัติ (server ที่เพิ่งถูก grant/สร้าง
   โผล่โดยไม่ต้อง reconnect)
 - **node event** (`node_stats`): เฉพาะ admin หรือ `nodes.manage` — คนอื่นไม่ได้รับ
+- **server list event** (`server_added`, `server_removed`): broadcast **ไม่ filter** ไปทุก connection
+  (payload มีแค่ `server_id` ไม่มีข้อมูล server จริง จึงไม่รั่ว) — client ใช้ signal ว่า list ของ server
+  เปลี่ยน (create/import/delete) แล้ว refetch `GET /api/servers` (ซึ่งเช็คสิทธิ์เองอยู่แล้ว)
 
 server → client (JSON, field `type` เป็นตัวแยกชนิด):
 ```json
@@ -246,11 +249,16 @@ server → client (JSON, field `type` เป็นตัวแยกชนิด
 {"type": "server_stats", "server_id": "<uuid>", "stats": {"cpu_percent": 12.5, "memory_used_mb": 800, "memory_limit_mb": 2048, "net_rx_bps": 1024, "net_tx_bps": 512, "disk_read_bps": 0, "disk_write_bps": 4096, "updated_at": "<rfc3339>"}}
 {"type": "server_stats", "server_id": "<uuid>", "stats": null}
 {"type": "server_jobs", "server_id": "<uuid>"}
+{"type": "server_added", "server_id": "<uuid>"}
+{"type": "server_removed", "server_id": "<uuid>"}
 {"type": "node_stats", "node": {"id": "<uuid>", "name": "...", "status": "online", "agent_version": "...", "os": "...", "arch": "...", "cpu_percent": 3.1, "memory_used_mb": 1024, "memory_total_mb": 16384, "disk_used_mb": 20000, "disk_total_mb": 500000, "net_rx_bps": 2048, "net_tx_bps": 1024, "last_heartbeat_at": "<rfc3339>", "created_at": "<rfc3339>"}}
 ```
 - `server_status`: `status` เป็นค่าเดียวกับ field `status` ของ server (provisioning|stopped|starting|running|stopping|errored|deleting)
 - `server_stats`: `stats` เป็น `null` เมื่อ server ไม่ได้ running / ยังไม่มี cache (semantics เดียวกับ field `stats` ของ `GET /api/servers`); เมื่อ running และมีค่าใหม่ push ตัวเลขล่าสุด
 - `server_jobs`: signal ว่า job ของ server นี้เปลี่ยน (client refetch `GET /api/servers/{id}/jobs`)
+- `server_added` / `server_removed`: signal ว่า list ของ server เปลี่ยน — `server_added` ส่งตอน
+  create/import (row เกิดแล้ว), `server_removed` ส่งตอน delete job สำเร็จ (row ถูกลบจริง);
+  client refetch `GET /api/servers` (ส่งแบบ unfiltered ทุก connection — ดู scope ด้านบน)
 - `node_stats`: `node` เป็น object รูปแบบเดียวกับ item ของ `GET /api/nodes` แบบ field-for-field
 
 Pattern การใช้ฝั่ง web: โหลด state เริ่มต้นผ่าน REST ตามปกติ แล้วอัปเดตต่อจาก event เหล่านี้;

@@ -117,6 +117,21 @@ function applyEvent(
       qc.invalidateQueries({ queryKey: ["servers", msg.server_id, "jobs"] });
       break;
     }
+    case "server_added": {
+      // server ใหม่ (create/import) — refetch list ให้ dashboard เห็นทันทีไม่ต้อง refresh
+      qc.invalidateQueries({ queryKey: ["servers"] });
+      break;
+    }
+    case "server_removed": {
+      // server ถูกลบ — เอาออกจาก cache ทันที + refetch กันค้าง
+      qc.setQueryData<ServersCache>(["servers"], (old) =>
+        old
+          ? { ...old, servers: old.servers.filter((s) => s.id !== msg.server_id) }
+          : old,
+      );
+      qc.invalidateQueries({ queryKey: ["servers"] });
+      break;
+    }
   }
 }
 

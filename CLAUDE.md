@@ -82,6 +82,9 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   **ห้ามเพิ่ม `refetchInterval` poll REST สำหรับข้อมูลพวกนี้** (โหลด state เริ่มต้นด้วย REST ครั้งเดียว
   แล้วรับ update ต่อจาก WS, resync ด้วย refetch ตอน reconnect). เพิ่ม push event ใหม่ = emit ที่ agent
   gRPC hook point (agenthub) หรือ job result (jobs) เข้า `events.Hub` แล้ว document ใน docs/api.md
+  - **server list change**: `server_added` (emit ตอน create/import ใน httpapi) / `server_removed`
+    (emit ตอน delete job สำเร็จใน jobs) broadcast แบบ unfiltered (payload มีแค่ server_id) →
+    web invalidate `["servers"]` refetch (dashboard เพิ่ม/เอา instance ออกเองแบบ realtime)
 - Proto: package `mcpanel.<x>.v1`, directory ต้องตรง package (buf lint STANDARD บังคับ),
   breaking change ต้องขึ้น v2 ไม่แก้ v1
 - NATS subjects: `mcpanel.jobs.{node_id}` (JobEnvelope), `mcpanel.results` (JobResult) —

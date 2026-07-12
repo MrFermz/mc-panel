@@ -12,6 +12,7 @@ import (
 	"github.com/mc-panel/control-plane/internal/agenthub"
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/console"
+	"github.com/mc-panel/control-plane/internal/events"
 	"github.com/mc-panel/control-plane/internal/jobs"
 	"github.com/mc-panel/control-plane/internal/serverstats"
 	"github.com/mc-panel/control-plane/internal/store"
@@ -26,11 +27,12 @@ type API struct {
 	rings    *console.Registry
 	stats    *serverstats.Cache
 	hub      *agenthub.Hub
+	events   *events.Hub
 	js       jetstream.JetStream
 	log      *slog.Logger
 }
 
-func New(st *store.Store, am *auth.Manager, disp *jobs.Dispatcher, vs *versions.Service, rings *console.Registry, stats *serverstats.Cache, hub *agenthub.Hub, js jetstream.JetStream, log *slog.Logger) *API {
+func New(st *store.Store, am *auth.Manager, disp *jobs.Dispatcher, vs *versions.Service, rings *console.Registry, stats *serverstats.Cache, hub *agenthub.Hub, ev *events.Hub, js jetstream.JetStream, log *slog.Logger) *API {
 	return &API{
 		st:       st,
 		auth:     am,
@@ -39,6 +41,7 @@ func New(st *store.Store, am *auth.Manager, disp *jobs.Dispatcher, vs *versions.
 		rings:    rings,
 		stats:    stats,
 		hub:      hub,
+		events:   ev,
 		js:       js,
 		log:      log,
 	}

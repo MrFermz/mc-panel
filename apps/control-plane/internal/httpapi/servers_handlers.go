@@ -202,6 +202,9 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		"node_id": srv.NodeID.String(),
 	})
 
+	// row เกิดแล้ว → แจ้ง browser refetch server list (dashboard อัปเดตทันที)
+	a.events.ServerAdded(srv.ID)
+
 	job, err := a.disp.CreateServer(r.Context(), srv, req.AcceptEula, user.ID)
 	if err != nil {
 		// job ถูก mark failed แล้วใน dispatcher — server ที่ provision ไม่ได้ให้จบที่ errored

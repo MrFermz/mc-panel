@@ -109,6 +109,7 @@ export const jobTypeSchema = z.enum([
   "stop_server",
   "kill_server",
   "delete_server",
+  "import_server",
 ]);
 
 export const jobStatusSchema = z.enum([
@@ -302,5 +303,8 @@ export const eventsServerMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("node_stats"), node: nodeSchema }),
   z.object({ type: z.literal("server_jobs"), server_id: z.string() }),
+  // list เปลี่ยน (สร้าง/import/ลบ server) — web invalidate ["servers"] ให้ dashboard สดโดยไม่ต้อง refresh
+  z.object({ type: z.literal("server_added"), server_id: z.string() }),
+  z.object({ type: z.literal("server_removed"), server_id: z.string() }),
 ]);
 export type EventsServerMessage = z.infer<typeof eventsServerMessageSchema>;
