@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  ActivityIcon,
   PlayIcon,
   RotateCwIcon,
   SquareIcon,
@@ -24,12 +25,19 @@ import {
   useStatsHistoryStore,
   type StatPoint,
 } from "@/lib/settings/stats-history";
+import { useSettingsStore } from "@/lib/settings/store";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import SettingsTab from "@/components/server/settings-tab";
 import AccessTab from "@/components/server/access-tab";
 import FilesTab from "@/components/server/files-tab";
@@ -75,6 +83,10 @@ function ServerDetailPage() {
   const history = useStatsHistoryStore((s) => s.history[id] ?? EMPTY_HISTORY);
   const pushStats = useStatsHistoryStore((s) => s.push);
   const resetStats = useStatsHistoryStore((s) => s.reset);
+
+  // การ์ด live-resources เปิด/ปิด — จำค่าไว้ข้าม visit (persist ใน settings store)
+  const resourcesOpen = useSettingsStore((s) => s.detailResourcesOpen);
+  const setResourcesOpen = useSettingsStore((s) => s.setDetailResourcesOpen);
 
   // ไม่ poll แล้ว — stats/status อัปเดตผ่าน WS /ws/events (useEvents ที่ layout patch cache นี้)
   const detail = useQuery({
@@ -266,15 +278,25 @@ function ServerDetailPage() {
       </p>
 
       {isRunning && stats && (
-        <Card className="gap-3 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-              {t("stats.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4">
-            <StatsChart stats={stats} history={history} height={140} />
-          </CardContent>
+        <Card className="px-4 py-0">
+          <Accordion
+            type="single"
+            collapsible
+            value={resourcesOpen ? "resources" : ""}
+            onValueChange={(v) => setResourcesOpen(v === "resources")}
+          >
+            <AccordionItem value="resources" className="border-b-0">
+              <AccordionTrigger className="text-muted-foreground hover:text-foreground text-xs font-semibold tracking-wider uppercase">
+                <span className="flex items-center gap-1.5">
+                  <ActivityIcon className="size-3.5" />
+                  {t("stats.title")}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <StatsChart stats={stats} history={history} height={140} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
       )}
 

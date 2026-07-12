@@ -12,6 +12,9 @@ interface SettingsState {
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
+  // หน้า detail: การ์ด live-resources เปิด/ปิด (จำค่าไว้ข้าม visit) — default เปิด
+  detailResourcesOpen: boolean;
+  setDetailResourcesOpen: (open: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -23,6 +26,9 @@ export const useSettingsStore = create<SettingsState>()(
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      detailResourcesOpen: true,
+      setDetailResourcesOpen: (detailResourcesOpen) =>
+        set({ detailResourcesOpen }),
     }),
     {
       name: "mc_settings",

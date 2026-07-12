@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ActivityIcon,
   CpuIcon,
   DownloadIcon,
   HardDriveIcon,
@@ -28,7 +27,7 @@ import { useSettingsStore, type ServerView } from "@/lib/settings/store";
 import { useStatsHistoryStore } from "@/lib/settings/stats-history";
 import { ServerCard } from "@/components/server/server-card";
 import { ServerRow } from "@/components/server/server-row";
-import { NodeStatsChart } from "@/components/node/node-stats-chart";
+import { NodeStatsAccordion } from "@/components/node/node-stats-accordion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,15 +36,7 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE: Record<ServerView, number> = { grid: 12, list: 10 };
 
-function NodeSummary({
-  node,
-  open,
-  onToggle,
-}: {
-  node: Node;
-  open: boolean;
-  onToggle: () => void;
-}) {
+function NodeSummary({ node }: { node: Node }) {
   const t = useT();
   const online = node.status === "online";
   return (
@@ -88,26 +79,7 @@ function NodeSummary({
             {formatMb(node.disk_total_mb)}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={open}
-          className={cn(
-            "text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs transition-colors",
-            open && "text-foreground",
-          )}
-        >
-          <ActivityIcon className="size-3.5" />
-          {t("stats.resources")}
-        </button>
-        {open &&
-          (online ? (
-            <NodeStatsChart node={node} />
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              {t("nodes.offlineNoStats")}
-            </p>
-          ))}
+        <NodeStatsAccordion node={node} />
       </CardContent>
     </Card>
   );
@@ -170,17 +142,6 @@ export default function DashboardPage() {
   const resetStats = useStatsHistoryStore((s) => s.reset);
 
   const [page, setPage] = React.useState(1);
-  // node id ที่กางกราฟ resource อยู่บน dashboard (หลาย node พร้อมกันได้, ไม่ persist ข้าม reload)
-  const [openNodeCharts, setOpenNodeCharts] = React.useState<Set<string>>(
-    new Set(),
-  );
-  const toggleNodeChart = (id: string) =>
-    setOpenNodeCharts((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
 
   // ไม่ poll แล้ว — stats/status อัปเดตผ่าน WS /ws/events (useEvents ที่ layout)
   const servers = useQuery({
@@ -261,12 +222,7 @@ export default function DashboardPage() {
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {nodes.data.nodes.map((node) => (
-              <NodeSummary
-                key={node.id}
-                node={node}
-                open={openNodeCharts.has(node.id)}
-                onToggle={() => toggleNodeChart(node.id)}
-              />
+              <NodeSummary key={node.id} node={node} />
             ))}
           </div>
         </section>

@@ -323,6 +323,12 @@ export const en = {
   "wizard.imported":
     "Server imported. Its files, whitelist and settings are ready to edit below.",
   "wizard.detectedVersion": "Detected version",
+  "wizard.createContinue": "Create & continue",
+  "wizard.importContinue": "Import & continue",
+  "wizard.next": "Next",
+  "wizard.detecting": "Reading the archive…",
+  "wizard.detectedHint": "Detected {type} · Minecraft {version} from the archive.",
+  "wizard.summaryName": "Name",
   "wizard.provisioning": "Preparing the server on the node…",
   "wizard.provisionFailed":
     "Provisioning failed on the node. You can still open the server to inspect it.",

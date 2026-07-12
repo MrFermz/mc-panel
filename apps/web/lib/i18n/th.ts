@@ -322,6 +322,12 @@ export const th: Dictionary = {
   "wizard.imported":
     "นำเข้าเซิร์ฟเวอร์แล้ว ไฟล์ whitelist และการตั้งค่าพร้อมให้แก้ด้านล่าง",
   "wizard.detectedVersion": "เวอร์ชันที่ตรวจพบ",
+  "wizard.createContinue": "สร้างและไปต่อ",
+  "wizard.importContinue": "นำเข้าและไปต่อ",
+  "wizard.next": "ถัดไป",
+  "wizard.detecting": "กำลังอ่านไฟล์บีบอัด…",
+  "wizard.detectedHint": "ตรวจพบ {type} · Minecraft {version} จากไฟล์ที่เลือก",
+  "wizard.summaryName": "ชื่อ",
   "wizard.provisioning": "กำลังเตรียมเซิร์ฟเวอร์บนโหนด…",
   "wizard.provisionFailed":
     "เตรียมเซิร์ฟเวอร์บนโหนดไม่สำเร็จ แต่ยังเปิดเข้าไปตรวจสอบได้",
