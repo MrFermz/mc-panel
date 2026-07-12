@@ -101,7 +101,11 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
 }
 
 func (s *Store) CreateUser(ctx context.Context, email string, username *string, passwordHash, displayName string, isAdmin bool, capabilities []string) (*User, error) {
-	// nil slice -> pgx encode เป็น '{}' (empty array) ตรงกับ NOT NULL DEFAULT
+	// pgx encode nil slice เป็น SQL NULL ไม่ใช่ '{}' — ชน NOT NULL ของ capabilities
+	// (โผล่ตอน seed admin บน DB เปล่า) จึงต้อง coalesce เป็น empty slice ก่อนเสมอ
+	if capabilities == nil {
+		capabilities = []string{}
+	}
 	// username nil -> NULL (partial unique index มองข้ามแถว username IS NULL)
 	return scanUser(s.pool.QueryRow(ctx, `
 		INSERT INTO users (email, username, password_hash, display_name, is_admin, capabilities, must_change_password)
