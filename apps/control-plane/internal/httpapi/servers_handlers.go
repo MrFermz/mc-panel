@@ -70,6 +70,10 @@ func (a *API) statsViewFor(s *store.Server) *serverStatsView {
 		CPUPercent:    st.CPUPercent,
 		MemoryUsedMB:  st.MemoryUsedMB,
 		MemoryLimitMB: st.MemoryLimitMB,
+		NetRxBps:      st.NetRxBps,
+		NetTxBps:      st.NetTxBps,
+		DiskReadBps:   st.DiskReadBps,
+		DiskWriteBps:  st.DiskWriteBps,
 		UpdatedAt:     st.UpdatedAt,
 	}
 }

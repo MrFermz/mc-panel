@@ -14,7 +14,8 @@ const StatsChart = dynamic(
   () => import("@/components/server/stats-chart").then((m) => m.StatsChart),
   {
     ssr: false,
-    loading: () => <Skeleton className="h-[220px] w-full" />,
+    // สี่กราฟ height=100 (CPU/RAM/Network/Disk)
+    loading: () => <Skeleton className="h-[520px] w-full" />,
   },
 );
 
@@ -23,10 +24,15 @@ const EMPTY_HISTORY: StatPoint[] = [];
 // รวม node metrics ให้เข้ารูป ServerStats เพื่อ reuse StatsChart ตัวเดียวกับ instance
 // (node ไม่มี "limit" ต่อ process — ใช้ total ของเครื่องเป็นเพดาน)
 function nodeStats(node: Node): ServerStats {
+  // net/disk baseline ปล่อย 0 — StatsChart อ่านค่าจริงจากจุดล่าสุดใน history (StatPoint ของ node)
   return {
     cpu_percent: node.cpu_percent,
     memory_used_mb: node.memory_used_mb,
     memory_limit_mb: node.memory_total_mb,
+    net_rx_bps: 0,
+    net_tx_bps: 0,
+    disk_read_bps: 0,
+    disk_write_bps: 0,
     updated_at: node.last_heartbeat_at ?? "",
   };
 }
@@ -35,5 +41,12 @@ export function NodeStatsChart({ node }: { node: Node }) {
   const history = useStatsHistoryStore(
     (s) => s.history[node.id] ?? EMPTY_HISTORY,
   );
-  return <StatsChart stats={nodeStats(node)} history={history} height={100} />;
+  return (
+    <StatsChart
+      stats={nodeStats(node)}
+      history={history}
+      height={100}
+      variant="node"
+    />
+  );
 }

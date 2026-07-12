@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 
@@ -31,12 +32,26 @@ func (h *Handler) Process(ctx context.Context, env *jobv1.JobEnvelope) (detail s
 			AcceptEULA: p.CreateServer.AcceptEula,
 		})
 	case *jobv1.JobEnvelope_ImportServer:
-		return "", h.prov.ImportServer(ctx, env.ServerId, provision.ImportSpec{
+		detectedVersion, ierr := h.prov.ImportServer(ctx, env.ServerId, provision.ImportSpec{
 			ServerType:  p.ImportServer.ServerType,
 			MCVersion:   p.ImportServer.McVersion,
 			AcceptEULA:  p.ImportServer.AcceptEula,
 			ArchivePath: p.ImportServer.ArchivePath,
 		})
+		if ierr != nil {
+			return "", ierr
+		}
+		// control-plane อ่าน Detail ตอน job สำเร็จเพื่อ sync mc_version ของ server ให้ตรงจริง
+		if detectedVersion != "" {
+			b, merr := json.Marshal(struct {
+				MCVersion string `json:"mc_version"`
+			}{detectedVersion})
+			if merr != nil {
+				return "", merr
+			}
+			return string(b), nil
+		}
+		return "", nil
 	case *jobv1.JobEnvelope_StartServer:
 		return "", h.runner.Start(ctx, runner.ServerConfig{
 			ID:       env.ServerId,

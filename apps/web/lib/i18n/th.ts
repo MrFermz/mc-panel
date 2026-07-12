@@ -307,6 +307,31 @@ export const th: Dictionary = {
   "import.errImportFailed": "นำเข้าบนโหนดไม่สำเร็จ",
   "import.errGeneric": "นำเข้าเซิร์ฟเวอร์ไม่สำเร็จ",
 
+  // ---------- new/import server wizard (full page) ----------
+  "wizard.newBreadcrumb": "เซิร์ฟเวอร์ใหม่",
+  "wizard.importBreadcrumb": "นำเข้าเซิร์ฟเวอร์",
+  "wizard.tabGeneral": "ทั่วไป",
+  "wizard.tabProperties": "ตั้งค่าเซิร์ฟเวอร์",
+  "wizard.tabAccess": "สิทธิ์เข้าถึง",
+  "wizard.tabPlayers": "ผู้เล่น",
+  "wizard.lockedHint": "สร้างหรือนำเข้าเซิร์ฟเวอร์ก่อนจึงจะแก้แท็บนี้ได้",
+  "wizard.done": "ไปที่เซิร์ฟเวอร์",
+  "wizard.summary": "เซิร์ฟเวอร์พร้อมแล้ว",
+  "wizard.created":
+    "สร้างเซิร์ฟเวอร์แล้ว ตอนนี้แก้แท็บอื่นได้ หรือไปที่เซิร์ฟเวอร์ได้เลย",
+  "wizard.imported":
+    "นำเข้าเซิร์ฟเวอร์แล้ว ไฟล์ whitelist และการตั้งค่าพร้อมให้แก้ด้านล่าง",
+  "wizard.detectedVersion": "เวอร์ชันที่ตรวจพบ",
+  "wizard.provisioning": "กำลังเตรียมเซิร์ฟเวอร์บนโหนด…",
+  "wizard.provisionFailed":
+    "เตรียมเซิร์ฟเวอร์บนโหนดไม่สำเร็จ แต่ยังเปิดเข้าไปตรวจสอบได้",
+  "wizard.editGeneral": "แก้ข้อมูลพื้นฐาน",
+  "wizard.summaryType": "ประเภท",
+  "wizard.summaryNode": "โหนด",
+  "wizard.summaryPort": "พอร์ตโฮสต์",
+  "wizard.overlayTitle": "กำลังนำเข้าเซิร์ฟเวอร์",
+  "wizard.overlayHint": "เปิดหน้านี้ค้างไว้จนกว่าจะอัปโหลดเสร็จ",
+
   // ---------- players / whitelist tab ----------
   "players.add": "เพิ่ม",
   "players.addPlaceholder": "ชื่อผู้ใช้ Minecraft",
@@ -461,4 +486,12 @@ export const th: Dictionary = {
   "stats.cpu": "CPU",
   "stats.ram": "RAM",
   "stats.waiting": "กำลังเก็บข้อมูล...",
+  "chart.network": "เครือข่าย",
+  "chart.disk": "ดิสก์",
+  "chart.diskIO": "ดิสก์ I/O",
+  "chart.read": "อ่าน",
+  "chart.write": "เขียน",
+  "chart.rx": "เข้า",
+  "chart.tx": "ออก",
+  "chart.used": "ใช้ไป",
 };

@@ -30,6 +30,10 @@ function toStatPoint(stats: NonNullable<Server["stats"]>): StatPoint {
     cpu: stats.cpu_percent,
     memUsed: stats.memory_used_mb,
     memLimit: stats.memory_limit_mb,
+    netRx: stats.net_rx_bps,
+    netTx: stats.net_tx_bps,
+    diskR: stats.disk_read_bps,
+    diskW: stats.disk_write_bps,
   };
 }
 
@@ -43,6 +47,10 @@ function toNodeStatPoint(node: Node): StatPoint {
     cpu: node.cpu_percent,
     memUsed: node.memory_used_mb,
     memLimit: node.memory_total_mb,
+    netRx: node.net_rx_bps,
+    netTx: node.net_tx_bps,
+    diskUsed: node.disk_used_mb,
+    diskTotal: node.disk_total_mb,
   };
 }
 

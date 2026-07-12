@@ -13,6 +13,10 @@ type Stat struct {
 	CPUPercent    float64
 	MemoryUsedMB  int64
 	MemoryLimitMB int64
+	NetRxBps      float64
+	NetTxBps      float64
+	DiskReadBps   float64
+	DiskWriteBps  float64
 	UpdatedAt     time.Time
 }
 

@@ -26,11 +26,17 @@ type ServerConfig struct {
 }
 
 // ResourceStats คือ resource usage ที่ agent รายงานกลับ
+// Net*/Disk* เป็น counter สะสมดิบ (cumulative bytes) — rate/sec คำนวณจาก delta
+// ระหว่าง sample ที่ชั้นบน (serverstats) ไม่ใช่ที่นี่
 type ResourceStats struct {
 	CPUPercent    float64
 	MemoryMB      int
 	MemoryLimitMB int
 	DiskMB        int
+	NetRxBytes    uint64
+	NetTxBytes    uint64
+	DiskReadBytes uint64
+	DiskWrBytes   uint64
 }
 
 // Runner คือ interface กลางที่ NativeRunner และ DockerRunner ต้อง implement

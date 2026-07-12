@@ -144,6 +144,13 @@ func (s *Store) UpdateServerConfig(ctx context.Context, id uuid.UUID, name *stri
 		id, name, memoryMB, hostPort, clearHostPort))
 }
 
+// UpdateServerMCVersion set mc_version จากเวอร์ชันที่ agent detect ได้หลัง import สำเร็จ
+func (s *Store) UpdateServerMCVersion(ctx context.Context, id uuid.UUID, mcVersion string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE servers SET mc_version = $2, updated_at = now() WHERE id = $1`, id, mcVersion)
+	return err
+}
+
 func (s *Store) UpdateServerStatus(ctx context.Context, id uuid.UUID, status string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE servers SET status = $2, updated_at = now() WHERE id = $1`, id, status)

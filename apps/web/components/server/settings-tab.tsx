@@ -250,7 +250,7 @@ function PropertyControl({
   );
 }
 
-function ServerPropertiesCard({ serverId }: { serverId: string }) {
+export function ServerPropertiesCard({ serverId }: { serverId: string }) {
   const t = useT();
   const queryClient = useQueryClient();
 

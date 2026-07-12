@@ -11,13 +11,14 @@ import (
 
 const nodeCols = `id, name, agent_token_hash, status, agent_version, os, arch,
 	cpu_percent, memory_used_mb, memory_total_mb, disk_used_mb, disk_total_mb,
-	last_heartbeat_at, created_at`
+	net_rx_bps, net_tx_bps, last_heartbeat_at, created_at`
 
 func scanNode(row pgx.Row) (*Node, error) {
 	var n Node
 	err := row.Scan(&n.ID, &n.Name, &n.AgentTokenHash, &n.Status, &n.AgentVersion,
 		&n.OS, &n.Arch, &n.CPUPercent, &n.MemoryUsedMB, &n.MemoryTotalMB,
-		&n.DiskUsedMB, &n.DiskTotalMB, &n.LastHeartbeatAt, &n.CreatedAt)
+		&n.DiskUsedMB, &n.DiskTotalMB, &n.NetRxBps, &n.NetTxBps,
+		&n.LastHeartbeatAt, &n.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -105,7 +106,7 @@ func (s *Store) UpdateNodeHello(ctx context.Context, id uuid.UUID, agentVersion,
 	return err
 }
 
-func (s *Store) UpdateNodeHeartbeat(ctx context.Context, id uuid.UUID, cpuPercent float64, memUsedMB, memTotalMB, diskUsedMB, diskTotalMB int64) error {
+func (s *Store) UpdateNodeHeartbeat(ctx context.Context, id uuid.UUID, cpuPercent float64, memUsedMB, memTotalMB, diskUsedMB, diskTotalMB int64, netRxBps, netTxBps float64) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE nodes SET
 			cpu_percent       = $2,
@@ -113,10 +114,12 @@ func (s *Store) UpdateNodeHeartbeat(ctx context.Context, id uuid.UUID, cpuPercen
 			memory_total_mb   = $4,
 			disk_used_mb      = $5,
 			disk_total_mb     = $6,
+			net_rx_bps        = $7,
+			net_tx_bps        = $8,
 			status            = 'online',
 			last_heartbeat_at = now()
 		WHERE id = $1`,
-		id, cpuPercent, memUsedMB, memTotalMB, diskUsedMB, diskTotalMB)
+		id, cpuPercent, memUsedMB, memTotalMB, diskUsedMB, diskTotalMB, netRxBps, netTxBps)
 	return err
 }
 

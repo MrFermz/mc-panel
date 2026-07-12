@@ -45,6 +45,9 @@ export const nodeSchema = z.object({
   memory_total_mb: z.number(),
   disk_used_mb: z.number(),
   disk_total_mb: z.number(),
+  // network throughput ของทั้ง node (bytes/sec) — default 0 เผื่อ payload เก่ายังไม่มี field นี้
+  net_rx_bps: z.number().default(0),
+  net_tx_bps: z.number().default(0),
   last_heartbeat_at: z.string().nullable().default(null),
   created_at: z.string(),
 });
@@ -74,6 +77,11 @@ export const serverStatsSchema = z.object({
   cpu_percent: z.number(),
   memory_used_mb: z.number(),
   memory_limit_mb: z.number(),
+  // network + disk I/O rate ของ container (bytes/sec) — default 0 เผื่อ payload เก่ายังไม่มี
+  net_rx_bps: z.number().default(0),
+  net_tx_bps: z.number().default(0),
+  disk_read_bps: z.number().default(0),
+  disk_write_bps: z.number().default(0),
   updated_at: z.string(),
 });
 export type ServerStats = z.infer<typeof serverStatsSchema>;

@@ -18,6 +18,10 @@ export function formatBytes(bytes: number): string {
   return `${val >= 100 ? Math.round(val) : val.toFixed(1)} ${units[i]}`;
 }
 
+export function formatBps(bytesPerSec: number): string {
+  return `${formatBytes(bytesPerSec)}/s`;
+}
+
 export function formatCpuPercent(percent: number): string {
   // < 10% โชว์ทศนิยม 1 ตำแหน่งให้พอเห็นความเปลี่ยนแปลง, มากกว่านั้นปัดเต็ม
   return `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}%`;

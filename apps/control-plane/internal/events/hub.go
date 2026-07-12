@@ -21,6 +21,10 @@ type ServerStatsPayload struct {
 	CPUPercent    float64   `json:"cpu_percent"`
 	MemoryUsedMB  int64     `json:"memory_used_mb"`
 	MemoryLimitMB int64     `json:"memory_limit_mb"`
+	NetRxBps      float64   `json:"net_rx_bps"`
+	NetTxBps      float64   `json:"net_tx_bps"`
+	DiskReadBps   float64   `json:"disk_read_bps"`
+	DiskWriteBps  float64   `json:"disk_write_bps"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
@@ -37,6 +41,8 @@ type NodePayload struct {
 	MemoryTotalMB   int64      `json:"memory_total_mb"`
 	DiskUsedMB      int64      `json:"disk_used_mb"`
 	DiskTotalMB     int64      `json:"disk_total_mb"`
+	NetRxBps        float64    `json:"net_rx_bps"`
+	NetTxBps        float64    `json:"net_tx_bps"`
 	LastHeartbeatAt *time.Time `json:"last_heartbeat_at"`
 	CreatedAt       time.Time  `json:"created_at"`
 }
@@ -56,6 +62,8 @@ func NewNodePayload(n *store.Node) NodePayload {
 		MemoryTotalMB:   n.MemoryTotalMB,
 		DiskUsedMB:      n.DiskUsedMB,
 		DiskTotalMB:     n.DiskTotalMB,
+		NetRxBps:        n.NetRxBps,
+		NetTxBps:        n.NetTxBps,
 		LastHeartbeatAt: n.LastHeartbeatAt,
 		CreatedAt:       n.CreatedAt,
 	}

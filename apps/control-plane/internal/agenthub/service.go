@@ -171,7 +171,7 @@ func (h *Hub) handleMessage(ctx context.Context, nodeID uuid.UUID, msg *agentv1.
 
 func (h *Hub) handleHeartbeat(ctx context.Context, nodeID uuid.UUID, hb *agentv1.Heartbeat) {
 	if err := h.st.UpdateNodeHeartbeat(ctx, nodeID, hb.CpuPercent, hb.MemoryUsedMb,
-		hb.MemoryTotalMb, hb.DiskUsedMb, hb.DiskTotalMb); err != nil {
+		hb.MemoryTotalMb, hb.DiskUsedMb, hb.DiskTotalMb, hb.NetRxBps, hb.NetTxBps); err != nil {
 		h.log.Error("update node heartbeat failed", "node_id", nodeID, "error", err)
 		return
 	}
@@ -266,6 +266,10 @@ func (h *Hub) handleServerStats(ctx context.Context, nodeID uuid.UUID, st *agent
 		CPUPercent:    st.CpuPercent,
 		MemoryUsedMB:  st.MemoryUsedMb,
 		MemoryLimitMB: st.MemoryLimitMb,
+		NetRxBps:      st.NetRxBps,
+		NetTxBps:      st.NetTxBps,
+		DiskReadBps:   st.DiskReadBps,
+		DiskWriteBps:  st.DiskWriteBps,
 		UpdatedAt:     time.Now(),
 	}
 	h.stats.Set(serverID, stat)
@@ -275,6 +279,10 @@ func (h *Hub) handleServerStats(ctx context.Context, nodeID uuid.UUID, st *agent
 			CPUPercent:    stat.CPUPercent,
 			MemoryUsedMB:  stat.MemoryUsedMB,
 			MemoryLimitMB: stat.MemoryLimitMB,
+			NetRxBps:      stat.NetRxBps,
+			NetTxBps:      stat.NetTxBps,
+			DiskReadBps:   stat.DiskReadBps,
+			DiskWriteBps:  stat.DiskWriteBps,
 			UpdatedAt:     stat.UpdatedAt,
 		})
 	} else {

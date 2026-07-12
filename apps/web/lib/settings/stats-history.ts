@@ -8,6 +8,13 @@ export interface StatPoint {
   cpu: number; // percent
   memUsed: number; // MB
   memLimit: number; // MB
+  netRx: number; // bytes/sec
+  netTx: number; // bytes/sec
+  // instance วัด disk เป็น I/O rate, node วัดเป็นพื้นที่ที่ใช้ — เก็บได้ทั้งคู่ (ฝั่งที่ไม่ใช้ปล่อยว่าง)
+  diskR?: number; // instance: read bytes/sec
+  diskW?: number; // instance: write bytes/sec
+  diskUsed?: number; // node: MB
+  diskTotal?: number; // node: MB
 }
 
 // history ของ resource stats ต่อ server เก็บใน memory เท่านั้น (ephemeral เหมือน console history)

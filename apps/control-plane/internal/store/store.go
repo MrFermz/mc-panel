@@ -55,6 +55,8 @@ type Node struct {
 	MemoryTotalMB   int64
 	DiskUsedMB      int64
 	DiskTotalMB     int64
+	NetRxBps        float64
+	NetTxBps        float64
 	LastHeartbeatAt *time.Time
 	CreatedAt       time.Time
 }

@@ -28,6 +28,9 @@
   --chart-low: oklch(0.62 0.16 150);
   --chart-medium: oklch(0.72 0.16 75);
   --chart-high: oklch(0.6 0.22 27.3);
+  /* คู่สีสำหรับ series สองเส้น (network rx/tx, disk read/write) — ค่าปรับ contrast สำหรับพื้นสว่าง */
+  --chart-rx: oklch(0.55 0.16 240);
+  --chart-tx: oklch(0.55 0.2 300);
 }
 
 .dark {
@@ -54,6 +57,9 @@
   --chart-low: oklch(0.72 0.18 150);
   --chart-medium: oklch(0.8 0.15 80);
   --chart-high: oklch(0.7 0.19 22.2);
+  /* ปรับให้สว่างขึ้นเพื่อ contrast บนพื้นมืด */
+  --chart-rx: oklch(0.7 0.16 240);
+  --chart-tx: oklch(0.72 0.19 300);
 }
 
 @theme inline {

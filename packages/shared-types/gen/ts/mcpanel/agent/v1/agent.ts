@@ -117,6 +117,16 @@ export interface Heartbeat {
      * @generated from protobuf field: repeated string running_server_ids = 6
      */
     runningServerIds: string[]; // server ที่ container กำลังรันอยู่จริง
+    /**
+     * host network rate (bytes/sec) คำนวณจาก delta ฝั่ง agent
+     *
+     * @generated from protobuf field: double net_rx_bps = 7
+     */
+    netRxBps: number;
+    /**
+     * @generated from protobuf field: double net_tx_bps = 8
+     */
+    netTxBps: number;
 }
 /**
  * @generated from protobuf message mcpanel.agent.v1.ConsoleOutput
@@ -173,6 +183,24 @@ export interface ServerStats {
      * @generated from protobuf field: int64 memory_limit_mb = 4
      */
     memoryLimitMb: bigint; // limit ที่ตั้งให้ container (heap + overhead)
+    /**
+     * rate คำนวณจาก delta ระหว่าง sample ฝั่ง agent (bytes/sec) — realtime/ephemeral
+     *
+     * @generated from protobuf field: double net_rx_bps = 5
+     */
+    netRxBps: number; // container network receive rate
+    /**
+     * @generated from protobuf field: double net_tx_bps = 6
+     */
+    netTxBps: number; // container network transmit rate
+    /**
+     * @generated from protobuf field: double disk_read_bps = 7
+     */
+    diskReadBps: number; // container block I/O read rate
+    /**
+     * @generated from protobuf field: double disk_write_bps = 8
+     */
+    diskWriteBps: number; // container block I/O write rate
 }
 // ---------- control plane -> agent ----------
 
@@ -653,7 +681,9 @@ class Heartbeat$Type extends MessageType<Heartbeat> {
             { no: 3, name: "memory_total_mb", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
             { no: 4, name: "disk_used_mb", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
             { no: 5, name: "disk_total_mb", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
-            { no: 6, name: "running_server_ids", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ }
+            { no: 6, name: "running_server_ids", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 7, name: "net_rx_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 8, name: "net_tx_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ }
         ]);
     }
     create(value?: PartialMessage<Heartbeat>): Heartbeat {
@@ -664,6 +694,8 @@ class Heartbeat$Type extends MessageType<Heartbeat> {
         message.diskUsedMb = 0n;
         message.diskTotalMb = 0n;
         message.runningServerIds = [];
+        message.netRxBps = 0;
+        message.netTxBps = 0;
         if (value !== undefined)
             reflectionMergePartial<Heartbeat>(this, message, value);
         return message;
@@ -690,6 +722,12 @@ class Heartbeat$Type extends MessageType<Heartbeat> {
                     break;
                 case /* repeated string running_server_ids */ 6:
                     message.runningServerIds.push(reader.string());
+                    break;
+                case /* double net_rx_bps */ 7:
+                    message.netRxBps = reader.double();
+                    break;
+                case /* double net_tx_bps */ 8:
+                    message.netTxBps = reader.double();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -721,6 +759,12 @@ class Heartbeat$Type extends MessageType<Heartbeat> {
         /* repeated string running_server_ids = 6; */
         for (let i = 0; i < message.runningServerIds.length; i++)
             writer.tag(6, WireType.LengthDelimited).string(message.runningServerIds[i]);
+        /* double net_rx_bps = 7; */
+        if (message.netRxBps !== 0)
+            writer.tag(7, WireType.Bit64).double(message.netRxBps);
+        /* double net_tx_bps = 8; */
+        if (message.netTxBps !== 0)
+            writer.tag(8, WireType.Bit64).double(message.netTxBps);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -856,7 +900,11 @@ class ServerStats$Type extends MessageType<ServerStats> {
             { no: 1, name: "server_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "cpu_percent", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
             { no: 3, name: "memory_used_mb", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
-            { no: 4, name: "memory_limit_mb", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ }
+            { no: 4, name: "memory_limit_mb", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
+            { no: 5, name: "net_rx_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 6, name: "net_tx_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 7, name: "disk_read_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 8, name: "disk_write_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ }
         ]);
     }
     create(value?: PartialMessage<ServerStats>): ServerStats {
@@ -865,6 +913,10 @@ class ServerStats$Type extends MessageType<ServerStats> {
         message.cpuPercent = 0;
         message.memoryUsedMb = 0n;
         message.memoryLimitMb = 0n;
+        message.netRxBps = 0;
+        message.netTxBps = 0;
+        message.diskReadBps = 0;
+        message.diskWriteBps = 0;
         if (value !== undefined)
             reflectionMergePartial<ServerStats>(this, message, value);
         return message;
@@ -885,6 +937,18 @@ class ServerStats$Type extends MessageType<ServerStats> {
                     break;
                 case /* int64 memory_limit_mb */ 4:
                     message.memoryLimitMb = reader.int64().toBigInt();
+                    break;
+                case /* double net_rx_bps */ 5:
+                    message.netRxBps = reader.double();
+                    break;
+                case /* double net_tx_bps */ 6:
+                    message.netTxBps = reader.double();
+                    break;
+                case /* double disk_read_bps */ 7:
+                    message.diskReadBps = reader.double();
+                    break;
+                case /* double disk_write_bps */ 8:
+                    message.diskWriteBps = reader.double();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -910,6 +974,18 @@ class ServerStats$Type extends MessageType<ServerStats> {
         /* int64 memory_limit_mb = 4; */
         if (message.memoryLimitMb !== 0n)
             writer.tag(4, WireType.Varint).int64(message.memoryLimitMb);
+        /* double net_rx_bps = 5; */
+        if (message.netRxBps !== 0)
+            writer.tag(5, WireType.Bit64).double(message.netRxBps);
+        /* double net_tx_bps = 6; */
+        if (message.netTxBps !== 0)
+            writer.tag(6, WireType.Bit64).double(message.netTxBps);
+        /* double disk_read_bps = 7; */
+        if (message.diskReadBps !== 0)
+            writer.tag(7, WireType.Bit64).double(message.diskReadBps);
+        /* double disk_write_bps = 8; */
+        if (message.diskWriteBps !== 0)
+            writer.tag(8, WireType.Bit64).double(message.diskWriteBps);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

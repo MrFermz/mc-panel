@@ -46,6 +46,9 @@ message Heartbeat {
   int64 disk_used_mb = 4;
   int64 disk_total_mb = 5;
   repeated string running_server_ids = 6; // server ที่ container กำลังรันอยู่จริง
+  // host network rate (bytes/sec) คำนวณจาก delta ฝั่ง agent
+  double net_rx_bps = 7;
+  double net_tx_bps = 8;
 }
 
 message ConsoleOutput {
@@ -76,6 +79,11 @@ message ServerStats {
   double cpu_percent = 2;      // 0-100 * จำนวน core (เทียบกับ 1 core = 100%)
   int64 memory_used_mb = 3;
   int64 memory_limit_mb = 4;   // limit ที่ตั้งให้ container (heap + overhead)
+  // rate คำนวณจาก delta ระหว่าง sample ฝั่ง agent (bytes/sec) — realtime/ephemeral
+  double net_rx_bps = 5;       // container network receive rate
+  double net_tx_bps = 6;       // container network transmit rate
+  double disk_read_bps = 7;    // container block I/O read rate
+  double disk_write_bps = 8;   // container block I/O write rate
 }
 
 // ---------- control plane -> agent ----------

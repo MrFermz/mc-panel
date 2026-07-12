@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ActivityIcon,
   CpuIcon,
   DownloadIcon,
   HardDriveIcon,
@@ -23,10 +25,10 @@ import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
 import { useSettingsStore, type ServerView } from "@/lib/settings/store";
-import { useUiStore } from "@/lib/settings/ui-store";
 import { useStatsHistoryStore } from "@/lib/settings/stats-history";
 import { ServerCard } from "@/components/server/server-card";
 import { ServerRow } from "@/components/server/server-row";
+import { NodeStatsChart } from "@/components/node/node-stats-chart";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,13 +37,21 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE: Record<ServerView, number> = { grid: 12, list: 10 };
 
-function NodeSummary({ node }: { node: Node }) {
+function NodeSummary({
+  node,
+  open,
+  onToggle,
+}: {
+  node: Node;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useT();
   const online = node.status === "online";
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="px-4">
-        <CardTitle className="flex items-center justify-between text-sm">
+        <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="truncate">{node.name}</span>
           <Badge
             variant="outline"
@@ -61,21 +71,43 @@ function NodeSummary({ node }: { node: Node }) {
           </Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent className="text-muted-foreground grid gap-1 px-4 text-xs">
-        <div className="flex items-center gap-1.5">
-          <CpuIcon className="size-3.5" />
-          {t("res.cpu")} {node.cpu_percent.toFixed(1)}%
+      <CardContent className="grid gap-3 px-4">
+        <div className="text-muted-foreground grid gap-1 text-xs">
+          <div className="flex items-center gap-1.5">
+            <CpuIcon className="size-3.5" />
+            {t("res.cpu")} {node.cpu_percent.toFixed(1)}%
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MemoryStickIcon className="size-3.5" />
+            {t("res.ram")} {formatMb(node.memory_used_mb)} /{" "}
+            {formatMb(node.memory_total_mb)}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <HardDriveIcon className="size-3.5" />
+            {t("res.disk")} {formatMb(node.disk_used_mb)} /{" "}
+            {formatMb(node.disk_total_mb)}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <MemoryStickIcon className="size-3.5" />
-          {t("res.ram")} {formatMb(node.memory_used_mb)} /{" "}
-          {formatMb(node.memory_total_mb)}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <HardDriveIcon className="size-3.5" />
-          {t("res.disk")} {formatMb(node.disk_used_mb)} /{" "}
-          {formatMb(node.disk_total_mb)}
-        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className={cn(
+            "text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs transition-colors",
+            open && "text-foreground",
+          )}
+        >
+          <ActivityIcon className="size-3.5" />
+          {t("stats.resources")}
+        </button>
+        {open &&
+          (online ? (
+            <NodeStatsChart node={node} />
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              {t("nodes.offlineNoStats")}
+            </p>
+          ))}
       </CardContent>
     </Card>
   );
@@ -133,13 +165,22 @@ export default function DashboardPage() {
 
   const view = useSettingsStore((s) => s.serverView);
   const setView = useSettingsStore((s) => s.setServerView);
-  const openNewServer = useUiStore((s) => s.openNewServer);
-  const openImportServer = useUiStore((s) => s.openImportServer);
 
   const pushStats = useStatsHistoryStore((s) => s.push);
   const resetStats = useStatsHistoryStore((s) => s.reset);
 
   const [page, setPage] = React.useState(1);
+  // node id ที่กางกราฟ resource อยู่บน dashboard (หลาย node พร้อมกันได้, ไม่ persist ข้าม reload)
+  const [openNodeCharts, setOpenNodeCharts] = React.useState<Set<string>>(
+    new Set(),
+  );
+  const toggleNodeChart = (id: string) =>
+    setOpenNodeCharts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   // ไม่ poll แล้ว — stats/status อัปเดตผ่าน WS /ws/events (useEvents ที่ layout)
   const servers = useQuery({
@@ -178,6 +219,10 @@ export default function DashboardPage() {
           cpu: s.stats.cpu_percent,
           memUsed: s.stats.memory_used_mb,
           memLimit: s.stats.memory_limit_mb,
+          netRx: s.stats.net_rx_bps,
+          netTx: s.stats.net_tx_bps,
+          diskR: s.stats.disk_read_bps,
+          diskW: s.stats.disk_write_bps,
         });
       } else {
         resetStats(s.id);
@@ -216,7 +261,12 @@ export default function DashboardPage() {
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {nodes.data.nodes.map((node) => (
-              <NodeSummary key={node.id} node={node} />
+              <NodeSummary
+                key={node.id}
+                node={node}
+                open={openNodeCharts.has(node.id)}
+                onToggle={() => toggleNodeChart(node.id)}
+              />
             ))}
           </div>
         </section>
@@ -231,13 +281,17 @@ export default function DashboardPage() {
             <ViewToggle view={view} onChange={changeView} />
             {canCreateServer && (
               <>
-                <Button size="sm" variant="outline" onClick={openImportServer}>
-                  <DownloadIcon />
-                  {t("import.button")}
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/servers/new?mode=import">
+                    <DownloadIcon />
+                    {t("import.button")}
+                  </Link>
                 </Button>
-                <Button size="sm" onClick={openNewServer}>
-                  <PlusIcon />
-                  {t("nav.newServer")}
+                <Button size="sm" asChild>
+                  <Link href="/servers/new">
+                    <PlusIcon />
+                    {t("nav.newServer")}
+                  </Link>
                 </Button>
               </>
             )}
@@ -262,8 +316,8 @@ export default function DashboardPage() {
             <CardContent className="text-muted-foreground flex flex-col items-center gap-3 text-sm">
               <p>{t("dashboard.noServers")}</p>
               {canCreateServer && (
-                <Button variant="outline" onClick={openNewServer}>
-                  {t("dashboard.createFirst")}
+                <Button variant="outline" asChild>
+                  <Link href="/servers/new">{t("dashboard.createFirst")}</Link>
                 </Button>
               )}
             </CardContent>

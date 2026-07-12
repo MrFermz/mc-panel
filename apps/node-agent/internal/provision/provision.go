@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -179,20 +180,20 @@ func writePanelFiles(dir, serverType, mcVersion string, acceptEULA bool) error {
 // ImportServer แตก zip ที่ถูก stage ไว้ใน jail ของ server แล้ว provision โดยไม่โหลด jar
 // (jar/world/config มาจาก zip ที่ user อัปโหลด) — ทุก path ที่แตะ filesystem ผ่าน SafeJoin,
 // ไม่ materialize symlink, มี size cap กัน disk-fill/zip-bomb
-func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec ImportSpec) error {
+func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec ImportSpec) (detectedVersion string, err error) {
 	dir, err := p.serverDir(serverID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// staged zip ถูกเขียนเข้ามาใน jail แล้วผ่าน chunked write — path มาจากภายนอก ต้อง SafeJoin
 	archivePath, err := filemanager.SafeJoin(dir, spec.ArchivePath)
 	if err != nil {
-		return fmt.Errorf("archive path validation failed: %w", err)
+		return "", fmt.Errorf("archive path validation failed: %w", err)
 	}
 	zr, err := zip.OpenReader(archivePath)
 	if err != nil {
-		return fmt.Errorf("open import archive: %w", err)
+		return "", fmt.Errorf("open import archive: %w", err)
 	}
 
 	var (
@@ -239,22 +240,168 @@ func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec Im
 		extractErr = cerr
 	}
 	if extractErr != nil {
-		return fmt.Errorf("extract import archive: %w", extractErr)
+		return "", fmt.Errorf("extract import archive: %w", extractErr)
 	}
 
 	// เอา staged zip ออกหลังแตกเสร็จ — ไม่ให้ค้างเปลือง disk / โผล่ใน file manager
 	if err := os.Remove(archivePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("remove staged archive: %w", err)
+		return "", fmt.Errorf("remove staged archive: %w", err)
 	}
 
-	if err := writePanelFiles(dir, spec.ServerType, spec.MCVersion, spec.AcceptEULA); err != nil {
-		return err
+	// launch script รัน `java -jar server.jar` (หรือ velocity.jar) ตายตัว — zip ที่ user
+	// อัปโหลดมักมี jar ชื่ออื่น (paper-1.21.1.jar ฯลฯ) ต้อง normalize ชื่อ ไม่งั้น start crash
+	// jarName = ชื่อไฟล์เดิมของ jar หลัก (ใช้ fallback เดา version จากชื่อ)
+	renamedTo, jarName := p.normalizeServerJar(dir, spec.ServerType, serverID)
+
+	// เดา mc_version best-effort เพื่อ pre-fill panel — เชื่อ version.json ใน jar ก่อน,
+	// ไม่ได้ค่อย parse จากชื่อไฟล์เดิม, สุดท้าย fallback ค่าที่ user กรอก
+	detectedVersion = p.detectMCVersion(dir, renamedTo, jarName)
+	if detectedVersion == "" {
+		detectedVersion = spec.MCVersion
+	}
+
+	// meta.json ต้องสะท้อน version จริงที่ detect ได้ (ไม่ใช่ค่าที่ user เดา)
+	if err := writePanelFiles(dir, spec.ServerType, detectedVersion, spec.AcceptEULA); err != nil {
+		return "", err
 	}
 
 	p.chownRecursive(dir)
 	log.Printf("server imported: server=%s type=%s version=%s files=%d bytes=%d",
-		serverID, spec.ServerType, spec.MCVersion, fileCount, totalIn)
-	return nil
+		serverID, spec.ServerType, detectedVersion, fileCount, totalIn)
+	return detectedVersion, nil
+}
+
+// normalizeServerJar เปลี่ยนชื่อ jar หลักที่ root เป็น server.jar (หรือ velocity.jar)
+// ให้ตรงกับ launch script. forge ใช้ run.sh/forge-*.jar อยู่แล้ว — ข้ามไป.
+// คืน (ชื่อไฟล์ target ที่ใช้จริง, ชื่อไฟล์เดิมของ jar หลัก) เพื่อไปเดา version ต่อ
+func (p *Provisioner) normalizeServerJar(dir, serverType, serverID string) (target, originalName string) {
+	switch serverType {
+	case "forge":
+		// forge จัดการผ่าน run.sh / forge-*.jar ใน launchScript — ไม่แตะ
+		return "", ""
+	case "velocity":
+		target = "velocity.jar"
+	default:
+		target = "server.jar"
+	}
+
+	// มี target อยู่แล้ว = zip ตั้งชื่อถูกมาแต่แรก, ไม่ต้อง rename แต่ยังคืนชื่อไว้เดา version
+	if _, err := os.Stat(filepath.Join(dir, target)); err == nil {
+		return target, target
+	}
+
+	jars := rootJars(dir)
+	if len(jars) == 0 {
+		// อาจเป็น setup ที่ไม่มี jar (velocity บาง config) — ไม่ fail ที่นี่
+		// ปล่อยให้ start เป็นคน surface error จริงทีหลัง
+		log.Printf("import: no root jar to rename to %s: server=%s", target, serverID)
+		return "", ""
+	}
+
+	pick := pickMainJar(dir, jars)
+	if err := os.Rename(filepath.Join(dir, pick), filepath.Join(dir, target)); err != nil {
+		log.Printf("import: rename %s to %s failed: server=%s err=%v", pick, target, serverID, err)
+		return "", pick
+	}
+	log.Printf("import: renamed main jar %s to %s: server=%s", pick, target, serverID)
+	return target, pick
+}
+
+// rootJars คืนชื่อ *.jar ที่ root ของ server dir (non-recursive)
+func rootJars(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var jars []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(strings.ToLower(e.Name()), ".jar") {
+			jars = append(jars, e.Name())
+		}
+	}
+	return jars
+}
+
+// pickMainJar เดา jar หลักจากหลายไฟล์: jar เดียวเลือกเลย, หลายไฟล์เลือกจากชื่อที่คุ้น
+// (paper/purpur/...) ไม่มีเลยเลือกไฟล์ใหญ่สุด (server jar มักใหญ่กว่า plugin/lib)
+func pickMainJar(dir string, jars []string) string {
+	if len(jars) == 1 {
+		return jars[0]
+	}
+	knownHints := []string{"paper", "purpur", "spigot", "vanilla", "fabric-server", "minecraft_server", "craftbukkit", "server"}
+	for _, hint := range knownHints {
+		for _, j := range jars {
+			if strings.Contains(strings.ToLower(j), hint) {
+				return j
+			}
+		}
+	}
+	// fallback: ไฟล์ใหญ่สุด — server jar มักใหญ่กว่า plugin/mod jar ที่เผลอวางไว้ root
+	largest, largestSize := jars[0], int64(-1)
+	for _, j := range jars {
+		if fi, err := os.Stat(filepath.Join(dir, j)); err == nil && fi.Size() > largestSize {
+			largest, largestSize = j, fi.Size()
+		}
+	}
+	return largest
+}
+
+var versionTokenRe = regexp.MustCompile(`\d+\.\d+(\.\d+)?`)
+
+// detectMCVersion เดา version จาก jar: version.json ใน jar ก่อน แล้ว fallback ชื่อไฟล์เดิม
+func (p *Provisioner) detectMCVersion(dir, target, originalName string) string {
+	if target != "" {
+		if v := versionFromJarManifest(filepath.Join(dir, target)); v != "" {
+			return v
+		}
+	}
+	// fallback: token version ในชื่อไฟล์เดิม เช่น paper-1.21.1.jar
+	if originalName != "" {
+		if v := versionTokenRe.FindString(originalName); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// versionFromJarManifest เปิด jar เป็น zip อ่าน version.json ที่ root → คืน id/name
+// (vanilla/paper/fabric bundle ไฟล์นี้มา) — อ่านไม่ได้/ไม่มีให้คืน ""
+func versionFromJarManifest(jarPath string) string {
+	zr, err := zip.OpenReader(jarPath)
+	if err != nil {
+		return ""
+	}
+	defer zr.Close()
+	for _, f := range zr.File {
+		if f.Name != "version.json" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return ""
+		}
+		// version.json เล็ก (ไม่กี่ร้อย byte) — จำกัดขนาดกันไฟล์ผิดปกติ
+		b, err := io.ReadAll(io.LimitReader(rc, 1<<20))
+		rc.Close()
+		if err != nil {
+			return ""
+		}
+		var vj struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(b, &vj) != nil {
+			return ""
+		}
+		if vj.ID != "" {
+			return vj.ID
+		}
+		return vj.Name
+	}
+	return ""
 }
 
 // extractFile แตก 1 regular entry ไปที่ target โดยคุมขนาดสะสม (written) กัน zip-bomb

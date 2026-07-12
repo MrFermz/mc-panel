@@ -23,8 +23,8 @@ const StatsChart = dynamic(
   () => import("@/components/server/stats-chart").then((m) => m.StatsChart),
   {
     ssr: false,
-    // height ให้ตรงกับ StatsChart จริง (สองกราฟ height=80) เพื่อไม่ให้กระตุกตอนโหลด
-    loading: () => <Skeleton className="h-[220px] w-full" />,
+    // height ให้ใกล้ StatsChart จริง (สี่กราฟ height=80: CPU/RAM/Network/Disk) เพื่อไม่ให้กระตุกตอนโหลด
+    loading: () => <Skeleton className="h-[440px] w-full" />,
   },
 );
 

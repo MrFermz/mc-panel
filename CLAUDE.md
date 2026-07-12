@@ -129,6 +129,8 @@ NATS เป็นแค่ job transport ไม่เกี่ยวกับ au
 
 **สร้าง server**: POST /api/servers → insert แถว (status=provisioning) + job `create_server` → agent
 โหลด jar + เขียน eula/launch script → JobResult → status=stopped → user สั่ง start ต่อ
+(import server: job `import_server` — agent อาจ detect เวอร์ชันจริงแล้วรายงานใน `JobResult.Detail` JSON
+`{"mc_version":"..."}` → control-plane update `mc_version` ของ server ให้ ถ้าเวอร์ชันผ่าน validate)
 
 **Start**: job `start_server` (control-plane เลือก `mcpanel/mc-runtime:{8|17|21|25}` จาก mc_version) →
 agent **ensure runtime image** (มีในเครื่องแล้ว = reuse ไม่โหลดซ้ำ; ไม่มี = pull `eclipse-temurin:{ver}-jre`
@@ -151,7 +153,9 @@ dispatch ล้ม = mark errored. audit `server_import`
 
 **Resource monitoring ต่อ instance**: agent วัด container stats ทุก ~5 วิ → gRPC `ServerStats`
 → control-plane เก็บ in-memory cache (ไม่ลง DB — ephemeral) → แนบใน field `stats` ของ server response
-→ web แสดง CPU/RAM ต่อ instance (dashboard + หน้า detail)
+→ web แสดง CPU/RAM ต่อ instance (dashboard + หน้า detail). `stats` มี network/block-I/O rate ด้วย
+(`net_rx_bps`/`net_tx_bps`/`disk_read_bps`/`disk_write_bps` bytes/sec) และ node stats มี `net_rx_bps`/`net_tx_bps`
+(เก็บใน nodes row เหมือน cpu/mem/disk, มาจาก heartbeat) — ทั้งคู่ push ผ่าน `server_stats`/`node_stats` WS ด้วย
 
 **Global capability (RBAC ระดับ panel)**: คนละชั้นกับ `server_permissions` (ต่อ server) — `users.capabilities`
 เป็น key array ที่ admin ตั้งต่อ user ให้เข้าถึงหน้า/เมนู + CRUD ได้ (`users.manage`, `nodes.manage`,

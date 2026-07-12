@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -277,6 +278,20 @@ func (r *DockerRunner) Stats(id string) (ResourceStats, error) {
 	sysDelta := float64(s.CPUStats.SystemUsage) - float64(s.PreCPUStats.SystemUsage)
 	if cpuDelta > 0 && sysDelta > 0 {
 		stats.CPUPercent = cpuDelta / sysDelta * float64(s.CPUStats.OnlineCPUs) * 100
+	}
+	// counter สะสมของ network/block-io — sum ทุก interface / ทุก device
+	// (แปลงเป็น rate/sec ที่ serverstats จาก delta ระหว่าง sample)
+	for _, n := range s.Networks {
+		stats.NetRxBytes += n.RxBytes
+		stats.NetTxBytes += n.TxBytes
+	}
+	for _, e := range s.BlkioStats.IoServiceBytesRecursive {
+		switch strings.ToLower(e.Op) {
+		case "read":
+			stats.DiskReadBytes += e.Value
+		case "write":
+			stats.DiskWrBytes += e.Value
+		}
 	}
 	return stats, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,6 +113,9 @@ func (rc *ResultConsumer) handle(msg jetstream.Msg) {
 
 	rc.log.Info("job result applied", "job_id", jobID, "type", job.Type,
 		"success", res.Success, "error", res.Error)
+	if job.Type == "import_server" && res.Success && job.ServerID != nil {
+		rc.applyDetectedMCVersion(ctx, *job.ServerID, res.Detail)
+	}
 	rc.afterCommit(ctx, job, plan, changed, restartStart, deleted)
 	msg.Ack()
 }
@@ -281,6 +285,35 @@ func reapPlan(job *store.Job) store.TransitionPlan {
 		return store.TransitionPlan{NewStatus: "errored", OnlyFromStatus: "deleting"}
 	}
 	return store.TransitionPlan{}
+}
+
+// mcVersionRe กัน garbage/injection ก่อนเขียน mc_version — เผื่อ release (1.20.1),
+// snapshot (23w13a), pre/rc (1.20-pre1) แต่ปฏิเสธค่าเพี้ยนยาว ๆ / มีอักขระแปลก
+var mcVersionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z._-]{0,31}$`)
+
+// applyDetectedMCVersion อ่านเวอร์ชันที่ agent detect (JobResult.Detail เป็น JSON
+// {"mc_version":"..."}) แล้ว update mc_version ของ server — ทำเฉพาะ import_server
+// สำเร็จ. detail ว่าง/parse ไม่ได้/เวอร์ชันไม่ผ่าน regex → ข้ามเงียบ ๆ
+func (rc *ResultConsumer) applyDetectedMCVersion(ctx context.Context, serverID uuid.UUID, detail string) {
+	if detail == "" {
+		return
+	}
+	var d struct {
+		MCVersion string `json:"mc_version"`
+	}
+	if err := json.Unmarshal([]byte(detail), &d); err != nil {
+		return
+	}
+	if d.MCVersion == "" || !mcVersionRe.MatchString(d.MCVersion) {
+		return
+	}
+	if err := rc.st.UpdateServerMCVersion(ctx, serverID, d.MCVersion); err != nil {
+		rc.log.Error("update server mc_version failed", "server_id", serverID,
+			"mc_version", d.MCVersion, "error", err)
+		return
+	}
+	rc.log.Info("server mc_version updated from import detection",
+		"server_id", serverID, "mc_version", d.MCVersion)
 }
 
 // hasRestartIntent อ่าน marker ที่ dispatcher แทรกไว้ใน payload (_meta.restart)

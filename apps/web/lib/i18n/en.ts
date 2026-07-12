@@ -307,6 +307,32 @@ export const en = {
   "import.errImportFailed": "Import failed on the node.",
   "import.errGeneric": "Failed to import server",
 
+  // ---------- new/import server wizard (full page) ----------
+  "wizard.newBreadcrumb": "New server",
+  "wizard.importBreadcrumb": "Import server",
+  "wizard.tabGeneral": "General",
+  "wizard.tabProperties": "Server settings",
+  "wizard.tabAccess": "Access",
+  "wizard.tabPlayers": "Players",
+  "wizard.lockedHint":
+    "Create or import the server first to unlock this tab.",
+  "wizard.done": "Go to server",
+  "wizard.summary": "Server ready",
+  "wizard.created":
+    "Server created. The other tabs are now editable — or head straight to the server.",
+  "wizard.imported":
+    "Server imported. Its files, whitelist and settings are ready to edit below.",
+  "wizard.detectedVersion": "Detected version",
+  "wizard.provisioning": "Preparing the server on the node…",
+  "wizard.provisionFailed":
+    "Provisioning failed on the node. You can still open the server to inspect it.",
+  "wizard.editGeneral": "Edit basics",
+  "wizard.summaryType": "Type",
+  "wizard.summaryNode": "Node",
+  "wizard.summaryPort": "Host port",
+  "wizard.overlayTitle": "Importing your server",
+  "wizard.overlayHint": "Keep this page open until the upload finishes.",
+
   // ---------- players / whitelist tab ----------
   "players.add": "Add",
   "players.addPlaceholder": "Minecraft username",
@@ -463,6 +489,14 @@ export const en = {
   "stats.cpu": "CPU",
   "stats.ram": "RAM",
   "stats.waiting": "Collecting data...",
+  "chart.network": "Network",
+  "chart.disk": "Disk",
+  "chart.diskIO": "Disk I/O",
+  "chart.read": "Read",
+  "chart.write": "Write",
+  "chart.rx": "In",
+  "chart.tx": "Out",
+  "chart.used": "Used",
 } as const;
 
 export type TranslationKey = keyof typeof en;

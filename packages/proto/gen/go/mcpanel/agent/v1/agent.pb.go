@@ -311,8 +311,11 @@ type Heartbeat struct {
 	DiskUsedMb       int64                  `protobuf:"varint,4,opt,name=disk_used_mb,json=diskUsedMb,proto3" json:"disk_used_mb,omitempty"`
 	DiskTotalMb      int64                  `protobuf:"varint,5,opt,name=disk_total_mb,json=diskTotalMb,proto3" json:"disk_total_mb,omitempty"`
 	RunningServerIds []string               `protobuf:"bytes,6,rep,name=running_server_ids,json=runningServerIds,proto3" json:"running_server_ids,omitempty"` // server ที่ container กำลังรันอยู่จริง
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// host network rate (bytes/sec) คำนวณจาก delta ฝั่ง agent
+	NetRxBps      float64 `protobuf:"fixed64,7,opt,name=net_rx_bps,json=netRxBps,proto3" json:"net_rx_bps,omitempty"`
+	NetTxBps      float64 `protobuf:"fixed64,8,opt,name=net_tx_bps,json=netTxBps,proto3" json:"net_tx_bps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Heartbeat) Reset() {
@@ -385,6 +388,20 @@ func (x *Heartbeat) GetRunningServerIds() []string {
 		return x.RunningServerIds
 	}
 	return nil
+}
+
+func (x *Heartbeat) GetNetRxBps() float64 {
+	if x != nil {
+		return x.NetRxBps
+	}
+	return 0
+}
+
+func (x *Heartbeat) GetNetTxBps() float64 {
+	if x != nil {
+		return x.NetTxBps
+	}
+	return 0
 }
 
 type ConsoleOutput struct {
@@ -508,6 +525,11 @@ type ServerStats struct {
 	CpuPercent    float64                `protobuf:"fixed64,2,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"` // 0-100 * จำนวน core (เทียบกับ 1 core = 100%)
 	MemoryUsedMb  int64                  `protobuf:"varint,3,opt,name=memory_used_mb,json=memoryUsedMb,proto3" json:"memory_used_mb,omitempty"`
 	MemoryLimitMb int64                  `protobuf:"varint,4,opt,name=memory_limit_mb,json=memoryLimitMb,proto3" json:"memory_limit_mb,omitempty"` // limit ที่ตั้งให้ container (heap + overhead)
+	// rate คำนวณจาก delta ระหว่าง sample ฝั่ง agent (bytes/sec) — realtime/ephemeral
+	NetRxBps      float64 `protobuf:"fixed64,5,opt,name=net_rx_bps,json=netRxBps,proto3" json:"net_rx_bps,omitempty"`             // container network receive rate
+	NetTxBps      float64 `protobuf:"fixed64,6,opt,name=net_tx_bps,json=netTxBps,proto3" json:"net_tx_bps,omitempty"`             // container network transmit rate
+	DiskReadBps   float64 `protobuf:"fixed64,7,opt,name=disk_read_bps,json=diskReadBps,proto3" json:"disk_read_bps,omitempty"`    // container block I/O read rate
+	DiskWriteBps  float64 `protobuf:"fixed64,8,opt,name=disk_write_bps,json=diskWriteBps,proto3" json:"disk_write_bps,omitempty"` // container block I/O write rate
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -566,6 +588,34 @@ func (x *ServerStats) GetMemoryUsedMb() int64 {
 func (x *ServerStats) GetMemoryLimitMb() int64 {
 	if x != nil {
 		return x.MemoryLimitMb
+	}
+	return 0
+}
+
+func (x *ServerStats) GetNetRxBps() float64 {
+	if x != nil {
+		return x.NetRxBps
+	}
+	return 0
+}
+
+func (x *ServerStats) GetNetTxBps() float64 {
+	if x != nil {
+		return x.NetTxBps
+	}
+	return 0
+}
+
+func (x *ServerStats) GetDiskReadBps() float64 {
+	if x != nil {
+		return x.DiskReadBps
+	}
+	return 0
+}
+
+func (x *ServerStats) GetDiskWriteBps() float64 {
+	if x != nil {
+		return x.DiskWriteBps
 	}
 	return 0
 }
@@ -1469,7 +1519,7 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\x04arch\x18\x03 \x01(\tR\x04arch\x12 \n" +
 	"\ftotal_ram_mb\x18\x04 \x01(\x03R\n" +
 	"totalRamMb\x12\"\n" +
-	"\rtotal_disk_mb\x18\x05 \x01(\x03R\vtotalDiskMb\"\xee\x01\n" +
+	"\rtotal_disk_mb\x18\x05 \x01(\x03R\vtotalDiskMb\"\xaa\x02\n" +
 	"\tHeartbeat\x12\x1f\n" +
 	"\vcpu_percent\x18\x01 \x01(\x01R\n" +
 	"cpuPercent\x12$\n" +
@@ -1478,20 +1528,30 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\fdisk_used_mb\x18\x04 \x01(\x03R\n" +
 	"diskUsedMb\x12\"\n" +
 	"\rdisk_total_mb\x18\x05 \x01(\x03R\vdiskTotalMb\x12,\n" +
-	"\x12running_server_ids\x18\x06 \x03(\tR\x10runningServerIds\"B\n" +
+	"\x12running_server_ids\x18\x06 \x03(\tR\x10runningServerIds\x12\x1c\n" +
+	"\n" +
+	"net_rx_bps\x18\a \x01(\x01R\bnetRxBps\x12\x1c\n" +
+	"\n" +
+	"net_tx_bps\x18\b \x01(\x01R\bnetTxBps\"B\n" +
 	"\rConsoleOutput\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x14\n" +
 	"\x05lines\x18\x02 \x03(\tR\x05lines\"}\n" +
 	"\fServerStatus\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x123\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x1d.mcpanel.agent.v1.ServerStateR\x05state\x12\x1b\n" +
-	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"\x99\x01\n" +
+	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"\x9f\x02\n" +
 	"\vServerStats\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1f\n" +
 	"\vcpu_percent\x18\x02 \x01(\x01R\n" +
 	"cpuPercent\x12$\n" +
 	"\x0ememory_used_mb\x18\x03 \x01(\x03R\fmemoryUsedMb\x12&\n" +
-	"\x0fmemory_limit_mb\x18\x04 \x01(\x03R\rmemoryLimitMb\"\xdd\x01\n" +
+	"\x0fmemory_limit_mb\x18\x04 \x01(\x03R\rmemoryLimitMb\x12\x1c\n" +
+	"\n" +
+	"net_rx_bps\x18\x05 \x01(\x01R\bnetRxBps\x12\x1c\n" +
+	"\n" +
+	"net_tx_bps\x18\x06 \x01(\x01R\bnetTxBps\x12\"\n" +
+	"\rdisk_read_bps\x18\a \x01(\x01R\vdiskReadBps\x12$\n" +
+	"\x0edisk_write_bps\x18\b \x01(\x01R\fdiskWriteBps\"\xdd\x01\n" +
 	"\x0eControlMessage\x125\n" +
 	"\awelcome\x18\x01 \x01(\v2\x19.mcpanel.agent.v1.WelcomeH\x00R\awelcome\x12E\n" +
 	"\rconsole_input\x18\x02 \x01(\v2\x1e.mcpanel.agent.v1.ConsoleInputH\x00R\fconsoleInput\x12B\n" +

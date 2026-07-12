@@ -94,6 +94,10 @@ function ServerDetailPage() {
       cpu: stats.cpu_percent,
       memUsed: stats.memory_used_mb,
       memLimit: stats.memory_limit_mb,
+      netRx: stats.net_rx_bps,
+      netTx: stats.net_tx_bps,
+      diskR: stats.disk_read_bps,
+      diskW: stats.disk_write_bps,
     });
   }, [id, isRunning, stats, pushStats]);
 
