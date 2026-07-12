@@ -181,13 +181,19 @@ func (a *API) streamImportArchive(w http.ResponseWriter, r *http.Request, user *
 		return
 	}
 
-	if _, err := a.st.GetNodeByID(r.Context(), v.nodeID); err != nil {
+	node, err := a.st.GetNodeByID(r.Context(), v.nodeID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "node_not_found", "node not found")
 			return
 		}
 		a.log.Error("load node failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+
+	// admission control ก่อน stage/สร้าง row — กัน RAM overcommit เหมือน create
+	if !a.checkNodeMemory(w, r, node, v.memoryMB, 0) {
 		return
 	}
 

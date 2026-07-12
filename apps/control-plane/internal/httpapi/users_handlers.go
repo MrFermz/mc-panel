@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mc-panel/control-plane/internal/auth"
@@ -30,6 +31,35 @@ func (a *API) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	views := make([]userView, 0, len(users))
 	for _, u := range users {
 		views = append(views, toUserView(u))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": views})
+}
+
+// directoryUserView = shape เบาสำหรับ access picker (ดู docs/api.md)
+type directoryUserView struct {
+	ID          uuid.UUID `json:"id"`
+	Email       string    `json:"email"`
+	Username    *string   `json:"username"`
+	DisplayName string    `json:"display_name"`
+}
+
+// handleUserDirectory เปิดให้ทุก user ที่ login แล้ว (ไม่ต้องมี users.manage) —
+// owner ใช้เลือก collaborator ตอน grant server_permission ผ่าน email/id
+func (a *API) handleUserDirectory(w http.ResponseWriter, r *http.Request) {
+	users, err := a.st.ListUserDirectory(r.Context())
+	if err != nil {
+		a.log.Error("list user directory failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+	views := make([]directoryUserView, 0, len(users))
+	for _, u := range users {
+		views = append(views, directoryUserView{
+			ID:          u.ID,
+			Email:       u.Email,
+			Username:    u.Username,
+			DisplayName: u.DisplayName,
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": views})
 }

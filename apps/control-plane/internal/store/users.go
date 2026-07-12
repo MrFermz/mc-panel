@@ -105,6 +105,42 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
 	return users, rows.Err()
 }
 
+// DirectoryUser = ชุด field เบาสำหรับ access picker (ไม่ leak hash/สิทธิ์/สถานะ)
+type DirectoryUser struct {
+	ID          uuid.UUID
+	Email       string
+	Username    *string
+	DisplayName string
+}
+
+// ListUserDirectory คืน user ที่ active + ยังไม่ถูกลบ สำหรับให้ owner เลือก collaborator
+// (ไม่ต้องมี users.manage — เป็นข้อมูลเบา ๆ ที่ทุกคนใน panel เห็นได้)
+func (s *Store) ListUserDirectory(ctx context.Context) ([]DirectoryUser, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, email, username, display_name
+		FROM users
+		WHERE deleted_at IS NULL AND is_active = true
+		ORDER BY coalesce(username, email), created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]DirectoryUser, 0)
+	for rows.Next() {
+		var d DirectoryUser
+		var email *string
+		if err := rows.Scan(&d.ID, &email, &d.Username, &d.DisplayName); err != nil {
+			return nil, err
+		}
+		if email != nil {
+			d.Email = *email
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CreateUser(ctx context.Context, email string, username *string, passwordHash, displayName string, isAdmin bool, capabilities []string) (*User, error) {
 	// pgx encode nil slice เป็น SQL NULL ไม่ใช่ '{}' — ชน NOT NULL ของ capabilities
 	// (โผล่ตอน seed admin บน DB เปล่า) จึงต้อง coalesce เป็น empty slice ก่อนเสมอ

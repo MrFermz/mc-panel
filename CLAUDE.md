@@ -192,6 +192,18 @@ control-plane เก็บ ring buffer 500 บรรทัด + broadcast WS →
 agent FileWrite (stream เดียวกับ file manager, SafeJoin ที่ agent) → ถ้า running ส่ง `whitelist reload`
 เข้า console (best-effort). สิทธิ์เท่า file manager. REST `/api/servers/{id}/players*`. ⚠️ ต้อง `white-list=true`
 ใน server.properties ถึงจะ enforce จริง; UUID จาก Mojang ใช้กับ `online-mode=true` เท่านั้น (offline-mode คนละ UUID)
+- **GET players = unified list**: merge DB whitelist + `usercache.json` (seen) + `ops.json` (op) +
+  `banned-players.json` (banned) โดย key ด้วย uuid (normalize dash/case) — อ่านไฟล์ผ่าน agent FileRead.
+  ไฟล์ไม่มี = ว่าง (ไม่ error); **node offline = degrade** เหลือ DB whitelist (แท็บยังใช้ได้ตอน server หยุด)
+- **Access picker**: `GET /api/users/directory` (authed ทุกคน ไม่ใช่ `users.manage`) คืน user ที่ active
+  แบบ field เบา ให้ owner เลือก collaborator; POST permission รับ `user_id` (จาก directory) หรือ `email`
+
+**Properties แก้ได้เฉพาะ stopped/errored**: PUT `/properties` ตอบ 409 `invalid_state` ถ้า server ไม่หยุด
+(MC เขียนทับ server.properties ตอน shutdown — แก้ตอนรันจะหาย); GET/read ทำได้ทุกสถานะ
+
+**RAM admission control**: create/import/ขยาย `memory_mb` เช็คผลรวม `memory_mb` ทุก server บน node
+(`SumServerMemoryMBOnNode`) + ตัวใหม่ ต้องไม่เกิน `node.memory_total_mb` → ไม่งั้น 400 `insufficient_memory`
+(body มี `used_mb/total_mb/available_mb`). node total=0/ไม่รู้ = ข้ามเช็ค. PATCH เช็คเฉพาะตอนขยาย (ไม่นับ memory เดิมตัวเอง)
 
 **Default host port**: `GET /api/meta/next-port?node_id=` คืน host_port ว่างต่ำสุดบน node (เริ่ม 25565)
 ให้ web prefill ฟอร์มสร้าง server — suggestion เท่านั้น ไม่ reserve (create ยัง enforce UNIQUE (node_id, host_port))

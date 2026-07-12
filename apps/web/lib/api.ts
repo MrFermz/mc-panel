@@ -8,12 +8,14 @@ import {
   nextPortResponseSchema,
   playersResponseSchema,
   serverPropertiesResponseSchema,
+  userDirectoryResponseSchema,
   type AddPlayerResponse,
   type CreateServerResponse,
   type FileContentResponse,
   type FileListResponse,
   type PlayersResponse,
   type ServerPropertiesResponse,
+  type UserDirectoryResponse,
 } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -280,4 +282,9 @@ export function removePlayer(serverId: string, uuid: string): Promise<void> {
 
 export function deleteUser(userId: string): Promise<void> {
   return apiSendVoid("DELETE", `/api/users/${userId}`);
+}
+
+// รายชื่อ user ที่ active สำหรับให้เลือกใน access tab (ไม่ใช่ admin-only)
+export function listUserDirectory(): Promise<UserDirectoryResponse> {
+  return apiGet("/api/users/directory", userDirectoryResponseSchema);
 }

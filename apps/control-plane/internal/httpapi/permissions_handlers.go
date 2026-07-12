@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/store"
 )
@@ -47,6 +49,7 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		UserID          string `json:"user_id"`
 		Email           string `json:"email"`
 		Role            string `json:"role"`
 		CanConsoleWrite bool   `json:"can_console_write"`
@@ -61,13 +64,29 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target, err := a.st.GetUserByEmail(r.Context(), strings.TrimSpace(req.Email))
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "user_not_found", "no user with this email")
-		return
+	// user_id มาก่อน email (picker ส่ง id ตรง ๆ, ยังรองรับ email เดิมสำหรับพิมพ์มือ)
+	var target *store.User
+	var err error
+	if strings.TrimSpace(req.UserID) != "" {
+		id, perr := uuid.Parse(strings.TrimSpace(req.UserID))
+		if perr != nil {
+			writeError(w, http.StatusNotFound, "user_not_found", "no user with this id")
+			return
+		}
+		target, err = a.st.GetUserByID(r.Context(), id)
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user_not_found", "no user with this id")
+			return
+		}
+	} else {
+		target, err = a.st.GetUserByEmail(r.Context(), strings.TrimSpace(req.Email))
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user_not_found", "no user with this email")
+			return
+		}
 	}
 	if err != nil {
-		a.log.Error("resolve user by email failed", "error", err)
+		a.log.Error("resolve permission target user failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
 		return
 	}

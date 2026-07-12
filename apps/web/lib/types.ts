@@ -209,14 +209,20 @@ export const nextPortResponseSchema = z.object({ port: z.number() });
 
 // ---------- players / whitelist (docs/api.md หัวข้อ Players) ----------
 
+// unified player list — union ของ whitelist ∪ joined(usercache) ∪ ops ∪ banned
+// boolean flag ทั้งชุด default false เผื่อ response บางเส้น (เช่น add) ส่งมาไม่ครบ
 export const serverPlayerSchema = z.object({
-  uuid: z.string(),
+  uuid: z.string().default(""),
   username: z.string(),
-  added_at: z.string(),
+  whitelisted: z.boolean().default(false),
+  seen: z.boolean().default(false),
+  op: z.boolean().default(false),
+  banned: z.boolean().default(false),
 });
 export type ServerPlayer = z.infer<typeof serverPlayerSchema>;
 
 export const playersResponseSchema = z.object({
+  whitelist_enabled: z.boolean().default(false),
   players: z.array(serverPlayerSchema),
 });
 export type PlayersResponse = z.infer<typeof playersResponseSchema>;
@@ -264,6 +270,21 @@ export const jobsResponseSchema = z.object({ jobs: z.array(jobSchema) });
 export const permissionsResponseSchema = z.object({
   permissions: z.array(permissionSchema),
 });
+
+// GET /api/users/directory — รายชื่อ user ที่ active สำหรับเลือกใน access tab
+// email อาจว่าง (user ที่มีแต่ username), username อาจเป็น null
+export const directoryUserSchema = z.object({
+  id: z.string(),
+  email: z.string().default(""),
+  username: z.string().nullable().default(null),
+  display_name: z.string().default(""),
+});
+export type DirectoryUser = z.infer<typeof directoryUserSchema>;
+
+export const userDirectoryResponseSchema = z.object({
+  users: z.array(directoryUserSchema),
+});
+export type UserDirectoryResponse = z.infer<typeof userDirectoryResponseSchema>;
 
 export const metaNodesResponseSchema = z.object({
   nodes: z.array(metaNodeSchema),

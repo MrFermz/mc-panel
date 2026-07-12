@@ -162,6 +162,11 @@ export const en = {
   "sset.propsExtra": "Panel-managed properties",
   "sset.propsExtraHint":
     "These properties are managed by the panel and cannot be edited here.",
+  "sset.stopToEditMemory": "Stop the server to change memory/port.",
+  "sset.stopToEditProps":
+    "Stop the server before editing server.properties (Minecraft overwrites it on shutdown).",
+  "sset.errRunning":
+    "Stop the server first — memory and port can only change while it is stopped.",
 
   // ---------- access tab ----------
   "access.subtitle": "Who can see and operate this server.",
@@ -173,6 +178,11 @@ export const en = {
   "access.failedLoad": "Failed to load permissions.",
   "access.editTitle": "Edit access for {email}",
   "access.accountRequired": "The user must already have an account on this panel.",
+  "access.pickUser": "Existing user",
+  "access.pickUserPlaceholder": "Select a user",
+  "access.noPickable": "No other users to add",
+  "access.orEmail": "Or type an email",
+  "access.emailPlaceholder": "name@example.com",
   "access.email": "Email",
   "access.roleOwner": "Owner",
   "access.roleOperator": "Operator",
@@ -276,6 +286,9 @@ export const en = {
   "new.viewServer": "View server",
   "new.created": "Server \"{name}\" created",
   "new.failedCreate": "Failed to create server",
+  "new.ramBudget": "{free} free of {total} ({used} used)",
+  "new.ramOverBudget": "Selected memory exceeds the free RAM on this node.",
+  "new.errInsufficientMemory": "Not enough free RAM on the node for this memory size.",
 
   // ---------- import existing server ----------
   "import.button": "Import server",
@@ -347,7 +360,21 @@ export const en = {
   "players.username": "Username",
   "players.addedAt": "Added",
   "players.actions": "Actions",
-  "players.empty": "No players on the whitelist yet.",
+  "players.status": "Status",
+  "players.whitelist": "Whitelist",
+  "players.toggleWhitelist": "Toggle whitelist",
+  "players.badgeWhitelisted": "Whitelisted",
+  "players.badgeJoined": "Joined",
+  "players.badgeOp": "OP",
+  "players.badgeBanned": "Banned",
+  "players.filterAll": "All",
+  "players.filterWhitelisted": "Whitelisted",
+  "players.filterJoined": "Joined",
+  "players.filterOp": "OP",
+  "players.filterBanned": "Banned",
+  "players.searchPlaceholder": "Search players...",
+  "players.noneMatch": "No players match the filter.",
+  "players.empty": "No players yet — add one to the whitelist below.",
   "players.failedLoad": "Failed to load players.",
   "players.removeTitle": "Remove player?",
   "players.removeDesc": "\"{name}\" will be removed from the whitelist.",

@@ -96,6 +96,32 @@ func validateHostPort(p *int) bool {
 	return p == nil || (*p >= 1024 && *p <= 65535)
 }
 
+// checkNodeMemory บังคับ RAM admission control: (ผลรวม memory_mb ที่จองบน node - excludeMB)
+// + requestedMB ต้องไม่เกิน node.MemoryTotalMB. excludeMB ใช้กันนับ memory เดิมของ instance
+// ที่กำลังขยายซ้ำ (create=0, update=memory ปัจจุบันของ server). คืน false + เขียน error แล้ว
+// เมื่อเกิน/DB พลาด; คืน true (ปล่อยผ่าน) เมื่อผ่าน หรือ node ยังไม่รายงาน total (=0)
+func (a *API) checkNodeMemory(w http.ResponseWriter, r *http.Request, node *store.Node, requestedMB, excludeMB int) bool {
+	total := int(node.MemoryTotalMB)
+	if total <= 0 {
+		return true
+	}
+	sum, err := a.st.SumServerMemoryMBOnNode(r.Context(), node.ID)
+	if err != nil {
+		a.log.Error("sum node memory failed", "node_id", node.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return false
+	}
+	used := sum - excludeMB
+	if used < 0 {
+		used = 0
+	}
+	if used+requestedMB > total {
+		writeInsufficientMemory(w, used, requestedMB, total)
+		return false
+	}
+	return true
+}
+
 func (a *API) handleListServers(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
 
@@ -175,13 +201,20 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "node_id must be a valid UUID")
 		return
 	}
-	if _, err := a.st.GetNodeByID(r.Context(), nodeID); err != nil {
+	node, err := a.st.GetNodeByID(r.Context(), nodeID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "node_not_found", "node not found")
 			return
 		}
 		a.log.Error("load node failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+
+	// admission control: กัน RAM overcommit — ผลรวม memory_mb ที่จองบน node + ตัวใหม่
+	// ต้องไม่เกิน MemoryTotalMB (ข้ามเช็คเมื่อ node ยังไม่รายงาน total)
+	if !a.checkNodeMemory(w, r, node, req.MemoryMB, 0) {
 		return
 	}
 
@@ -294,6 +327,19 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "invalid_state",
 			"host_port and memory_mb can only be changed while the server is stopped or errored")
 		return
+	}
+
+	// admission control ตอนขยาย RAM: กันไม่ให้ผลรวมเกิน node total (ไม่นับ memory เดิมของตัวเอง)
+	if req.MemoryMB != nil && *req.MemoryMB > srv.MemoryMB {
+		node, err := a.st.GetNodeByID(r.Context(), srv.NodeID)
+		if err != nil {
+			a.log.Error("load node failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+			return
+		}
+		if !a.checkNodeMemory(w, r, node, *req.MemoryMB, srv.MemoryMB) {
+			return
+		}
 	}
 
 	updated, err := a.st.UpdateServerConfig(r.Context(), srv.ID, req.Name, req.MemoryMB, req.HostPort, clearHostPort)

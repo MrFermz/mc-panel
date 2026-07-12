@@ -4,12 +4,14 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { apiGet, apiSendVoid, ApiError } from "@/lib/api";
+import { apiGet, apiSendVoid, listUserDirectory, ApiError } from "@/lib/api";
 import {
   permissionsResponseSchema,
+  type DirectoryUser,
   type Permission,
   type PermissionRole,
 } from "@/lib/types";
+import { useMe } from "@/lib/use-me";
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +45,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface FormState {
+  // userId !== "" → ส่ง user_id (เลือกจาก dropdown); "" → ใช้ free-text email แทน
+  userId: string;
   email: string;
   role: PermissionRole;
   can_console_write: boolean;
@@ -50,6 +54,7 @@ interface FormState {
 }
 
 const emptyForm: FormState = {
+  userId: "",
   email: "",
   role: "viewer",
   can_console_write: false,
@@ -62,6 +67,15 @@ function roleKey(role: PermissionRole): TranslationKey {
   return "access.roleViewer";
 }
 
+// label ของ user ใน dropdown — display_name + (email หรือ @username)
+function directoryLabel(u: DirectoryUser): string {
+  const secondary = u.email || (u.username ? `@${u.username}` : "");
+  const primary = u.display_name || u.email || u.username || u.id;
+  return secondary && secondary !== primary
+    ? `${primary} (${secondary})`
+    : primary;
+}
+
 export default function AccessTab({ serverId }: { serverId: string }) {
   const t = useT();
   const queryClient = useQueryClient();
@@ -70,22 +84,49 @@ export default function AccessTab({ serverId }: { serverId: string }) {
   const [form, setForm] = React.useState<FormState>(emptyForm);
   const [removeTarget, setRemoveTarget] = React.useState<Permission | null>(null);
 
+  const me = useMe();
+
   const permissions = useQuery({
     queryKey: ["servers", serverId, "permissions"],
     queryFn: () =>
       apiGet(`/api/servers/${serverId}/permissions`, permissionsResponseSchema),
   });
 
+  const directory = useQuery({
+    queryKey: ["users", "directory"],
+    queryFn: () => listUserDirectory(),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  // user ที่เลือกได้: active ทั้งหมด ตัดตัวเอง + คนที่มีสิทธิ์อยู่แล้วออก
+  const pickableUsers = React.useMemo(() => {
+    const already = new Set(
+      (permissions.data?.permissions ?? []).map((p) => p.user_id),
+    );
+    const meId = me.data?.user.id;
+    return (directory.data?.users ?? []).filter(
+      (u) => u.id !== meId && !already.has(u.id),
+    );
+  }, [directory.data, permissions.data, me.data]);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["servers", serverId] });
   };
 
   const upsert = useMutation({
-    mutationFn: (payload: FormState) =>
-      apiSendVoid("POST", `/api/servers/${serverId}/permissions`, {
-        ...payload,
-        email: payload.email.trim(),
-      }),
+    mutationFn: (payload: FormState) => {
+      const base = {
+        role: payload.role,
+        can_console_write: payload.can_console_write,
+        can_manage_files: payload.can_manage_files,
+      };
+      // เลือกจาก dropdown → user_id, ไม่งั้น free-text email
+      const body = payload.userId
+        ? { ...base, user_id: payload.userId }
+        : { ...base, email: payload.email.trim() };
+      return apiSendVoid("POST", `/api/servers/${serverId}/permissions`, body);
+    },
     onSuccess: () => {
       toast.success(editingEmail ? t("access.updated") : t("access.added"));
       setDialogOpen(false);
@@ -122,6 +163,7 @@ export default function AccessTab({ serverId }: { serverId: string }) {
   const openEdit = (perm: Permission) => {
     setEditingEmail(perm.email);
     setForm({
+      userId: "",
       email: perm.email,
       role: perm.role,
       can_console_write: perm.can_console_write,
@@ -129,6 +171,10 @@ export default function AccessTab({ serverId }: { serverId: string }) {
     });
     setDialogOpen(true);
   };
+
+  // ปุ่ม add ปิดไว้จนกว่าจะเลือก user หรือกรอก email (ตอนแก้ไขไม่ต้องเช็ค)
+  const canSubmit =
+    editingEmail !== null || form.userId !== "" || form.email.trim() !== "";
 
   return (
     <div className="grid gap-4">
@@ -216,18 +262,57 @@ export default function AccessTab({ serverId }: { serverId: string }) {
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!upsert.isPending) upsert.mutate(form);
+              if (canSubmit && !upsert.isPending) upsert.mutate(form);
             }}
           >
+            {editingEmail === null && (
+              <div className="grid gap-2">
+                <Label htmlFor="perm-user">{t("access.pickUser")}</Label>
+                <Select
+                  value={form.userId}
+                  onValueChange={(v) =>
+                    // เลือก user → เคลียร์ช่อง email (ใช้ user_id แทน)
+                    setForm({ ...form, userId: v, email: "" })
+                  }
+                  disabled={pickableUsers.length === 0}
+                >
+                  <SelectTrigger id="perm-user">
+                    <SelectValue
+                      placeholder={
+                        directory.isPending
+                          ? t("common.loading")
+                          : pickableUsers.length === 0
+                            ? t("access.noPickable")
+                            : t("access.pickUserPlaceholder")
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickableUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {directoryLabel(u)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid gap-2">
-              <Label htmlFor="perm-email">{t("access.email")}</Label>
+              <Label htmlFor="perm-email">
+                {editingEmail === null ? t("access.orEmail") : t("access.email")}
+              </Label>
               <Input
                 id="perm-email"
                 type="email"
-                required
-                disabled={editingEmail !== null}
+                disabled={editingEmail !== null || form.userId !== ""}
+                placeholder={
+                  editingEmail === null ? t("access.emailPlaceholder") : undefined
+                }
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) =>
+                  // พิมพ์ email → ล้าง user ที่เลือกไว้
+                  setForm({ ...form, email: e.target.value, userId: "" })
+                }
               />
             </div>
             <div className="grid gap-2">
@@ -282,7 +367,7 @@ export default function AccessTab({ serverId }: { serverId: string }) {
               >
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" disabled={upsert.isPending}>
+              <Button type="submit" disabled={!canSubmit || upsert.isPending}>
                 {upsert.isPending ? t("common.saving") : t("common.save")}
               </Button>
             </DialogFooter>

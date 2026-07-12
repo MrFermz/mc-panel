@@ -8,9 +8,11 @@ const MEMORY_PRESETS = [1024, 2048, 4096, 8192, 16384] as const;
 export function MemoryPresets({
   value,
   onChange,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const current = Number(value);
   return (
@@ -20,6 +22,7 @@ export function MemoryPresets({
           key={mb}
           type="button"
           size="sm"
+          disabled={disabled}
           variant={current === mb ? "default" : "outline"}
           onClick={() => onChange(String(mb))}
         >

@@ -218,6 +218,13 @@ func (a *API) handleUpdateProperties(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MC เขียนทับ server.properties ตอน shutdown — แก้ตอนรันอยู่จะถูก overwrite หายทันที
+	if srv.Status != "stopped" && srv.Status != "errored" {
+		writeError(w, http.StatusConflict, "invalid_state",
+			"stop the server before editing server.properties (Minecraft overwrites it on shutdown)")
+		return
+	}
+
 	var req struct {
 		Values map[string]string `json:"values"`
 	}

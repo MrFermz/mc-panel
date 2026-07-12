@@ -164,6 +164,11 @@ export const th: Dictionary = {
   "sset.propsExtra": "คุณสมบัติที่จัดการโดยแผงควบคุม",
   "sset.propsExtraHint":
     "คุณสมบัติเหล่านี้จัดการโดยแผงควบคุมและไม่สามารถแก้ไขที่นี่ได้",
+  "sset.stopToEditMemory": "หยุดเซิร์ฟเวอร์ก่อนจึงจะแก้ memory/พอร์ตได้",
+  "sset.stopToEditProps":
+    "หยุดเซิร์ฟเวอร์ก่อนแก้ server.properties (Minecraft เขียนทับตอนปิด)",
+  "sset.errRunning":
+    "หยุดเซิร์ฟเวอร์ก่อน — memory และพอร์ตแก้ได้เฉพาะตอนที่หยุดอยู่เท่านั้น",
 
   // ---------- access tab ----------
   "access.subtitle": "ใครมองเห็นและควบคุมเซิร์ฟเวอร์นี้ได้บ้าง",
@@ -175,6 +180,11 @@ export const th: Dictionary = {
   "access.failedLoad": "โหลดสิทธิ์เข้าถึงไม่สำเร็จ",
   "access.editTitle": "แก้ไขสิทธิ์เข้าถึงของ {email}",
   "access.accountRequired": "ผู้ใช้ต้องมีบัญชีบนแผงควบคุมนี้อยู่แล้ว",
+  "access.pickUser": "ผู้ใช้ที่มีอยู่",
+  "access.pickUserPlaceholder": "เลือกผู้ใช้",
+  "access.noPickable": "ไม่มีผู้ใช้อื่นให้เพิ่ม",
+  "access.orEmail": "หรือพิมพ์อีเมล",
+  "access.emailPlaceholder": "name@example.com",
   "access.email": "อีเมล",
   "access.roleOwner": "เจ้าของ",
   "access.roleOperator": "ผู้ควบคุม",
@@ -276,6 +286,9 @@ export const th: Dictionary = {
   "new.viewServer": "ดูเซิร์ฟเวอร์",
   "new.created": "สร้างเซิร์ฟเวอร์ \"{name}\" แล้ว",
   "new.failedCreate": "สร้างเซิร์ฟเวอร์ไม่สำเร็จ",
+  "new.ramBudget": "ว่าง {free} จาก {total} (ใช้ไป {used})",
+  "new.ramOverBudget": "หน่วยความจำที่เลือกเกิน RAM ที่ว่างบนโหนดนี้",
+  "new.errInsufficientMemory": "RAM ว่างบนโหนดไม่พอสำหรับขนาดหน่วยความจำนี้",
 
   // ---------- import existing server ----------
   "import.button": "นำเข้าเซิร์ฟเวอร์",
@@ -346,7 +359,21 @@ export const th: Dictionary = {
   "players.username": "ชื่อผู้ใช้",
   "players.addedAt": "เพิ่มเมื่อ",
   "players.actions": "การกระทำ",
-  "players.empty": "ยังไม่มีผู้เล่นใน whitelist",
+  "players.status": "สถานะ",
+  "players.whitelist": "Whitelist",
+  "players.toggleWhitelist": "สลับ whitelist",
+  "players.badgeWhitelisted": "อยู่ใน whitelist",
+  "players.badgeJoined": "เคยเข้าเล่น",
+  "players.badgeOp": "OP",
+  "players.badgeBanned": "ถูกแบน",
+  "players.filterAll": "ทั้งหมด",
+  "players.filterWhitelisted": "whitelist",
+  "players.filterJoined": "เคยเข้าเล่น",
+  "players.filterOp": "OP",
+  "players.filterBanned": "ถูกแบน",
+  "players.searchPlaceholder": "ค้นหาผู้เล่น...",
+  "players.noneMatch": "ไม่มีผู้เล่นตรงกับตัวกรอง",
+  "players.empty": "ยังไม่มีผู้เล่น — เพิ่มลง whitelist ด้านล่างได้เลย",
   "players.failedLoad": "โหลดรายชื่อผู้เล่นไม่สำเร็จ",
   "players.removeTitle": "นำผู้เล่นออก?",
   "players.removeDesc": "\"{name}\" จะถูกนำออกจาก whitelist",

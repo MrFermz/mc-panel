@@ -173,3 +173,12 @@ func (s *Store) DeleteServerRow(ctx context.Context, id uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM servers WHERE id = $1`, id)
 	return err
 }
+
+// SumServerMemoryMBOnNode คืนผลรวม memory_mb ของทุก server บน node (rows ถูก hard-delete
+// เมื่อลบจริง จึงไม่ต้อง filter สถานะ) — ใช้กัน RAM overcommit ตอน create/import/grow
+func (s *Store) SumServerMemoryMBOnNode(ctx context.Context, nodeID uuid.UUID) (int, error) {
+	var sum int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(SUM(memory_mb), 0) FROM servers WHERE node_id = $1`, nodeID).Scan(&sum)
+	return sum, err
+}

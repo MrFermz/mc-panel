@@ -73,6 +73,9 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.Get("/auth/me", a.handleMe)
 			pr.Post("/auth/change-password", a.handleChangePassword)
 
+			// user directory: authed ทุกคน (ไม่ใช่ users.manage) — owner ใช้เลือก collaborator
+			pr.Get("/users/directory", a.handleUserDirectory)
+
 			pr.Group(func(um chi.Router) {
 				um.Use(a.requireCap(capManageUsers))
 				um.Get("/users", a.handleListUsers)

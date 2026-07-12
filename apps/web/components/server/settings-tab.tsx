@@ -19,6 +19,7 @@ import {
   serverResponseSchema,
   type Server,
   type ServerPropertyField,
+  type ServerStatus,
 } from "@/lib/types";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,12 @@ import {
 } from "@/components/ui/accordion";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MemoryPresets } from "@/components/server/memory-presets";
+
+// memory/พอร์ต/server.properties แก้ได้เฉพาะตอน server หยุด/error
+// (backend บังคับด้วย 409 invalid_state — Minecraft เขียนทับไฟล์ตอนปิด)
+function isStoppedLike(status: ServerStatus): boolean {
+  return status === "stopped" || status === "errored";
+}
 
 export default function SettingsTab({ server }: { server: Server }) {
   const t = useT();
@@ -79,6 +86,10 @@ export default function SettingsTab({ server }: { server: Server }) {
       queryClient.invalidateQueries({ queryKey: ["servers"] });
     },
     onError: (err) => {
+      if (err instanceof ApiError && err.code === "invalid_state") {
+        toast.error(t("sset.errRunning"));
+        return;
+      }
       toast.error(err instanceof ApiError ? err.message : t("sset.failedSave"));
     },
   });
@@ -97,6 +108,7 @@ export default function SettingsTab({ server }: { server: Server }) {
     },
   });
 
+  const canEditRuntime = isStoppedLike(server.status);
   const memory = Number(memoryMb);
   const port = hostPort === "" ? null : Number(hostPort);
   const valid =
@@ -136,10 +148,15 @@ export default function SettingsTab({ server }: { server: Server }) {
                 id="s-memory"
                 type="number"
                 min={512}
+                disabled={!canEditRuntime}
                 value={memoryMb}
                 onChange={(e) => setMemoryMb(e.target.value)}
               />
-              <MemoryPresets value={memoryMb} onChange={setMemoryMb} />
+              <MemoryPresets
+                value={memoryMb}
+                onChange={setMemoryMb}
+                disabled={!canEditRuntime}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="s-port">{t("sset.hostPort")}</Label>
@@ -149,11 +166,17 @@ export default function SettingsTab({ server }: { server: Server }) {
                 min={1024}
                 max={65535}
                 placeholder={t("sset.hostPortPlaceholder")}
+                disabled={!canEditRuntime}
                 value={hostPort}
                 onChange={(e) => setHostPort(e.target.value)}
               />
             </div>
-            <Button type="submit" disabled={!valid || save.isPending}>
+            {!canEditRuntime && (
+              <p className="text-muted-foreground text-xs">
+                {t("sset.stopToEditMemory")}
+              </p>
+            )}
+            <Button type="submit" disabled={!valid || !canEditRuntime || save.isPending}>
               {save.isPending ? t("common.saving") : t("sset.saveChanges")}
             </Button>
           </form>
@@ -174,7 +197,7 @@ export default function SettingsTab({ server }: { server: Server }) {
       </div>
 
       <div className="lg:col-span-2">
-        <ServerPropertiesCard serverId={server.id} />
+        <ServerPropertiesCard serverId={server.id} status={server.status} />
       </div>
 
       <ConfirmDialog
@@ -196,14 +219,16 @@ function PropertyControl({
   field,
   value,
   onChange,
+  disabled,
 }: {
   field: ServerPropertyField;
   value: string;
   onChange: (value: string) => void;
+  disabled: boolean;
 }) {
   if (field.type === "enum") {
     return (
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger id={`prop-${field.key}`}>
           <SelectValue />
         </SelectTrigger>
@@ -223,6 +248,7 @@ function PropertyControl({
         <Switch
           id={`prop-${field.key}`}
           checked={value === "true"}
+          disabled={disabled}
           onCheckedChange={(v) => onChange(v ? "true" : "false")}
         />
       </div>
@@ -233,6 +259,7 @@ function PropertyControl({
       <Input
         id={`prop-${field.key}`}
         type="number"
+        disabled={disabled}
         {...(field.min !== null ? { min: field.min } : {})}
         {...(field.max !== null ? { max: field.max } : {})}
         value={value}
@@ -244,15 +271,24 @@ function PropertyControl({
     <Input
       id={`prop-${field.key}`}
       type="text"
+      disabled={disabled}
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />
   );
 }
 
-export function ServerPropertiesCard({ serverId }: { serverId: string }) {
+export function ServerPropertiesCard({
+  serverId,
+  status,
+}: {
+  serverId: string;
+  // undefined (เช่นตอน wizard สร้างเสร็จใหม่ = หยุดอยู่) → แก้ได้
+  status?: ServerStatus;
+}) {
   const t = useT();
   const queryClient = useQueryClient();
+  const canEdit = status === undefined || isStoppedLike(status);
 
   const query = useQuery({
     queryKey: ["servers", serverId, "properties"],
@@ -290,6 +326,10 @@ export function ServerPropertiesCard({ serverId }: { serverId: string }) {
         toast.error(t("sset.propsInvalid"));
         return;
       }
+      if (err instanceof ApiError && err.code === "invalid_state") {
+        toast.error(t("sset.stopToEditProps"));
+        return;
+      }
       toast.error(err instanceof ApiError ? err.message : t("sset.failedSave"));
     },
   });
@@ -321,6 +361,11 @@ export function ServerPropertiesCard({ serverId }: { serverId: string }) {
           </p>
         ) : (
           <div className="grid gap-4">
+            {!canEdit && (
+              <p className="text-muted-foreground text-sm">
+                {t("sset.stopToEditProps")}
+              </p>
+            )}
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {fields.map((field) => (
                 <div key={field.key} className="grid gap-2">
@@ -331,6 +376,7 @@ export function ServerPropertiesCard({ serverId }: { serverId: string }) {
                     field={field}
                     value={draft[field.key] ?? values?.[field.key] ?? ""}
                     onChange={(v) => setField(field.key, v)}
+                    disabled={!canEdit}
                   />
                 </div>
               ))}
@@ -364,7 +410,7 @@ export function ServerPropertiesCard({ serverId }: { serverId: string }) {
             <div>
               <Button
                 type="button"
-                disabled={!dirty || save.isPending}
+                disabled={!dirty || !canEdit || save.isPending}
                 onClick={() => save.mutate()}
               >
                 {save.isPending ? t("common.saving") : t("common.save")}

@@ -32,6 +32,25 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, errorBody{Code: code, Message: message})
 }
 
+// writeInsufficientMemory ตอบ 400 insufficient_memory พร้อมตัวเลข used/total/available
+// (นอกเหนือ code/message ปกติ) ให้ web แสดงรายละเอียดได้ — used = memory ที่จองบน node
+// อยู่แล้ว (ไม่รวม instance ที่กำลังจะเพิ่ม/ขยาย), requested = ค่าใหม่ที่ขอ
+func writeInsufficientMemory(w http.ResponseWriter, used, requested, total int) {
+	available := total - used
+	if available < 0 {
+		available = 0
+	}
+	msg := fmt.Sprintf("not enough memory on node: requested %d MB, but only %d MB of %d MB is available",
+		requested, available, total)
+	writeJSON(w, http.StatusBadRequest, map[string]any{
+		"code":         "insufficient_memory",
+		"message":      msg,
+		"used_mb":      used,
+		"total_mb":     total,
+		"available_mb": available,
+	})
+}
+
 const maxBodySize = 1 << 20
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {

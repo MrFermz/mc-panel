@@ -30,7 +30,9 @@ import {
   jobResponseSchema,
   metaNodesResponseSchema,
   metaServerTypesResponseSchema,
+  nodesResponseSchema,
   serverDetailResponseSchema,
+  serversResponseSchema,
   versionsResponseSchema,
   type Job,
   type Server,
@@ -255,6 +257,19 @@ function useServerMetadata(disabled: boolean): MetadataValues & {
     }
   }, [portEdited, suggestedPort]);
 
+  // งบ RAM ต่อโหนด: total ของ node − ผลรวม memory_mb ของ server ที่มีอยู่บนโหนดนั้น
+  // ทั้งสอง query แชร์ cache กับ dashboard (["nodes"], ["servers"]) — พังก็แค่ไม่โชว์ hint
+  const nodesFullQuery = useQuery({
+    queryKey: ["nodes"],
+    queryFn: () => apiGet("/api/nodes", nodesResponseSchema),
+    retry: false,
+  });
+  const serversQuery = useQuery({
+    queryKey: ["servers"],
+    queryFn: () => apiGet("/api/servers", serversResponseSchema),
+    retry: false,
+  });
+
   const typesQuery = useQuery({
     queryKey: ["meta", "server-types"],
     queryFn: () => apiGet("/api/meta/server-types", metaServerTypesResponseSchema),
@@ -274,6 +289,20 @@ function useServerMetadata(disabled: boolean): MetadataValues & {
 
   const memory = Number(memoryMb);
   const port = hostPort === "" ? null : Number(hostPort);
+
+  // งบ RAM ของโหนดที่เลือก (backend เป็น source of truth จริง — นี่แค่ช่วยเตือนล่วงหน้า)
+  const selectedNode = nodesFullQuery.data?.nodes.find((n) => n.id === nodeId);
+  const usedMb = (serversQuery.data?.servers ?? [])
+    .filter((s) => s.node_id === nodeId)
+    .reduce((sum, s) => sum + s.memory_mb, 0);
+  const totalMb = selectedNode?.memory_total_mb ?? 0;
+  const freeMb = Math.max(0, totalMb - usedMb);
+  const overBudget =
+    selectedNode !== undefined &&
+    Number.isInteger(memory) &&
+    memory > 0 &&
+    memory > freeMb;
+
   const metaValid =
     name.trim().length > 0 &&
     nodeId !== "" &&
@@ -393,6 +422,23 @@ function useServerMetadata(disabled: boolean): MetadataValues & {
             onChange={(e) => setMemoryMb(e.target.value)}
           />
           <MemoryPresets value={memoryMb} onChange={setMemoryMb} />
+          {selectedNode && (
+            <p
+              className={cn(
+                "text-xs",
+                overBudget ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {t("new.ramBudget", {
+                free: formatMb(freeMb),
+                total: formatMb(totalMb),
+                used: formatMb(usedMb),
+              })}
+            </p>
+          )}
+          {overBudget && (
+            <p className="text-destructive text-xs">{t("new.ramOverBudget")}</p>
+          )}
         </div>
 
         <div className="grid gap-2">
@@ -487,6 +533,11 @@ function NewServerForm({
       ),
     onSuccess: (data) => onCreated(data.server, data.job),
     onError: (err) => {
+      // insufficient_memory: message มีตัวเลข used/total มาแล้ว — โชว์ตรง ๆ
+      if (err instanceof ApiError && err.code === "insufficient_memory") {
+        toast.error(err.message || t("new.errInsufficientMemory"));
+        return;
+      }
       toast.error(err instanceof ApiError ? err.message : t("new.failedCreate"));
     },
   });
