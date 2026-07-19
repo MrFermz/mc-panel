@@ -204,7 +204,18 @@ export const th: Dictionary = {
   "access.email": "อีเมล",
   "access.roleOwner": "เจ้าของ",
   "access.roleOperator": "ผู้ควบคุม",
+  "access.roleModerator": "ผู้ดูแลเกม",
   "access.roleViewer": "ผู้ชม",
+  "access.roleMember": "สมาชิก",
+  "access.roleCustom": "กำหนดเอง",
+  "access.accessLevel": "สิทธิ์",
+  "access.capsCount": "{count} สิทธิ์",
+  "access.rolePreset": "บทบาทสำเร็จรูป",
+  "access.permissions": "สิทธิ์",
+  "access.ownerHint":
+    "เจ้าของควบคุม server นี้ได้ทั้งหมด รวมถึงจัดการว่าจะแชร์ให้ใครบ้าง",
+  "access.presetHint":
+    "เลือกบทบาทสำเร็จรูป หรือปรับสิทธิ์รายข้อได้ — แต่ละสิทธิ์ต้องมีสิทธิ์ระดับ panel คู่กันด้วยถึงจะมีผล",
   "access.canConsole": "พิมพ์คำสั่งในคอนโซลได้",
   "access.canFiles": "จัดการไฟล์ได้",
   "access.added": "เพิ่มสิทธิ์แล้ว",

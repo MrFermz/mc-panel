@@ -102,13 +102,19 @@ func (h *WSHandler) HandleConsole(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusForbidden, "forbidden", "insufficient capability")
 			return
 		}
-		if _, err := h.Store.GetPermission(r.Context(), user.ID, srv.ID); err != nil {
+		perm, err := h.Store.GetPermission(r.Context(), user.ID, srv.ID)
+		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeErr(w, http.StatusForbidden, "forbidden", "no access to this server")
 				return
 			}
 			h.Log.Error("ws load permission failed", "error", err)
 			writeErr(w, http.StatusInternalServerError, "internal_error", "internal error")
+			return
+		}
+		// grant ต่อ server ต้องมี console.view ด้วย (owner ได้ทุก server-scoped cap โดยปริยาย)
+		if perm.Role != "owner" && !slices.Contains(perm.Capabilities, capConsoleView) {
+			writeErr(w, http.StatusForbidden, "forbidden", "no access to this server")
 			return
 		}
 	}
@@ -226,7 +232,7 @@ func (h *WSHandler) handleInput(ctx context.Context, user *store.User, srv *stor
 			sendErr("internal_error", "internal error")
 			return
 		}
-		if perm.Role != "owner" && !perm.CanConsoleWrite {
+		if perm.Role != "owner" && !slices.Contains(perm.Capabilities, capConsoleWrite) {
 			sendErr("forbidden", "console write not allowed")
 			return
 		}

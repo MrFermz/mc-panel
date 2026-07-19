@@ -276,25 +276,24 @@ func toJobView(j *store.Job) jobView {
 }
 
 type permissionView struct {
-	UserID          uuid.UUID `json:"user_id"`
-	Email           string    `json:"email"`
-	Username        *string   `json:"username"`
-	DisplayName     string    `json:"display_name"`
-	AvatarURL       *string   `json:"avatar_url"`
-	Role            string    `json:"role"`
-	CanConsoleWrite bool      `json:"can_console_write"`
-	CanManageFiles  bool      `json:"can_manage_files"`
+	UserID      uuid.UUID `json:"user_id"`
+	Email       string    `json:"email"`
+	Username    *string   `json:"username"`
+	DisplayName string    `json:"display_name"`
+	AvatarURL   *string   `json:"avatar_url"`
+	// Role = owner | member ; owner ได้ทุก server-scoped cap โดยปริยาย (capabilities ว่าง)
+	Role         string   `json:"role"`
+	Capabilities []string `json:"capabilities"`
 }
 
 func toPermissionView(p *store.PermissionWithUser) permissionView {
 	return permissionView{
-		UserID:          p.UserID,
-		Email:           p.Email,
-		Username:        p.Username,
-		DisplayName:     p.DisplayName,
-		AvatarURL:       avatarURL(p.UserID, p.AvatarUpdatedAt),
-		Role:            p.Role,
-		CanConsoleWrite: p.CanConsoleWrite,
-		CanManageFiles:  p.CanManageFiles,
+		UserID:       p.UserID,
+		Email:        p.Email,
+		Username:     p.Username,
+		DisplayName:  p.DisplayName,
+		AvatarURL:    avatarURL(p.UserID, p.AvatarUpdatedAt),
+		Role:         p.Role,
+		Capabilities: emptyIfNil(p.Capabilities),
 	}
 }

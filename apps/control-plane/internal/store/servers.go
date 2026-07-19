@@ -55,9 +55,10 @@ func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.
 		return nil, err
 	}
 
+	// owner ได้ทุก server-scoped cap โดยปริยาย — capabilities ปล่อยว่าง (default '{}')
 	_, err = tx.Exec(ctx, `
-		INSERT INTO server_permissions (user_id, server_id, role, can_console_write, can_manage_files)
-		VALUES ($1, $2, 'owner', TRUE, TRUE)`,
+		INSERT INTO server_permissions (user_id, server_id, role)
+		VALUES ($1, $2, 'owner')`,
 		ownerID, srv.ID)
 	if err != nil {
 		return nil, err

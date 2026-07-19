@@ -94,7 +94,15 @@ function baseName(path: string): string {
 
 type NameMode = "newFolder" | "newFile" | "rename";
 
-export default function ServerFiles({ serverId }: { serverId: string }) {
+export default function ServerFiles({
+  serverId,
+  canWrite,
+  canDelete,
+}: {
+  serverId: string;
+  canWrite: boolean;
+  canDelete: boolean;
+}) {
   const t = useT();
   const queryClient = useQueryClient();
 
@@ -235,18 +243,22 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
           >
             <RefreshCwIcon className={cn(list.isFetching && "animate-spin")} />
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => openNameDialog("newFolder")}
-          >
-            <FolderPlusIcon />
-            {t("files.newFolder")}
-          </Button>
-          <Button size="sm" onClick={() => openNameDialog("newFile")}>
-            <FilePlusIcon />
-            {t("files.newFile")}
-          </Button>
+          {canWrite && (
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => openNameDialog("newFolder")}
+              >
+                <FolderPlusIcon />
+                {t("files.newFolder")}
+              </Button>
+              <Button size="sm" onClick={() => openNameDialog("newFile")}>
+                <FilePlusIcon />
+                {t("files.newFile")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -299,23 +311,27 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openNameDialog("rename", entry)}
-                          aria-label={`${t("files.rename")} ${entry.name}`}
-                        >
-                          <PencilIcon />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => setDeleteTarget(entry)}
-                          aria-label={`${t("common.delete")} ${entry.name}`}
-                        >
-                          <Trash2Icon />
-                        </Button>
+                        {canWrite && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openNameDialog("rename", entry)}
+                            aria-label={`${t("files.rename")} ${entry.name}`}
+                          >
+                            <PencilIcon />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            onClick={() => setDeleteTarget(entry)}
+                            aria-label={`${t("common.delete")} ${entry.name}`}
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -330,6 +346,7 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
         <FileEditorDialog
           serverId={serverId}
           path={editing}
+          canWrite={canWrite}
           onClose={() => setEditing(null)}
         />
       )}
@@ -412,10 +429,12 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
 function FileEditorDialog({
   serverId,
   path,
+  canWrite,
   onClose,
 }: {
   serverId: string;
   path: string;
+  canWrite: boolean;
   onClose: () => void;
 }) {
   const t = useT();
@@ -475,7 +494,7 @@ function FileEditorDialog({
             <CodeEditor
               value={value}
               onChange={(next) => setDraft(next)}
-              readOnly={truncated}
+              readOnly={truncated || !canWrite}
               filename={baseName(path)}
             />
           </div>
@@ -485,13 +504,15 @@ function FileEditorDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("common.close")}
           </Button>
-          <Button
-            type="button"
-            disabled={content.isError || truncated || save.isPending || !dirty}
-            onClick={() => save.mutate()}
-          >
-            {save.isPending ? t("common.saving") : t("common.save")}
-          </Button>
+          {canWrite && (
+            <Button
+              type="button"
+              disabled={content.isError || truncated || save.isPending || !dirty}
+              onClick={() => save.mutate()}
+            >
+              {save.isPending ? t("common.saving") : t("common.save")}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

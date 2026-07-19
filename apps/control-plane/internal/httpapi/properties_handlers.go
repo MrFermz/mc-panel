@@ -14,7 +14,7 @@ import (
 )
 
 // server.properties เป็นไฟล์ text ที่ root ของ server instance — จัดการผ่าน file manager
-// stream เดียวกัน (gate สิทธิ์เท่ากับ file manager: admin/owner/can_manage_files)
+// stream เดียวกัน (gate ด้วย cap settings.view/edit ต่อ server: admin/owner/grant มี cap)
 const propertiesFileName = "server.properties"
 
 // propField อธิบาย 1 key ใน catalog สำหรับให้ web render form + validate ฝั่ง server
@@ -166,7 +166,7 @@ func mergeProperties(text string, values map[string]string) string {
 }
 
 func (a *API) handleGetProperties(w http.ResponseWriter, r *http.Request) {
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capSettingsView)
 	if !ok {
 		return
 	}
@@ -213,7 +213,7 @@ func (a *API) handleGetProperties(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleUpdateProperties(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capSettingsEdit)
 	if !ok {
 		return
 	}

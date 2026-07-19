@@ -14,28 +14,6 @@ import (
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
-// canManageFiles: owner/admin หรือ permission ที่ตั้ง can_manage_files ไว้ (ดู docs/api.md)
-func canManageFiles(user *store.User, perm *store.Permission) bool {
-	if user.IsAdmin {
-		return true
-	}
-	return perm != nil && (perm.Role == "owner" || perm.CanManageFiles)
-}
-
-// loadServerForFiles โหลด server + เช็คสิทธิ์จัดการไฟล์ เขียน error response เองเมื่อไม่ผ่าน
-func (a *API) loadServerForFiles(w http.ResponseWriter, r *http.Request) (*store.Server, bool) {
-	user := auth.UserFrom(r.Context())
-	srv, perm, ok := a.loadServerAccess(w, r)
-	if !ok {
-		return nil, false
-	}
-	if !canManageFiles(user, perm) {
-		writeError(w, http.StatusForbidden, "forbidden", "file management access required")
-		return nil, false
-	}
-	return srv, true
-}
-
 type fileEntryView struct {
 	Name    string    `json:"name"`
 	IsDir   bool      `json:"is_dir"`
@@ -85,7 +63,7 @@ func (a *API) writeFileOpError(w http.ResponseWriter, msg string) {
 }
 
 func (a *API) handleListFiles(w http.ResponseWriter, r *http.Request) {
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capFilesView)
 	if !ok {
 		return
 	}
@@ -111,7 +89,7 @@ func (a *API) handleListFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleReadFile(w http.ResponseWriter, r *http.Request) {
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capFilesView)
 	if !ok {
 		return
 	}
@@ -138,7 +116,7 @@ func (a *API) handleReadFile(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleWriteFile(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capFilesWrite)
 	if !ok {
 		return
 	}
@@ -164,7 +142,7 @@ func (a *API) handleWriteFile(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleMakeDir(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capFilesWrite)
 	if !ok {
 		return
 	}
@@ -189,7 +167,7 @@ func (a *API) handleMakeDir(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleRenameFile(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capFilesWrite)
 	if !ok {
 		return
 	}
@@ -215,7 +193,7 @@ func (a *API) handleRenameFile(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capFilesDelete)
 	if !ok {
 		return
 	}

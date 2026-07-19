@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,39 @@ func (a *API) loadServerAccess(w http.ResponseWriter, r *http.Request) (*store.S
 	return srv, perm, true
 }
 
+// effectiveServerCap: user ทำ cap นี้กับ server นี้ได้ไหม — enforce 2 ชั้นแบบ AND
+// (1) global capability = เพดานระดับ panel  (2) server_permissions ต่อ server นี้
+// admin ครอบทุกอย่าง; owner ได้ทุก server-scoped cap; member ได้เฉพาะที่ grant ไว้
+func effectiveServerCap(user *store.User, perm *store.Permission, cap string) bool {
+	if user.IsAdmin {
+		return true
+	}
+	if !hasCapability(user, cap) {
+		return false
+	}
+	if perm == nil {
+		return false
+	}
+	if perm.Role == "owner" {
+		return true
+	}
+	return slices.Contains(perm.Capabilities, cap)
+}
+
+// loadServerCap = loadServerAccess + เช็ค effectiveServerCap สำหรับ cap ที่ handler ต้องการ
+// เขียน 403 เองเมื่อไม่ผ่าน — ใช้แทน loadServerAccess ในทุก endpoint ระดับ server ที่ผูก cap
+func (a *API) loadServerCap(w http.ResponseWriter, r *http.Request, cap string) (*store.Server, *store.Permission, bool) {
+	srv, perm, ok := a.loadServerAccess(w, r)
+	if !ok {
+		return nil, nil, false
+	}
+	if !effectiveServerCap(auth.UserFrom(r.Context()), perm, cap) {
+		writeError(w, http.StatusForbidden, "forbidden", "insufficient permission for this server")
+		return nil, nil, false
+	}
+	return srv, perm, true
+}
+
 // statsViewFor คืน stats จาก cache เฉพาะ server ที่ running และมีข้อมูลแล้ว
 // ไม่งั้น nil (JSON null) ตาม docs/api.md
 func (a *API) statsViewFor(s *store.Server) *serverStatsView {
@@ -99,13 +133,6 @@ func emptyIfNil(s []string) []string {
 	return s
 }
 
-
-func canOperate(user *store.User, perm *store.Permission) bool {
-	if user.IsAdmin {
-		return true
-	}
-	return perm != nil && (perm.Role == "owner" || perm.Role == "operator")
-}
 
 func isOwner(user *store.User, perm *store.Permission) bool {
 	if user.IsAdmin {
@@ -303,12 +330,8 @@ func (a *API) handleGetServer(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, perm, ok := a.loadServerAccess(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capServersEdit)
 	if !ok {
-		return
-	}
-	if !isOwner(user, perm) {
-		writeError(w, http.StatusForbidden, "forbidden", "owner access required")
 		return
 	}
 
@@ -392,12 +415,8 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, perm, ok := a.loadServerAccess(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capServersDelete)
 	if !ok {
-		return
-	}
-	if !isOwner(user, perm) {
-		writeError(w, http.StatusForbidden, "forbidden", "owner access required")
 		return
 	}
 
@@ -422,12 +441,8 @@ func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleServerAction(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, perm, ok := a.loadServerAccess(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capServersPower)
 	if !ok {
-		return
-	}
-	if !canOperate(user, perm) {
-		writeError(w, http.StatusForbidden, "forbidden", "operator access required")
 		return
 	}
 
@@ -509,7 +524,7 @@ func (a *API) handleListServerJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleConsoleHistory(w http.ResponseWriter, r *http.Request) {
-	srv, _, ok := a.loadServerAccess(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capConsoleView)
 	if !ok {
 		return
 	}

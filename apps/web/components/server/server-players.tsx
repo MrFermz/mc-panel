@@ -105,6 +105,8 @@ export default function ServerPlayers({
   serverId,
   isRunning,
   onlineNames,
+  canManage,
+  canModerate,
 }: {
   serverId: string;
   isRunning: boolean;
@@ -112,6 +114,9 @@ export default function ServerPlayers({
   // ไม่ใช้ค่า online ที่ติดมากับ payload ของ players เพราะนั่น fetch ครั้งเดียวแล้วค้าง
   // (กฎ repo: ห้าม poll REST — รับ update ต่อจาก WS)
   onlineNames: string[];
+  // canManage = players.manage (whitelist), canModerate = players.moderate (op/kick/ban)
+  canManage: boolean;
+  canModerate: boolean;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
@@ -251,7 +256,8 @@ export default function ServerPlayers({
   // ปุ่ม action ทุกตัวสั่งผ่าน console — server ต้องรันอยู่ถึงจะกดได้
   const actionsDisabled = !isRunning;
 
-  const rowActions = (player: ServerPlayer) => (
+  const rowActions = (player: ServerPlayer) =>
+    !canModerate ? null : (
     <div className="flex flex-wrap justify-end gap-1.5">
       <Button
         size="sm"
@@ -296,15 +302,17 @@ export default function ServerPlayers({
               {t("players.whitelistApplyHint")}
             </p>
           </div>
-          <Button
-            size="sm"
-            disabled={enableWhitelist.isPending}
-            onClick={() => enableWhitelist.mutate()}
-          >
-            {enableWhitelist.isPending
-              ? t("common.saving")
-              : t("players.enableWhitelist")}
-          </Button>
+          {canManage && (
+            <Button
+              size="sm"
+              disabled={enableWhitelist.isPending}
+              onClick={() => enableWhitelist.mutate()}
+            >
+              {enableWhitelist.isPending
+                ? t("common.saving")
+                : t("players.enableWhitelist")}
+            </Button>
+          )}
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
@@ -313,25 +321,27 @@ export default function ServerPlayers({
         </p>
       )}
 
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSubmit) add.mutate();
-        }}
-      >
-        <Input
-          className="w-full sm:max-w-xs"
-          maxLength={16}
-          placeholder={t("players.addPlaceholder")}
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-        <Button type="submit" disabled={!canSubmit}>
-          {add.isPending && <Loader2Icon className="size-4 animate-spin" />}
-          {t("players.add")}
-        </Button>
-      </form>
+      {canManage && (
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit) add.mutate();
+          }}
+        >
+          <Input
+            className="w-full sm:max-w-xs"
+            maxLength={16}
+            placeholder={t("players.addPlaceholder")}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <Button type="submit" disabled={!canSubmit}>
+            {add.isPending && <Loader2Icon className="size-4 animate-spin" />}
+            {t("players.add")}
+          </Button>
+        </form>
+      )}
 
       {players.isPending ? (
         <Skeleton className="h-32 w-full" />
@@ -416,7 +426,7 @@ export default function ServerPlayers({
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={player.whitelisted}
-                          disabled={toggling(player.uuid)}
+                          disabled={toggling(player.uuid) || !canManage}
                           onCheckedChange={() => toggle.mutate(player)}
                           aria-label={t("players.toggleWhitelist")}
                         />
@@ -480,7 +490,7 @@ export default function ServerPlayers({
                           <TableCell>
                             <Switch
                               checked={player.whitelisted}
-                              disabled={toggling(player.uuid)}
+                              disabled={toggling(player.uuid) || !canManage}
                               onCheckedChange={() => toggle.mutate(player)}
                               aria-label={t("players.toggleWhitelist")}
                             />

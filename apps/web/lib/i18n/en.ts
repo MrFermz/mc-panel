@@ -202,7 +202,18 @@ export const en = {
   "access.email": "Email",
   "access.roleOwner": "Owner",
   "access.roleOperator": "Operator",
+  "access.roleModerator": "Moderator",
   "access.roleViewer": "Viewer",
+  "access.roleMember": "Member",
+  "access.roleCustom": "Custom",
+  "access.accessLevel": "Access",
+  "access.capsCount": "{count} permissions",
+  "access.rolePreset": "Preset",
+  "access.permissions": "Permissions",
+  "access.ownerHint":
+    "Owner has full control of this server, including managing who it is shared with.",
+  "access.presetHint":
+    "Pick a preset or toggle permissions individually. Each still needs the matching panel permission to take effect.",
   "access.canConsole": "Can type console commands",
   "access.canFiles": "Can manage files",
   "access.added": "Permission added",

@@ -101,7 +101,7 @@ func displayUUID(s string) string {
 // ops + banned-players (อ่านไฟล์ผ่าน agent). node offline = degrade เหลือ DB whitelist
 // (แท็บยังใช้ได้ตอน server หยุด/offline). ไฟล์ไม่มี = ถือว่าว่าง ไม่ error
 func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capPlayersView)
 	if !ok {
 		return
 	}
@@ -221,7 +221,7 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 // uuid ที่ไม่มี skin (offline-mode/ไม่มี texture) ตอบ 404 → web fallback ไปตัวอักษรย่อ
 func (a *API) handlePlayerFace(w http.ResponseWriter, r *http.Request) {
 	// สิทธิ์เท่ากับดูรายชื่อผู้เล่น (รูปโผล่ในลิสต์เดียวกัน) — ยึด access ต่อ server ไม่ให้เป็น open proxy
-	if _, ok := a.loadServerForFiles(w, r); !ok {
+	if _, _, ok := a.loadServerCap(w, r, capPlayersView); !ok {
 		return
 	}
 
@@ -298,7 +298,7 @@ func (a *API) readMCPlayerFile(ctx context.Context, srv *store.Server, path stri
 
 func (a *API) handleAddPlayer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capPlayersManage)
 	if !ok {
 		return
 	}
@@ -353,7 +353,7 @@ func (a *API) handleAddPlayer(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleRemovePlayer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capPlayersManage)
 	if !ok {
 		return
 	}
@@ -524,10 +524,10 @@ var playerCommands = map[string]string{
 var safeUsernameRe = regexp.MustCompile(`^[A-Za-z0-9_.*-]{1,32}$`)
 
 // handlePlayerAction ส่งคำสั่งจัดการผู้เล่นเข้า console ของ server
-// สิทธิ์เท่าการจัดการผู้เล่น/ไฟล์ (loadServerForFiles) — ต้อง running เพราะสั่งผ่าน stdin
+// ต้องมี cap players.moderate ต่อ server (op/deop/kick/ban) — running เพราะสั่งผ่าน stdin
 func (a *API) handlePlayerAction(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
-	srv, ok := a.loadServerForFiles(w, r)
+	srv, _, ok := a.loadServerCap(w, r, capPlayersModerate)
 	if !ok {
 		return
 	}

@@ -93,6 +93,50 @@ var capabilityCatalog = []capabilityMeta{
 	{capAccessManage, "access", "manage", "Manage access", "Share a server with users and revoke access"},
 }
 
+// serverScopedCaps คือ subset ของ catalog ที่มีความหมาย "ต่อ server ตัวหนึ่ง" —
+// ชั้น server (server_permissions.capabilities) grant ได้เฉพาะ key พวกนี้ แล้ว enforce
+// แบบ AND กับ global capability (ดู effectiveServerCap). global-only cap (users.*, nodes.*,
+// servers.view_all/create, access.*) ไม่อยู่ในนี้: users/nodes ไม่ผูก server, view_all/create
+// เป็นสิทธิ์ระดับ panel, ส่วน access (แชร์ server ให้คนอื่น) เป็นของ owner เท่านั้น
+var serverScopedCaps = map[string]bool{
+	capServersEdit:     true,
+	capServersDelete:   true,
+	capServersPower:    true,
+	capConsoleView:     true,
+	capConsoleWrite:    true,
+	capFilesView:       true,
+	capFilesWrite:      true,
+	capFilesDelete:     true,
+	capPlayersView:     true,
+	capPlayersManage:   true,
+	capPlayersModerate: true,
+	capSettingsView:    true,
+	capSettingsEdit:    true,
+}
+
+// validateServerCapabilities: ทุก key ต้องเป็น server-scoped cap ไม่งั้น reject
+func validateServerCapabilities(keys []string) bool {
+	for _, k := range keys {
+		if !serverScopedCaps[k] {
+			return false
+		}
+	}
+	return true
+}
+
+// dedupStrings คืน slice ใหม่ที่ตัดค่าซ้ำ (คงลำดับที่เจอครั้งแรก) — ใช้ normalize grant list
+func dedupStrings(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func isKnownCapability(key string) bool {
 	for _, c := range capabilityCatalog {
 		if c.Key == key {

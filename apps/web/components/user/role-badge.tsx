@@ -57,22 +57,17 @@ const PANEL_ROLE_STYLE: Record<RoleKey, RoleStyle> = {
 };
 
 // role ต่อ server (server_permissions) — คนละ vocabulary กับ panel role
-// owner ได้มงกุฎเพราะเป็นสิทธิ์ที่ถอดไม่ได้ ไม่ใช่ preset ที่ตั้งเอง
+// owner ได้มงกุฎเพราะเป็นสิทธิ์ที่ถอดไม่ได้ ไม่ใช่ preset ที่ตั้งเอง ; member = grant ราย cap
 const SERVER_ROLE_STYLE: Record<PermissionRole, RoleStyle> = {
   owner: {
     icon: CrownIcon,
     className: "border-amber-500/30 bg-amber-500/15 text-amber-300",
     labelKey: "access.roleOwner",
   },
-  operator: {
-    icon: WrenchIcon,
-    className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
-    labelKey: "access.roleOperator",
-  },
-  viewer: {
+  member: {
     icon: EyeIcon,
     className: "border-sky-500/30 bg-sky-500/15 text-sky-300",
-    labelKey: "access.roleViewer",
+    labelKey: "access.roleMember",
   },
 };
 

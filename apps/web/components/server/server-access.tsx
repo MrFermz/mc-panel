@@ -4,22 +4,43 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { apiGet, apiSendVoid, listUserDirectory, ApiError } from "@/lib/api";
 import {
+  apiGet,
+  apiSendVoid,
+  listUserDirectory,
+  ApiError,
+} from "@/lib/api";
+import {
+  capabilitiesResponseSchema,
   permissionsResponseSchema,
   type DirectoryUser,
   type Permission,
-  type PermissionRole,
 } from "@/lib/types";
+import { SERVER_SCOPED_CAPABILITIES } from "@/lib/capabilities";
+import {
+  SERVER_ROLE_LABEL_KEYS,
+  SERVER_ROLE_PRESETS,
+  matchServerPreset,
+} from "@/lib/server-roles";
 import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
 import { userIdent, userTitle } from "@/lib/user-display";
 import { UserIdentity } from "@/components/user/user-identity";
+import {
+  FieldGroupLabel,
+  PermissionGroups,
+} from "@/components/user/permission-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -28,13 +49,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -45,22 +59,22 @@ import {
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface FormState {
   // userId !== "" → ส่ง user_id (เลือกจาก dropdown); "" → ใช้ free-text email แทน
   userId: string;
   email: string;
-  role: PermissionRole;
-  can_console_write: boolean;
-  can_manage_files: boolean;
+  role: "owner" | "member";
+  capabilities: string[];
 }
 
 const emptyForm: FormState = {
   userId: "",
   email: "",
-  role: "viewer",
-  can_console_write: false,
-  can_manage_files: false,
+  role: "member",
+  capabilities: SERVER_ROLE_PRESETS.find((p) => p.key === "viewer")!
+    .capabilities,
 };
 
 // label ของ user ใน dropdown — username + email ถ้ามีทั้งคู่
@@ -70,11 +84,49 @@ function directoryLabel(u: DirectoryUser): string {
   return secondary !== primary ? `${primary} (${secondary})` : primary;
 }
 
+// preset picker ต่อ server — เทียบชุด cap ปัจจุบันกับ preset แล้วไฮไลต์ตัวที่ตรง
+function ServerPresetPicker({
+  role,
+  capabilities,
+  onSelect,
+}: {
+  role: "owner" | "member";
+  capabilities: string[];
+  onSelect: (next: { role: "owner" | "member"; capabilities: string[] }) => void;
+}) {
+  const t = useT();
+  const selected = matchServerPreset(role, capabilities);
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {SERVER_ROLE_PRESETS.map((preset) => {
+        const active = selected === preset.key;
+        return (
+          <button
+            key={preset.key}
+            type="button"
+            onClick={() =>
+              onSelect({ role: preset.role, capabilities: preset.capabilities })
+            }
+            className={cn(
+              "h-10 rounded-md border text-sm font-medium transition-colors",
+              active
+                ? "border-primary bg-primary/15 text-primary"
+                : "hover:bg-accent hover:text-accent-foreground",
+            )}
+          >
+            {t(SERVER_ROLE_LABEL_KEYS[preset.key])}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ServerAccess({ serverId }: { serverId: string }) {
   const t = useT();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editingEmail, setEditingEmail] = React.useState<string | null>(null);
+  const [editingIdent, setEditingIdent] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm);
   const [removeTarget, setRemoveTarget] = React.useState<Permission | null>(
     null,
@@ -95,6 +147,20 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
     retry: false,
   });
 
+  // catalog ทั้งหมดจาก backend แล้ว filter เหลือเฉพาะ server-scoped cap (ชั้น access)
+  const caps = useQuery({
+    queryKey: ["meta", "capabilities"],
+    queryFn: () => apiGet("/api/meta/capabilities", capabilitiesResponseSchema),
+    staleTime: 300_000,
+  });
+  const serverCatalog = React.useMemo(
+    () =>
+      (caps.data?.capabilities ?? []).filter((c) =>
+        (SERVER_SCOPED_CAPABILITIES as readonly string[]).includes(c.key),
+      ),
+    [caps.data],
+  );
+
   // user ที่เลือกได้: active ทั้งหมด ตัดตัวเอง + คนที่มีสิทธิ์อยู่แล้วออก
   const pickableUsers = React.useMemo(() => {
     const already = new Set(
@@ -112,19 +178,18 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
 
   const upsert = useMutation({
     mutationFn: (payload: FormState) => {
+      // owner ได้ทุก cap โดยปริยาย — ไม่ต้องส่ง capabilities
       const base = {
         role: payload.role,
-        can_console_write: payload.can_console_write,
-        can_manage_files: payload.can_manage_files,
+        capabilities: payload.role === "owner" ? [] : payload.capabilities,
       };
-      // เลือกจาก dropdown → user_id, ไม่งั้น free-text email
       const body = payload.userId
         ? { ...base, user_id: payload.userId }
         : { ...base, email: payload.email.trim() };
       return apiSendVoid("POST", `/api/servers/${serverId}/permissions`, body);
     },
     onSuccess: () => {
-      toast.success(editingEmail ? t("access.updated") : t("access.added"));
+      toast.success(editingIdent ? t("access.updated") : t("access.added"));
       setDialogOpen(false);
       invalidate();
     },
@@ -155,28 +220,42 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
   });
 
   const openAdd = () => {
-    setEditingEmail(null);
+    setEditingIdent(null);
     setForm(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (perm: Permission) => {
-    setEditingEmail(userIdent(perm));
+    setEditingIdent(userIdent(perm));
     setForm({
       // ยึด user_id ตอนแก้ไข — collaborator ที่เป็น username-only account มี email = ""
-      // ถ้าปล่อยให้ไปทาง email จะส่งค่าว่างแล้วได้ user_not_found
       userId: perm.user_id,
       email: userIdent(perm),
       role: perm.role,
-      can_console_write: perm.can_console_write,
-      can_manage_files: perm.can_manage_files,
+      capabilities: perm.capabilities,
     });
     setDialogOpen(true);
   };
 
   // ปุ่ม add ปิดไว้จนกว่าจะเลือก user หรือกรอก email (ตอนแก้ไขไม่ต้องเช็ค)
   const canSubmit =
-    editingEmail !== null || form.userId !== "" || form.email.trim() !== "";
+    editingIdent !== null || form.userId !== "" || form.email.trim() !== "";
+
+  const toggle = (key: string, on: boolean) =>
+    setForm((prev) => ({
+      ...prev,
+      capabilities: on
+        ? [...new Set([...prev.capabilities, key])]
+        : prev.capabilities.filter((k) => k !== key),
+    }));
+
+  const toggleGroup = (keys: string[], on: boolean) =>
+    setForm((prev) => ({
+      ...prev,
+      capabilities: on
+        ? [...new Set([...prev.capabilities, ...keys])]
+        : prev.capabilities.filter((k) => !keys.includes(k)),
+    }));
 
   return (
     <div className="grid gap-4">
@@ -199,52 +278,62 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("access.user")}</TableHead>
-                  <TableHead>{t("access.consoleWrite")}</TableHead>
-                  <TableHead>{t("access.manageFiles")}</TableHead>
+                  <TableHead>{t("access.accessLevel")}</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {permissions.data.permissions.map((perm) => (
-                  <TableRow key={perm.user_id}>
-                    <TableCell>
-                      <UserIdentity
-                        user={{ id: perm.user_id, ...perm }}
-                        serverRole={perm.role}
-                        size="sm"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {perm.can_console_write
-                        ? t("common.yes")
-                        : t("common.no")}
-                    </TableCell>
-                    <TableCell>
-                      {perm.can_manage_files ? t("common.yes") : t("common.no")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEdit(perm)}
-                          aria-label={`${t("common.edit")} ${userTitle(perm)}`}
-                        >
-                          <PencilIcon />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => setRemoveTarget(perm)}
-                          aria-label={`${t("common.remove")} ${userTitle(perm)}`}
-                        >
-                          <Trash2Icon />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {permissions.data.permissions.map((perm) => {
+                  const preset = matchServerPreset(
+                    perm.role,
+                    perm.capabilities,
+                  );
+                  return (
+                    <TableRow key={perm.user_id}>
+                      <TableCell>
+                        <UserIdentity
+                          user={{ id: perm.user_id, ...perm }}
+                          serverRole={perm.role}
+                          size="sm"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">
+                          {t(SERVER_ROLE_LABEL_KEYS[preset])}
+                          {perm.role === "member" && (
+                            <span className="text-muted-foreground">
+                              {" · "}
+                              {t("access.capsCount", {
+                                count: perm.capabilities.length,
+                              })}
+                            </span>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEdit(perm)}
+                            aria-label={`${t("common.edit")} ${userTitle(perm)}`}
+                          >
+                            <PencilIcon />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            onClick={() => setRemoveTarget(perm)}
+                            aria-label={`${t("common.remove")} ${userTitle(perm)}`}
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -252,11 +341,11 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingEmail
-                ? t("access.editTitle", { email: editingEmail })
+              {editingIdent
+                ? t("access.editTitle", { email: editingIdent })
                 : t("access.addUser")}
             </DialogTitle>
             <DialogDescription>{t("access.accountRequired")}</DialogDescription>
@@ -268,7 +357,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
               if (canSubmit && !upsert.isPending) upsert.mutate(form);
             }}
           >
-            {editingEmail === null && (
+            {editingIdent === null && (
               <div className="grid gap-2">
                 <Label htmlFor="perm-user">{t("access.pickUser")}</Label>
                 <Select
@@ -300,74 +389,53 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
                 </Select>
               </div>
             )}
-            <div className="grid gap-2">
-              <Label htmlFor="perm-email">
-                {editingEmail === null
-                  ? t("access.orEmail")
-                  : t("access.email")}
-              </Label>
-              <Input
-                id="perm-email"
-                type="email"
-                disabled={editingEmail !== null || form.userId !== ""}
-                placeholder={
-                  editingEmail === null
-                    ? t("access.emailPlaceholder")
-                    : undefined
-                }
-                value={form.email}
-                onChange={(e) =>
-                  // พิมพ์ email → ล้าง user ที่เลือกไว้
-                  setForm({ ...form, email: e.target.value, userId: "" })
-                }
+            {editingIdent === null && (
+              <div className="grid gap-2">
+                <Label htmlFor="perm-email">{t("access.orEmail")}</Label>
+                <Input
+                  id="perm-email"
+                  type="email"
+                  disabled={form.userId !== ""}
+                  placeholder={t("access.emailPlaceholder")}
+                  value={form.email}
+                  onChange={(e) =>
+                    // พิมพ์ email → ล้าง user ที่เลือกไว้
+                    setForm({ ...form, email: e.target.value, userId: "" })
+                  }
+                />
+              </div>
+            )}
+
+            <div>
+              <FieldGroupLabel>{t("access.rolePreset")}</FieldGroupLabel>
+              <ServerPresetPicker
+                role={form.role}
+                capabilities={form.capabilities}
+                onSelect={(next) => setForm({ ...form, ...next })}
               />
+              <p className="text-muted-foreground mt-2 text-xs">
+                {form.role === "owner"
+                  ? t("access.ownerHint")
+                  : t("access.presetHint")}
+              </p>
             </div>
-            <div className="grid gap-2">
-              <Label>{t("access.role")}</Label>
-              <Select
-                value={form.role}
-                onValueChange={(v) =>
-                  setForm({ ...form, role: v as PermissionRole })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owner">{t("access.roleOwner")}</SelectItem>
-                  <SelectItem value="operator">
-                    {t("access.roleOperator")}
-                  </SelectItem>
-                  <SelectItem value="viewer">
-                    {t("access.roleViewer")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div>
+              <FieldGroupLabel>{t("access.permissions")}</FieldGroupLabel>
+              {caps.isPending ? (
+                <Skeleton className="h-64 w-full" />
+              ) : (
+                <PermissionGroups
+                  catalog={serverCatalog}
+                  // owner ได้ทุก server-scoped cap โดยปริยาย — โชว์เปิดค้าง กดไม่ได้
+                  isAdmin={form.role === "owner"}
+                  capabilities={form.capabilities}
+                  onToggle={toggle}
+                  onToggleGroup={toggleGroup}
+                />
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="perm-console"
-                checked={form.can_console_write}
-                onCheckedChange={(v) =>
-                  setForm({ ...form, can_console_write: v === true })
-                }
-              />
-              <Label htmlFor="perm-console" className="font-normal">
-                {t("access.canConsole")}
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="perm-files"
-                checked={form.can_manage_files}
-                onCheckedChange={(v) =>
-                  setForm({ ...form, can_manage_files: v === true })
-                }
-              />
-              <Label htmlFor="perm-files" className="font-normal">
-                {t("access.canFiles")}
-              </Label>
-            </div>
+
             <DialogFooter>
               <Button
                 type="button"

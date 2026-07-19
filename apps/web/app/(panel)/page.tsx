@@ -11,9 +11,9 @@ import {
 import { apiGet, ApiError } from "@/lib/api";
 import { serversResponseSchema, type Server } from "@/lib/types";
 import { formatMb, formatUptime } from "@/lib/format";
-import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings/store";
+import { useActiveServer } from "@/lib/use-active-server";
 import { useSetPageServer } from "@/components/layout/breadcrumb-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -152,10 +152,6 @@ function ServerOverview({ server }: { server: Server }) {
 
 export default function DashboardPage() {
   const t = useT();
-  const { data: meData } = useMe();
-  const me = meData?.user;
-  const isAdmin = me?.is_admin ?? false;
-
   const dashboardServerId = useSettingsStore((s) => s.dashboardServerId);
 
   // ไม่ poll — stats/status อัปเดตผ่าน WS /ws/events (useEvents ที่ layout patch cache นี้)
@@ -174,8 +170,9 @@ export default function DashboardPage() {
   const selected = serverList.find((s) => s.id === selectedId);
 
   // ปุ่มสั่งงานย้ายไป top bar — ผูก server + สิทธิ์ operate เข้ากับ header ของหน้านี้
-  // (list ไม่มี role ต่อ server → operate = admin หรือ owner ของ server ตัวนั้น)
-  const canOperate = isAdmin || (!!selected && selected.owner_id === me?.id);
+  // operate = cap servers.power ต่อ server ตัวนั้น (2 ชั้น) โหลด perm ผ่าน useActiveServer
+  // ซึ่งเลือก active server ด้วย logic เดียวกับ selectedId ที่นี่
+  const canOperate = useActiveServer().canOperate;
   useSetPageServer(selected, canOperate);
 
   return (

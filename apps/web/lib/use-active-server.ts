@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { useMe } from "@/lib/use-me";
 import { useSettingsStore } from "@/lib/settings/store";
+import { CAPABILITY, effectiveServerCap } from "@/lib/capabilities";
 
 export interface ActiveServer {
   serversQuery: UseQueryResult<{ servers: Server[] }>;
@@ -19,6 +20,8 @@ export interface ActiveServer {
   server: Server | undefined;
   isAdmin: boolean;
   isOwner: boolean;
+  // can(cap) = สิทธิ์ 2 ชั้น (global AND per-server) ต่อ active server — ใช้ gate ทุกปุ่ม/แท็บ
+  can: (cap: string) => boolean;
   canOperate: boolean;
   canConsoleWrite: boolean;
   canManageFiles: boolean;
@@ -58,6 +61,8 @@ export function useActiveServer(): ActiveServer {
   const isAdmin = me?.is_admin ?? false;
   const isOwner = isAdmin || myPermission?.role === "owner";
 
+  const can = (cap: string) => effectiveServerCap(me, myPermission, cap);
+
   return {
     serversQuery,
     detailQuery,
@@ -66,8 +71,9 @@ export function useActiveServer(): ActiveServer {
     server,
     isAdmin,
     isOwner,
-    canOperate: isOwner || myPermission?.role === "operator",
-    canConsoleWrite: isOwner || (myPermission?.can_console_write ?? false),
-    canManageFiles: isOwner || (myPermission?.can_manage_files ?? false),
+    can,
+    canOperate: can(CAPABILITY.serversPower),
+    canConsoleWrite: can(CAPABILITY.consoleWrite),
+    canManageFiles: can(CAPABILITY.filesWrite),
   };
 }

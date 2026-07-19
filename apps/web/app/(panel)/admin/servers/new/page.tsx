@@ -1128,6 +1128,8 @@ function NewServerWizard() {
         serverId={server.id}
         isRunning={server.status === "running"}
         onlineNames={server.stats?.online_players ?? []}
+        canManage
+        canModerate
       />
     ) : (
       <ProvisioningCard />

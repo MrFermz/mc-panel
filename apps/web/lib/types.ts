@@ -149,7 +149,8 @@ export const jobSchema = z.object({
 });
 export type Job = z.infer<typeof jobSchema>;
 
-export const permissionRoleSchema = z.enum(["owner", "operator", "viewer"]);
+// owner = superuser ต่อ server (ได้ทุก server-scoped cap + จัดการ access), member = grant ราย cap
+export const permissionRoleSchema = z.enum(["owner", "member"]);
 export type PermissionRole = z.infer<typeof permissionRoleSchema>;
 
 export const permissionSchema = z.object({
@@ -159,8 +160,8 @@ export const permissionSchema = z.object({
   display_name: z.string().default(""),
   avatar_url: z.string().nullable().default(null),
   role: permissionRoleSchema,
-  can_console_write: z.boolean(),
-  can_manage_files: z.boolean(),
+  // server-scoped capability ที่ grant ให้ member (owner จะว่าง = ได้ทุกอย่างโดยปริยาย)
+  capabilities: z.array(z.string()).default([]),
 });
 export type Permission = z.infer<typeof permissionSchema>;
 

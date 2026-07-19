@@ -48,3 +48,36 @@ export function hasCapability(
   if (!user) return false;
   return user.is_admin || user.capabilities.includes(key);
 }
+
+// server-scoped capability = cap ที่ grant ได้ในระดับ server (ชั้น access) — ต้องตรงกับ
+// serverScopedCaps ใน control-plane `internal/httpapi/capabilities.go`
+export const SERVER_SCOPED_CAPABILITIES = [
+  CAPABILITY.serversEdit,
+  CAPABILITY.serversDelete,
+  CAPABILITY.serversPower,
+  CAPABILITY.consoleView,
+  CAPABILITY.consoleWrite,
+  CAPABILITY.filesView,
+  CAPABILITY.filesWrite,
+  CAPABILITY.filesDelete,
+  CAPABILITY.playersView,
+  CAPABILITY.playersManage,
+  CAPABILITY.playersModerate,
+  CAPABILITY.settingsView,
+  CAPABILITY.settingsEdit,
+] as const;
+
+// effective per-server cap = enforce 2 ชั้นแบบ AND ให้ตรงกับ effectiveServerCap ฝั่ง backend:
+// admin ครอบทุกอย่าง; ไม่งั้นต้องมี global cap (เพดาน) AND (owner หรือ grant ต่อ server มี cap)
+export function effectiveServerCap(
+  user: Pick<User, "is_admin" | "capabilities"> | null | undefined,
+  perm: { role: string; capabilities: string[] } | undefined | null,
+  cap: string,
+): boolean {
+  if (!user) return false;
+  if (user.is_admin) return true;
+  if (!user.capabilities.includes(cap)) return false;
+  if (!perm) return false;
+  if (perm.role === "owner") return true;
+  return perm.capabilities.includes(cap);
+}

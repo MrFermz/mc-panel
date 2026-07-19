@@ -80,13 +80,14 @@ type Server struct {
 }
 
 type Permission struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	ServerID        uuid.UUID
-	Role            string
-	CanConsoleWrite bool
-	CanManageFiles  bool
-	CreatedAt       time.Time
+	ID       uuid.UUID
+	UserID   uuid.UUID
+	ServerID uuid.UUID
+	// Role = "owner" | "member" — owner ได้ทุก server-scoped cap โดยปริยาย + จัดการ access list
+	Role string
+	// Capabilities = server-scoped capability ที่ grant ให้ member (owner จะว่าง = implicit all)
+	Capabilities []string
+	CreatedAt    time.Time
 }
 
 type PermissionWithUser struct {

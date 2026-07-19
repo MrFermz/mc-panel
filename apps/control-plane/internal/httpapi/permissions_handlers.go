@@ -11,7 +11,7 @@ import (
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
-var validRoles = map[string]bool{"owner": true, "operator": true, "viewer": true}
+var validRoles = map[string]bool{"owner": true, "member": true}
 
 func (a *API) handleListPermissions(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
@@ -49,19 +49,29 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		UserID          string `json:"user_id"`
-		Email           string `json:"email"`
-		Role            string `json:"role"`
-		CanConsoleWrite bool   `json:"can_console_write"`
-		CanManageFiles  bool   `json:"can_manage_files"`
+		UserID       string   `json:"user_id"`
+		Email        string   `json:"email"`
+		Role         string   `json:"role"`
+		Capabilities []string `json:"capabilities"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	if !validRoles[req.Role] {
-		writeError(w, http.StatusBadRequest, "invalid_role", "role must be one of: owner, operator, viewer")
+		writeError(w, http.StatusBadRequest, "invalid_role", "role must be one of: owner, member")
 		return
+	}
+	// owner ได้ทุก server-scoped cap โดยปริยาย — เก็บ capabilities ว่าง
+	// member ต้องระบุ cap ที่ grant และทุก key ต้องเป็น server-scoped เท่านั้น
+	caps := []string{}
+	if req.Role == "member" {
+		if !validateServerCapabilities(req.Capabilities) {
+			writeError(w, http.StatusBadRequest, "invalid_capability",
+				"capabilities must all be server-scoped keys")
+			return
+		}
+		caps = dedupStrings(req.Capabilities)
 	}
 
 	// user_id มาก่อน email (picker ส่ง id ตรง ๆ, ยังรองรับ email เดิมสำหรับพิมพ์มือ)
@@ -114,8 +124,7 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	updated, err := a.st.UpsertPermission(r.Context(), target.ID, srv.ID,
-		req.Role, req.CanConsoleWrite, req.CanManageFiles)
+	updated, err := a.st.UpsertPermission(r.Context(), target.ID, srv.ID, req.Role, caps)
 	if err != nil {
 		a.log.Error("upsert permission failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
@@ -123,22 +132,20 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.audit(r, &user.ID, &srv.ID, "permission_updated", map[string]any{
-		"target_user_id":    target.ID.String(),
-		"role":              updated.Role,
-		"can_console_write": updated.CanConsoleWrite,
-		"can_manage_files":  updated.CanManageFiles,
+		"target_user_id": target.ID.String(),
+		"role":           updated.Role,
+		"capabilities":   updated.Capabilities,
 	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"permission": permissionView{
-			UserID:          target.ID,
-			Email:           target.Email,
-			Username:        target.Username,
-			DisplayName:     target.DisplayName,
-			AvatarURL:       avatarURL(target.ID, target.AvatarUpdatedAt),
-			Role:            updated.Role,
-			CanConsoleWrite: updated.CanConsoleWrite,
-			CanManageFiles:  updated.CanManageFiles,
+			UserID:       target.ID,
+			Email:        target.Email,
+			Username:     target.Username,
+			DisplayName:  target.DisplayName,
+			AvatarURL:    avatarURL(target.ID, target.AvatarUpdatedAt),
+			Role:         updated.Role,
+			Capabilities: emptyIfNil(updated.Capabilities),
 		},
 	})
 }

@@ -52,7 +52,21 @@ function isStoppedLike(status: ServerStatus): boolean {
   return status === "stopped" || status === "errored";
 }
 
-export default function ServerSettings({ server }: { server: Server }) {
+// สิทธิ์แยกตาม cap ต่อ server (คู่กับ status): แก้ runtime = servers.edit, ลบ = servers.delete,
+// ดู/แก้ properties = settings.view/edit — การ์ดที่ user ไม่มีสิทธิ์จะไม่ถูก render เลย
+export default function ServerSettings({
+  server,
+  canEdit,
+  canDelete,
+  canViewProps,
+  canEditProps,
+}: {
+  server: Server;
+  canEdit: boolean;
+  canDelete: boolean;
+  canViewProps: boolean;
+  canEditProps: boolean;
+}) {
   const t = useT();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -116,9 +130,9 @@ export default function ServerSettings({ server }: { server: Server }) {
     },
   });
 
-  // ลบได้เฉพาะตอนหยุด/error เท่านั้น (เหมือน memory/พอร์ต) — กันลบทับ instance ที่รันอยู่
-  const canEditRuntime = isStoppedLike(server.status);
-  const canDelete = isStoppedLike(server.status);
+  // ลบ/แก้ runtime ได้เฉพาะตอนหยุด/error (กันลบทับ instance ที่รันอยู่) AND ต้องมีสิทธิ์ cap
+  const canEditRuntime = canEdit && isStoppedLike(server.status);
+  const canDeleteServer = canDelete && isStoppedLike(server.status);
   const memory = Number(memoryMb);
   const port = hostPort === "" ? null : Number(hostPort);
   const valid =
@@ -131,6 +145,7 @@ export default function ServerSettings({ server }: { server: Server }) {
   return (
     <div className="grid items-start gap-6 lg:grid-cols-3">
       <div className="grid content-start gap-6">
+        {canEdit && (
         <Card>
           <CardHeader>
             <CardTitle>{t("sset.general")}</CardTitle>
@@ -197,7 +212,9 @@ export default function ServerSettings({ server }: { server: Server }) {
             </form>
           </CardContent>
         </Card>
+        )}
 
+        {canDelete && (
         <Card className="border-destructive/40">
           <CardHeader>
             <CardTitle className="text-destructive">
@@ -208,23 +225,30 @@ export default function ServerSettings({ server }: { server: Server }) {
           <CardContent className="grid gap-2">
             <Button
               variant="destructive"
-              disabled={!canDelete}
+              disabled={!canDeleteServer}
               onClick={() => setDeleteOpen(true)}
             >
               {t("sset.deleteServer")}
             </Button>
-            {!canDelete && (
+            {!canDeleteServer && (
               <p className="text-muted-foreground text-xs">
                 {t("sset.stopToDelete")}
               </p>
             )}
           </CardContent>
         </Card>
+        )}
       </div>
 
-      <div className="lg:col-span-2">
-        <ServerPropertiesCard serverId={server.id} status={server.status} />
-      </div>
+      {canViewProps && (
+        <div className="lg:col-span-2">
+          <ServerPropertiesCard
+            serverId={server.id}
+            status={server.status}
+            allowEdit={canEditProps}
+          />
+        </div>
+      )}
 
       <ConfirmDialog
         open={deleteOpen}
@@ -307,14 +331,17 @@ function PropertyControl({
 export function ServerPropertiesCard({
   serverId,
   status,
+  allowEdit = true,
 }: {
   serverId: string;
   // undefined (เช่นตอน wizard สร้างเสร็จใหม่ = หยุดอยู่) → แก้ได้
   status?: ServerStatus;
+  // allowEdit = สิทธิ์ settings.edit ต่อ server (wizard = owner จึง default true)
+  allowEdit?: boolean;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const canEdit = status === undefined || isStoppedLike(status);
+  const canEdit = allowEdit && (status === undefined || isStoppedLike(status));
 
   const query = useQuery({
     queryKey: ["servers", serverId, "properties"],
