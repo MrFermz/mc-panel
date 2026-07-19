@@ -86,8 +86,12 @@ const SGR = {
   brightGreen: "\x1b[92m",
 } as const;
 
-// [12:34:56] [Server thread/INFO]: message  — จับ timestamp / thread(level) / message
-const LOG_LINE_RE = /^(\[\d{1,2}:\d{2}:\d{2}\])\s*(?:\[([^\]]+)\])?\s*:?\s?([\s\S]*)$/;
+// รองรับสอง format ของ MC log:
+//   A) Paper/vanilla:  [09:45:33 INFO]: message          (time + level ใน bracket เดียว)
+//   B) log4j2 2 bracket: [12:34:56] [Server thread/INFO]: message
+// group: 1=time 2=level-in-bracket(A) 3=thread-bracket(B) 4=message
+const LOG_LINE_RE =
+  /^\[(\d{1,2}:\d{2}:\d{2})(?:\s+([A-Za-z]+))?\]\s*(?:\[([^\]]+)\])?\s*:?\s?([\s\S]*)$/;
 
 function levelSGR(level: string): string {
   switch (level) {
@@ -125,17 +129,28 @@ function colorizeLine(raw: string): string {
 
   const m = LOG_LINE_RE.exec(raw);
   if (!m) return raw; // format แปลก = ปล่อยดิบ ไม่เดา
-  const [, ts, thread, msg = ""] = m;
-  const level = (thread?.split("/").pop() ?? "").toUpperCase();
+  const [, time, levelInBracket, thread, msg = ""] = m;
+  const level = (
+    levelInBracket ||
+    thread?.split("/").pop() ||
+    ""
+  ).toUpperCase();
   const lc = levelSGR(level);
 
-  const tsPart = `${SGR.gray}${ts}${SGR.reset}`;
+  // prefix bracket: [time] หรือ [time LEVEL] โดยระบายสี level token ให้เด่น
+  let prefix: string;
+  if (levelInBracket) {
+    const lvl = lc
+      ? `${lc}${levelInBracket}${SGR.reset}${SGR.gray}`
+      : levelInBracket;
+    prefix = `${SGR.gray}[${time} ${lvl}]${SGR.reset}`;
+  } else {
+    prefix = `${SGR.gray}[${time}]${SGR.reset}`;
+  }
   const threadPart = thread ? ` ${SGR.dim}[${thread}]${SGR.reset}` : "";
   const sep = `${SGR.gray}:${SGR.reset}`;
-  const msgPart = lc
-    ? `${lc}${msg}${SGR.reset}`
-    : colorizeInfoMessage(msg);
-  return `${tsPart}${threadPart}${sep} ${msgPart}`;
+  const msgPart = lc ? `${lc}${msg}${SGR.reset}` : colorizeInfoMessage(msg);
+  return `${prefix}${threadPart}${sep} ${msgPart}`;
 }
 
 function writeLine(term: Terminal, raw: string) {
