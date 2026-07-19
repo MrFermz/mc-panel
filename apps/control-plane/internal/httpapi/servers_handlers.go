@@ -401,6 +401,13 @@ func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ต้องหยุด instance ก่อนลบ — กันลบทับ container ที่ยังรัน/กำลังเปลี่ยนสถานะ
+	if srv.Status != "stopped" && srv.Status != "errored" {
+		writeError(w, http.StatusConflict, "invalid_state",
+			"stop the server before deleting it")
+		return
+	}
+
 	job, err := a.disp.DeleteServer(r.Context(), srv, user.ID)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "dispatch_failed", "failed to dispatch delete job")

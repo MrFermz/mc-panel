@@ -164,13 +164,14 @@ export const th: Dictionary = {
   "sset.failedSave": "บันทึกไม่สำเร็จ",
   "sset.dangerZone": "โซนอันตราย",
   "sset.dangerDesc":
-    "การลบเซิร์ฟเวอร์จะหยุดการทำงาน ลบคอนเทนเนอร์ และลบข้อมูลทั้งหมดอย่างถาวร",
+    "หยุดเซิร์ฟเวอร์ก่อนแล้วจึงลบได้ — จะลบคอนเทนเนอร์และข้อมูลทั้งหมดอย่างถาวร",
   "sset.deleteServer": "ลบเซิร์ฟเวอร์",
   "sset.deleteTitle": "ลบ {name}?",
   "sset.deleteDesc":
     "การกระทำนี้จะลบเซิร์ฟเวอร์ โลก และไฟล์ทั้งหมดอย่างถาวร ไม่สามารถกู้คืนได้",
   "sset.deleting": "กำลังลบ \"{name}\" — คอนเทนเนอร์และข้อมูลจะถูกลบออก",
   "sset.failedDelete": "ลบไม่สำเร็จ",
+  "sset.stopToDelete": "หยุดเซิร์ฟเวอร์ก่อนจึงจะลบได้",
   "sset.propsTitle": "การตั้งค่าเซิร์ฟเวอร์ (server.properties)",
   "sset.propsRestartHint": "การเปลี่ยน server.properties จะมีผลเมื่อรีสตาร์ทครั้งถัดไป",
   "sset.propsSaved": "บันทึกแล้ว (มีผลเมื่อรีสตาร์ทครั้งถัดไป)",

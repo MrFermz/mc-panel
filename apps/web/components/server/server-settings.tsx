@@ -2,11 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   apiSend,
@@ -96,7 +92,12 @@ export default function ServerSettings({ server }: { server: Server }) {
 
   const remove = useMutation({
     mutationFn: () =>
-      apiSend("DELETE", `/api/servers/${server.id}`, undefined, jobResponseSchema),
+      apiSend(
+        "DELETE",
+        `/api/servers/${server.id}`,
+        undefined,
+        jobResponseSchema,
+      ),
     onSuccess: () => {
       toast.success(t("sset.deleting", { name: server.name }));
       setDeleteOpen(false);
@@ -104,96 +105,121 @@ export default function ServerSettings({ server }: { server: Server }) {
       router.push("/");
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : t("sset.failedDelete"));
+      // ต้องหยุด server ก่อนลบ — backend ตอบ 409 invalid_state ถ้ายังรันอยู่
+      if (err instanceof ApiError && err.code === "invalid_state") {
+        toast.error(t("sset.stopToDelete"));
+        return;
+      }
+      toast.error(
+        err instanceof ApiError ? err.message : t("sset.failedDelete"),
+      );
     },
   });
 
+  // ลบได้เฉพาะตอนหยุด/error เท่านั้น (เหมือน memory/พอร์ต) — กันลบทับ instance ที่รันอยู่
   const canEditRuntime = isStoppedLike(server.status);
+  const canDelete = isStoppedLike(server.status);
   const memory = Number(memoryMb);
   const port = hostPort === "" ? null : Number(hostPort);
   const valid =
     name.trim().length > 0 &&
     Number.isInteger(memory) &&
     memory >= 512 &&
-    (port === null || (Number.isInteger(port) && port >= 1024 && port <= 65535));
+    (port === null ||
+      (Number.isInteger(port) && port >= 1024 && port <= 65535));
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-3">
       <div className="grid content-start gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("sset.general")}</CardTitle>
-          <CardDescription>{t("sset.generalDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (valid && !save.isPending) save.mutate();
-            }}
-          >
-            <div className="grid gap-2">
-              <Label htmlFor="s-name">{t("sset.name")}</Label>
-              <Input
-                id="s-name"
-                maxLength={100}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="s-memory">{t("sset.memory")}</Label>
-              <Input
-                id="s-memory"
-                type="number"
-                min={512}
-                disabled={!canEditRuntime}
-                value={memoryMb}
-                onChange={(e) => setMemoryMb(e.target.value)}
-              />
-              <MemoryPresets
-                value={memoryMb}
-                onChange={setMemoryMb}
-                disabled={!canEditRuntime}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="s-port">{t("sset.hostPort")}</Label>
-              <Input
-                id="s-port"
-                type="number"
-                min={1024}
-                max={65535}
-                placeholder={t("sset.hostPortPlaceholder")}
-                disabled={!canEditRuntime}
-                value={hostPort}
-                onChange={(e) => setHostPort(e.target.value)}
-              />
-            </div>
-            {!canEditRuntime && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("sset.general")}</CardTitle>
+            <CardDescription>{t("sset.generalDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="grid gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (valid && !save.isPending) save.mutate();
+              }}
+            >
+              <div className="grid gap-2">
+                <Label htmlFor="s-name">{t("sset.name")}</Label>
+                <Input
+                  id="s-name"
+                  maxLength={100}
+                  disabled={!canEditRuntime}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="s-memory">{t("sset.memory")}</Label>
+                <Input
+                  id="s-memory"
+                  type="number"
+                  min={512}
+                  disabled={!canEditRuntime}
+                  value={memoryMb}
+                  onChange={(e) => setMemoryMb(e.target.value)}
+                />
+                <MemoryPresets
+                  value={memoryMb}
+                  onChange={setMemoryMb}
+                  disabled={!canEditRuntime}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="s-port">{t("sset.hostPort")}</Label>
+                <Input
+                  id="s-port"
+                  type="number"
+                  min={1024}
+                  max={65535}
+                  placeholder={t("sset.hostPortPlaceholder")}
+                  disabled={!canEditRuntime}
+                  value={hostPort}
+                  onChange={(e) => setHostPort(e.target.value)}
+                />
+              </div>
+              {!canEditRuntime && (
+                <p className="text-muted-foreground text-xs">
+                  {t("sset.stopToEditMemory")}
+                </p>
+              )}
+              <Button
+                type="submit"
+                disabled={!valid || !canEditRuntime || save.isPending}
+              >
+                {save.isPending ? t("common.saving") : t("sset.saveChanges")}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-destructive">
+              {t("sset.dangerZone")}
+            </CardTitle>
+            <CardDescription>{t("sset.dangerDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <Button
+              variant="destructive"
+              disabled={!canDelete}
+              onClick={() => setDeleteOpen(true)}
+            >
+              {t("sset.deleteServer")}
+            </Button>
+            {!canDelete && (
               <p className="text-muted-foreground text-xs">
-                {t("sset.stopToEditMemory")}
+                {t("sset.stopToDelete")}
               </p>
             )}
-            <Button type="submit" disabled={!valid || !canEditRuntime || save.isPending}>
-              {save.isPending ? t("common.saving") : t("sset.saveChanges")}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle className="text-destructive">{t("sset.dangerZone")}</CardTitle>
-          <CardDescription>{t("sset.dangerDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-            {t("sset.deleteServer")}
-          </Button>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="lg:col-span-2">
@@ -352,7 +378,9 @@ export function ServerPropertiesCard({
         {query.isPending ? (
           <Skeleton className="h-40 w-full" />
         ) : offline ? (
-          <p className="text-muted-foreground text-sm">{t("sset.propsOffline")}</p>
+          <p className="text-muted-foreground text-sm">
+            {t("sset.propsOffline")}
+          </p>
         ) : query.isError ? (
           <p className="text-destructive text-sm">
             {query.error instanceof ApiError

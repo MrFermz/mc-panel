@@ -162,13 +162,14 @@ export const en = {
   "sset.failedSave": "Failed to save",
   "sset.dangerZone": "Danger zone",
   "sset.dangerDesc":
-    "Deleting the server stops it, removes the container and permanently deletes all of its data.",
+    "Stop the server first, then delete it — this removes the container and permanently deletes all of its data.",
   "sset.deleteServer": "Delete server",
   "sset.deleteTitle": "Delete {name}?",
   "sset.deleteDesc":
     "This permanently deletes the server, its world and all files. This cannot be undone.",
   "sset.deleting": "Deleting \"{name}\" — container and data will be removed",
   "sset.failedDelete": "Failed to delete",
+  "sset.stopToDelete": "Stop the server before you can delete it.",
   "sset.propsTitle": "Server properties",
   "sset.propsRestartHint": "Changes to server.properties apply on the next restart.",
   "sset.propsSaved": "Saved (applies on next restart)",
