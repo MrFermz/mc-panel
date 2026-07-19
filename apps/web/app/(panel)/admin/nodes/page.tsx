@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -55,9 +56,10 @@ export default function AdminNodesPage() {
 
   const [registerOpen, setRegisterOpen] = React.useState(false);
   const [nodeName, setNodeName] = React.useState("");
-  const [token, setToken] = React.useState<{ name: string; value: string } | null>(
-    null,
-  );
+  const [token, setToken] = React.useState<{
+    name: string;
+    value: string;
+  } | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<Node | null>(null);
   // node id ที่กางกราฟ resource อยู่ (หลาย node พร้อมกันได้)
   const [chartOpen, setChartOpen] = React.useState<Set<string>>(new Set());
@@ -107,7 +109,9 @@ export default function AdminNodesPage() {
       queryClient.invalidateQueries({ queryKey: ["nodes"] });
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : t("nodes.failedRegister"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("nodes.failedRegister"),
+      );
     },
   });
 
@@ -119,7 +123,9 @@ export default function AdminNodesPage() {
       queryClient.invalidateQueries({ queryKey: ["nodes"] });
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : t("nodes.failedDelete"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("nodes.failedDelete"),
+      );
     },
   });
 
@@ -144,109 +150,133 @@ export default function AdminNodesPage() {
       ) : nodes.isError ? (
         <p className="text-destructive text-sm">{t("nodes.failedLoad")}</p>
       ) : nodes.data.nodes.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{t("nodes.empty")}</p>
+        <Card className="py-10">
+          <CardContent className="text-muted-foreground text-center text-sm">
+            {t("nodes.empty")}
+          </CardContent>
+        </Card>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("nodes.colName")}</TableHead>
-              <TableHead>{t("nodes.colStatus")}</TableHead>
-              <TableHead>{t("nodes.colAgent")}</TableHead>
-              <TableHead>{t("nodes.colCpu")}</TableHead>
-              <TableHead>{t("nodes.colRam")}</TableHead>
-              <TableHead>{t("nodes.colDisk")}</TableHead>
-              <TableHead>{t("nodes.colServers")}</TableHead>
-              <TableHead>{t("nodes.colHeartbeat")}</TableHead>
-              <TableHead className="w-24" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {nodes.data.nodes.map((node) => {
-              const serverCount = serverCountByNode.get(node.id) ?? 0;
-              const online = node.status === "online";
-              const showChart = chartOpen.has(node.id);
-              return (
-                <React.Fragment key={node.id}>
+        <Card className="py-0">
+          <CardContent className="overflow-x-auto px-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell className="font-medium">{node.name}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        online
-                          ? "bg-green-500/15 text-green-400 border-green-500/30"
-                          : "bg-red-500/15 text-red-400 border-red-500/30",
-                      )}
-                    >
-                      {t(online ? "nodeStatus.online" : "nodeStatus.offline")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {node.agent_version || "-"}
-                    {node.os && (
-                      <span>
-                        {" "}
-                        ({node.os}/{node.arch})
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>{node.cpu_percent.toFixed(1)}%</TableCell>
-                  <TableCell className="text-xs">
-                    {formatMb(node.memory_used_mb)} / {formatMb(node.memory_total_mb)}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {formatMb(node.disk_used_mb)} / {formatMb(node.disk_total_mb)}
-                  </TableCell>
-                  <TableCell>{serverCount}</TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {formatRelative(node.last_heartbeat_at)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("nodes.viewChart", { name: node.name })}
-                        aria-expanded={showChart}
-                        className={cn(showChart && "text-foreground bg-accent")}
-                        onClick={() => toggleChart(node.id)}
-                      >
-                        <ActivityIcon />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive"
-                        disabled={serverCount > 0 || servers.isPending}
-                        title={
-                          serverCount > 0 ? t("nodes.deleteAllFirst") : undefined
-                        }
-                        onClick={() => setDeleteTarget(node)}
-                        aria-label={t("nodes.deleteAria", { name: node.name })}
-                      >
-                        <Trash2Icon />
-                      </Button>
-                    </div>
-                  </TableCell>
+                  <TableHead>{t("nodes.colName")}</TableHead>
+                  <TableHead>{t("nodes.colStatus")}</TableHead>
+                  <TableHead>{t("nodes.colAgent")}</TableHead>
+                  <TableHead>{t("nodes.colCpu")}</TableHead>
+                  <TableHead>{t("nodes.colRam")}</TableHead>
+                  <TableHead>{t("nodes.colDisk")}</TableHead>
+                  <TableHead>{t("nodes.colServers")}</TableHead>
+                  <TableHead>{t("nodes.colHeartbeat")}</TableHead>
+                  <TableHead className="w-24" />
                 </TableRow>
-                {showChart && (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={9} className="bg-muted/30">
-                      {online ? (
-                        <NodeStatsChart node={node} />
-                      ) : (
-                        <p className="text-muted-foreground text-xs">
-                          {t("nodes.offlineNoStats")}
-                        </p>
+              </TableHeader>
+              <TableBody>
+                {nodes.data.nodes.map((node) => {
+                  const serverCount = serverCountByNode.get(node.id) ?? 0;
+                  const online = node.status === "online";
+                  const showChart = chartOpen.has(node.id);
+                  return (
+                    <React.Fragment key={node.id}>
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          {node.name}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              online
+                                ? "bg-green-500/15 text-green-400 border-green-500/30"
+                                : "bg-red-500/15 text-red-400 border-red-500/30",
+                            )}
+                          >
+                            {t(
+                              online
+                                ? "nodeStatus.online"
+                                : "nodeStatus.offline",
+                            )}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {node.agent_version || "-"}
+                          {node.os && (
+                            <span>
+                              {" "}
+                              ({node.os}/{node.arch})
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>{node.cpu_percent.toFixed(1)}%</TableCell>
+                        <TableCell className="text-xs">
+                          {formatMb(node.memory_used_mb)} /{" "}
+                          {formatMb(node.memory_total_mb)}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {formatMb(node.disk_used_mb)} /{" "}
+                          {formatMb(node.disk_total_mb)}
+                        </TableCell>
+                        <TableCell>{serverCount}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {formatRelative(node.last_heartbeat_at)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("nodes.viewChart", {
+                                name: node.name,
+                              })}
+                              aria-expanded={showChart}
+                              className={cn(
+                                showChart && "text-foreground bg-accent",
+                              )}
+                              onClick={() => toggleChart(node.id)}
+                            >
+                              <ActivityIcon />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              disabled={serverCount > 0 || servers.isPending}
+                              title={
+                                serverCount > 0
+                                  ? t("nodes.deleteAllFirst")
+                                  : undefined
+                              }
+                              onClick={() => setDeleteTarget(node)}
+                              aria-label={t("nodes.deleteAria", {
+                                name: node.name,
+                              })}
+                            >
+                              <Trash2Icon />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {showChart && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={9} className="bg-muted/30">
+                            {online ? (
+                              <NodeStatsChart node={node} />
+                            ) : (
+                              <p className="text-muted-foreground text-xs">
+                                {t("nodes.offlineNoStats")}
+                              </p>
+                            )}
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                  </TableRow>
-                )}
-                </React.Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>
+                    </React.Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
@@ -259,7 +289,8 @@ export default function AdminNodesPage() {
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (nodeName.trim() !== "" && !register.isPending) register.mutate();
+              if (nodeName.trim() !== "" && !register.isPending)
+                register.mutate();
             }}
           >
             <div className="grid gap-2">
@@ -304,8 +335,8 @@ export default function AdminNodesPage() {
         secret={token?.value ?? ""}
         extra={
           <p className="text-muted-foreground text-xs">
-            e.g. <code className="font-mono">AGENT_TOKEN=&lt;token&gt;</code> in the
-            agent&apos;s env file, or pass it to{" "}
+            e.g. <code className="font-mono">AGENT_TOKEN=&lt;token&gt;</code> in
+            the agent&apos;s env file, or pass it to{" "}
             <code className="font-mono">scripts/install-agent.sh</code>.
           </p>
         }

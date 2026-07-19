@@ -18,6 +18,7 @@ import { UserIdentity } from "@/components/user/user-identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -75,7 +76,9 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingEmail, setEditingEmail] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm);
-  const [removeTarget, setRemoveTarget] = React.useState<Permission | null>(null);
+  const [removeTarget, setRemoveTarget] = React.useState<Permission | null>(
+    null,
+  );
 
   const me = useMe();
 
@@ -129,7 +132,9 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
       if (err instanceof ApiError && err.code === "user_not_found") {
         toast.error(t("access.userNotFound"));
       } else {
-        toast.error(err instanceof ApiError ? err.message : t("access.failedSave"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("access.failedSave"),
+        );
       }
     },
   });
@@ -143,7 +148,9 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
       invalidate();
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : t("access.failedRemove"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("access.failedRemove"),
+      );
     },
   });
 
@@ -186,56 +193,62 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
       ) : permissions.isError ? (
         <p className="text-destructive text-sm">{t("access.failedLoad")}</p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("access.user")}</TableHead>
-              <TableHead>{t("access.consoleWrite")}</TableHead>
-              <TableHead>{t("access.manageFiles")}</TableHead>
-              <TableHead className="w-24" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {permissions.data.permissions.map((perm) => (
-              <TableRow key={perm.user_id}>
-                <TableCell>
-                  <UserIdentity
-                    user={{ id: perm.user_id, ...perm }}
-                    serverRole={perm.role}
-                    size="sm"
-                  />
-                </TableCell>
-                <TableCell>
-                  {perm.can_console_write ? t("common.yes") : t("common.no")}
-                </TableCell>
-                <TableCell>
-                  {perm.can_manage_files ? t("common.yes") : t("common.no")}
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(perm)}
-                      aria-label={`${t("common.edit")} ${userTitle(perm)}`}
-                    >
-                      <PencilIcon />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive"
-                      onClick={() => setRemoveTarget(perm)}
-                      aria-label={`${t("common.remove")} ${userTitle(perm)}`}
-                    >
-                      <Trash2Icon />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <Card className="py-0">
+          <CardContent className="overflow-x-auto px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("access.user")}</TableHead>
+                  <TableHead>{t("access.consoleWrite")}</TableHead>
+                  <TableHead>{t("access.manageFiles")}</TableHead>
+                  <TableHead className="w-24" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {permissions.data.permissions.map((perm) => (
+                  <TableRow key={perm.user_id}>
+                    <TableCell>
+                      <UserIdentity
+                        user={{ id: perm.user_id, ...perm }}
+                        serverRole={perm.role}
+                        size="sm"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {perm.can_console_write
+                        ? t("common.yes")
+                        : t("common.no")}
+                    </TableCell>
+                    <TableCell>
+                      {perm.can_manage_files ? t("common.yes") : t("common.no")}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(perm)}
+                          aria-label={`${t("common.edit")} ${userTitle(perm)}`}
+                        >
+                          <PencilIcon />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive"
+                          onClick={() => setRemoveTarget(perm)}
+                          aria-label={`${t("common.remove")} ${userTitle(perm)}`}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -289,14 +302,18 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
             )}
             <div className="grid gap-2">
               <Label htmlFor="perm-email">
-                {editingEmail === null ? t("access.orEmail") : t("access.email")}
+                {editingEmail === null
+                  ? t("access.orEmail")
+                  : t("access.email")}
               </Label>
               <Input
                 id="perm-email"
                 type="email"
                 disabled={editingEmail !== null || form.userId !== ""}
                 placeholder={
-                  editingEmail === null ? t("access.emailPlaceholder") : undefined
+                  editingEmail === null
+                    ? t("access.emailPlaceholder")
+                    : undefined
                 }
                 value={form.email}
                 onChange={(e) =>
@@ -321,7 +338,9 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
                   <SelectItem value="operator">
                     {t("access.roleOperator")}
                   </SelectItem>
-                  <SelectItem value="viewer">{t("access.roleViewer")}</SelectItem>
+                  <SelectItem value="viewer">
+                    {t("access.roleViewer")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>

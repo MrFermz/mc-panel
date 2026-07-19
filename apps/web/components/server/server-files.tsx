@@ -31,6 +31,7 @@ import { useT, type TranslateFn, type TranslationKey } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -104,7 +105,9 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
     target?: FileEntry;
   } | null>(null);
   const [nameValue, setNameValue] = React.useState("");
-  const [deleteTarget, setDeleteTarget] = React.useState<FileEntry | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<FileEntry | null>(
+    null,
+  );
 
   const list = useQuery({
     queryKey: ["servers", serverId, "files", path],
@@ -117,7 +120,11 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
     });
 
   const nameMutation = useMutation({
-    mutationFn: async (vars: { mode: NameMode; target?: FileEntry; value: string }) => {
+    mutationFn: async (vars: {
+      mode: NameMode;
+      target?: FileEntry;
+      value: string;
+    }) => {
       const name = vars.value.trim();
       if (vars.mode === "rename" && vars.target) {
         await renameFile(
@@ -228,7 +235,11 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
           >
             <RefreshCwIcon className={cn(list.isFetching && "animate-spin")} />
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => openNameDialog("newFolder")}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => openNameDialog("newFolder")}
+          >
             <FolderPlusIcon />
             {t("files.newFolder")}
           </Button>
@@ -246,65 +257,73 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
           {fileErrorMessage(list.error, t)}
         </p>
       ) : list.data.entries.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{t("files.empty")}</p>
+        <Card className="py-10">
+          <CardContent className="text-muted-foreground text-center text-sm">
+            {t("files.empty")}
+          </CardContent>
+        </Card>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("files.name")}</TableHead>
-              <TableHead className="w-28">{t("files.size")}</TableHead>
-              <TableHead className="w-48">{t("files.modified")}</TableHead>
-              <TableHead className="w-24" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.data.entries.map((entry) => (
-              <TableRow key={entry.name}>
-                <TableCell>
-                  <button
-                    type="button"
-                    onClick={() => openEntry(entry)}
-                    className="hover:text-foreground flex items-center gap-2 text-left"
-                  >
-                    {entry.is_dir ? (
-                      <FolderIcon className="size-4 shrink-0 text-sky-500" />
-                    ) : (
-                      <FileIcon className="text-muted-foreground size-4 shrink-0" />
-                    )}
-                    <span className="truncate">{entry.name}</span>
-                  </button>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
-                  {entry.is_dir ? "-" : formatBytes(entry.size)}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
-                  {formatDateTime(entry.mod_time)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openNameDialog("rename", entry)}
-                      aria-label={`${t("files.rename")} ${entry.name}`}
-                    >
-                      <PencilIcon />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive"
-                      onClick={() => setDeleteTarget(entry)}
-                      aria-label={`${t("common.delete")} ${entry.name}`}
-                    >
-                      <Trash2Icon />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <Card className="py-0">
+          <CardContent className="overflow-x-auto px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("files.name")}</TableHead>
+                  <TableHead className="w-28">{t("files.size")}</TableHead>
+                  <TableHead className="w-48">{t("files.modified")}</TableHead>
+                  <TableHead className="w-24" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.data.entries.map((entry) => (
+                  <TableRow key={entry.name}>
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={() => openEntry(entry)}
+                        className="hover:text-foreground flex items-center gap-2 text-left"
+                      >
+                        {entry.is_dir ? (
+                          <FolderIcon className="size-4 shrink-0 text-sky-500" />
+                        ) : (
+                          <FileIcon className="text-muted-foreground size-4 shrink-0" />
+                        )}
+                        <span className="truncate">{entry.name}</span>
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {entry.is_dir ? "-" : formatBytes(entry.size)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(entry.mod_time)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openNameDialog("rename", entry)}
+                          aria-label={`${t("files.rename")} ${entry.name}`}
+                        >
+                          <PencilIcon />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive"
+                          onClick={() => setDeleteTarget(entry)}
+                          aria-label={`${t("common.delete")} ${entry.name}`}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {editing !== null && (
@@ -377,9 +396,7 @@ export default function ServerFiles({ serverId }: { serverId: string }) {
         }}
         title={t("files.deleteTitle")}
         description={
-          deleteTarget
-            ? t("files.deleteDesc", { name: deleteTarget.name })
-            : ""
+          deleteTarget ? t("files.deleteDesc", { name: deleteTarget.name }) : ""
         }
         confirmLabel={t("common.delete")}
         destructive
@@ -470,9 +487,7 @@ function FileEditorDialog({
           </Button>
           <Button
             type="button"
-            disabled={
-              content.isError || truncated || save.isPending || !dirty
-            }
+            disabled={content.isError || truncated || save.isPending || !dirty}
             onClick={() => save.mutate()}
           >
             {save.isPending ? t("common.saving") : t("common.save")}

@@ -19,6 +19,7 @@ import { PlayerHead } from "@/components/server/player-head";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -32,7 +33,10 @@ import {
 import { cn } from "@/lib/utils";
 
 // map error code จาก players endpoint → ข้อความ toast ที่เป็นมิตร
-function playerErrorMessage(err: unknown, t: (k: TranslationKey) => string): string {
+function playerErrorMessage(
+  err: unknown,
+  t: (k: TranslationKey) => string,
+): string {
   if (!(err instanceof ApiError)) return t("players.errGeneric");
   switch (err.code) {
     case "player_not_found":
@@ -73,7 +77,10 @@ function RoleBadge({ player }: { player: ServerPlayer }) {
     );
   }
   return (
-    <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">
+    <Badge
+      variant="outline"
+      className="border-transparent bg-muted text-muted-foreground"
+    >
       {t("players.roleMember")}
     </Badge>
   );
@@ -394,7 +401,9 @@ export default function ServerPlayers({
                         uuid={player.uuid}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{player.username}</p>
+                        <p className="truncate font-medium">
+                          {player.username}
+                        </p>
                         <StatusCell player={player} />
                       </div>
                       <RoleBadge player={player} />
@@ -422,75 +431,67 @@ export default function ServerPlayers({
               </div>
 
               {/* จอใหญ่: ตาราง */}
-              <div className="hidden rounded-md border lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs tracking-wider uppercase">
-                        {t("players.colPlayer")}
-                      </TableHead>
-                      <TableHead className="text-xs tracking-wider uppercase">
-                        {t("players.colRole")}
-                      </TableHead>
-                      <TableHead className="text-xs tracking-wider uppercase">
-                        {t("players.colStatus")}
-                      </TableHead>
-                      <TableHead className="text-xs tracking-wider uppercase">
-                        {t("players.colPlaytime")}
-                      </TableHead>
-                      <TableHead className="text-xs tracking-wider uppercase">
-                        {t("players.whitelist")}
-                      </TableHead>
-                      <TableHead className="text-right text-xs tracking-wider uppercase">
-                        {t("players.colActions")}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visible.map((player) => (
-                      <TableRow key={player.uuid || player.username}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <PlayerHead
-                        name={player.username}
-                        serverId={serverId}
-                        uuid={player.uuid}
-                      />
-                            <div className="min-w-0">
-                              <p className="truncate font-medium">
-                                {player.username}
-                              </p>
-                              {player.banned && (
-                                <p className="text-xs font-medium text-red-600 dark:text-red-400">
-                                  {t("players.statusBanned")}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <RoleBadge player={player} />
-                        </TableCell>
-                        <TableCell>
-                          <StatusCell player={player} />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatPlaytime(player.playtime_seconds)}
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={player.whitelisted}
-                            disabled={toggling(player.uuid)}
-                            onCheckedChange={() => toggle.mutate(player)}
-                            aria-label={t("players.toggleWhitelist")}
-                          />
-                        </TableCell>
-                        <TableCell>{rowActions(player)}</TableCell>
+              <Card className="hidden py-0 lg:block">
+                <CardContent className="overflow-x-auto px-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("players.colPlayer")}</TableHead>
+                        <TableHead>{t("players.colRole")}</TableHead>
+                        <TableHead>{t("players.colStatus")}</TableHead>
+                        <TableHead>{t("players.colPlaytime")}</TableHead>
+                        <TableHead>{t("players.whitelist")}</TableHead>
+                        <TableHead className="text-right">
+                          {t("players.colActions")}
+                        </TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {visible.map((player) => (
+                        <TableRow key={player.uuid || player.username}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <PlayerHead
+                                name={player.username}
+                                serverId={serverId}
+                                uuid={player.uuid}
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate font-medium">
+                                  {player.username}
+                                </p>
+                                {player.banned && (
+                                  <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                                    {t("players.statusBanned")}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <RoleBadge player={player} />
+                          </TableCell>
+                          <TableCell>
+                            <StatusCell player={player} />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatPlaytime(player.playtime_seconds)}
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={player.whitelisted}
+                              disabled={toggling(player.uuid)}
+                              onCheckedChange={() => toggle.mutate(player)}
+                              aria-label={t("players.toggleWhitelist")}
+                            />
+                          </TableCell>
+                          <TableCell>{rowActions(player)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
 
               {!isRunning && (
                 <p className="text-muted-foreground text-xs">

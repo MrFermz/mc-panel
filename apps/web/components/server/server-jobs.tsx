@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { userTitle } from "@/lib/user-display";
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -79,14 +80,18 @@ function JobCard({ job }: { job: Job }) {
         </div>
         {job.error && (
           <div className="grid gap-1">
-            <dt className="text-muted-foreground shrink-0">{t("jobs.error")}</dt>
+            <dt className="text-muted-foreground shrink-0">
+              {t("jobs.error")}
+            </dt>
             <dd className="text-destructive break-words whitespace-pre-wrap">
               {job.error}
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-2">
-          <dt className="text-muted-foreground shrink-0">{t("jobs.created")}</dt>
+          <dt className="text-muted-foreground shrink-0">
+            {t("jobs.created")}
+          </dt>
           <dd className="text-muted-foreground text-right">
             {formatDateTime(job.created_at)}
           </dd>
@@ -129,60 +134,62 @@ export default function ServerJobs({ serverId }: { serverId: string }) {
       </div>
 
       {/* จอใหญ่: ตารางเดิม */}
-      <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("jobs.type")}</TableHead>
-              <TableHead>{t("jobs.status")}</TableHead>
-              <TableHead>{t("jobs.requestedBy")}</TableHead>
-              <TableHead>{t("jobs.error")}</TableHead>
-              <TableHead>{t("jobs.created")}</TableHead>
-              <TableHead>{t("jobs.completed")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {jobs.data.jobs.map((job) => {
-              const requester = requesterTitle(job);
-              return (
-              <TableRow key={job.id} className="align-top">
-                <TableCell className="text-xs">
-                  {t(`jobType.${job.type}` as TranslationKey)}
-                </TableCell>
-                <TableCell>
-                  <JobStatusBadge status={job.status} />
-                </TableCell>
-                <TableCell
-                  className="max-w-48 truncate text-xs"
-                  title={requester ?? job.requested_by_email ?? undefined}
-                >
-                  {requester ?? (
-                    <span className="text-muted-foreground">
-                      {t("jobs.system")}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-destructive max-w-md text-xs">
-                  {job.error ? (
-                    <span className="break-words whitespace-pre-wrap">
-                      {job.error}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
-                  {formatDateTime(job.created_at)}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
-                  {formatDateTime(job.completed_at)}
-                </TableCell>
+      <Card className="hidden py-0 md:block">
+        <CardContent className="overflow-x-auto px-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("jobs.type")}</TableHead>
+                <TableHead>{t("jobs.status")}</TableHead>
+                <TableHead>{t("jobs.requestedBy")}</TableHead>
+                <TableHead>{t("jobs.error")}</TableHead>
+                <TableHead>{t("jobs.created")}</TableHead>
+                <TableHead>{t("jobs.completed")}</TableHead>
               </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {jobs.data.jobs.map((job) => {
+                const requester = requesterTitle(job);
+                return (
+                  <TableRow key={job.id} className="align-top">
+                    <TableCell className="text-xs">
+                      {t(`jobType.${job.type}` as TranslationKey)}
+                    </TableCell>
+                    <TableCell>
+                      <JobStatusBadge status={job.status} />
+                    </TableCell>
+                    <TableCell
+                      className="max-w-48 truncate text-xs"
+                      title={requester ?? job.requested_by_email ?? undefined}
+                    >
+                      {requester ?? (
+                        <span className="text-muted-foreground">
+                          {t("jobs.system")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-destructive max-w-md text-xs">
+                      {job.error ? (
+                        <span className="break-words whitespace-pre-wrap">
+                          {job.error}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(job.created_at)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(job.completed_at)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </>
   );
 }
