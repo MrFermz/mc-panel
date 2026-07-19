@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT/.env"
 
 if [[ -f "$ENV_FILE" && "${1:-}" != "--force" ]]; then
-  echo ".env มีอยู่แล้วที่ $ENV_FILE — ถ้าต้องการสร้างใหม่ (secret เก่าจะใช้ไม่ได้ทั้งหมด) ใช้: $0 --force"
+  echo ".env already exists at $ENV_FILE — to recreate it (all old secrets become invalid) use: $0 --force"
   exit 0
 fi
 
@@ -58,4 +58,4 @@ EOF
 
 chmod 600 "$ENV_FILE"
 mkdir -p "$ROOT/data/servers"
-echo "สร้าง $ENV_FILE เรียบร้อย (chmod 600)"
+echo "Created $ENV_FILE (chmod 600)"

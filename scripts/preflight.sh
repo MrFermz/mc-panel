@@ -26,7 +26,7 @@ echo "=================="
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   pass "docker daemon reachable"
 else
-  fail "docker daemon not reachable — เปิด Docker Desktop และเปิด WSL integration ให้ distro นี้ (docker info ต้องรันได้)"
+  fail "docker daemon not reachable — start Docker Desktop and enable WSL integration for this distro (docker info must run)"
   fail_hard=1
 fi
 
@@ -34,30 +34,30 @@ fi
 if docker compose version >/dev/null 2>&1; then
   pass "docker compose v2 available ($(docker compose version --short 2>/dev/null || echo 'ok'))"
 else
-  warn "docker compose v2 not found — ต้องใช้ compose plugin (docker compose ...) ไม่ใช่ docker-compose รุ่นเก่า"
+  warn "docker compose v2 not found — use the compose plugin (docker compose ...), not the old docker-compose"
 fi
 
 # 3. repo path + MC_DATA_DIR ไม่ควรอยู่ใต้ /mnt/ (Windows drvfs ผ่าน WSL)
 under_mnt() { case "$1" in /mnt/*) return 0 ;; *) return 1 ;; esac; }
-DRVFS_REASON="drvfs: chown เป็น no-op (MC รันเป็น user 1000 ต้อง chown ได้) + bind mount ช้ามาก — ย้ายไป WSL ext4 home เช่น ~/mc-panel"
+DRVFS_REASON="drvfs: chown is a no-op (MC runs as user 1000 and must be able to chown) + bind mounts are very slow — move to a WSL ext4 home, e.g. ~/mc-panel"
 
 if under_mnt "$ROOT"; then
-  warn "repo อยู่บน $ROOT (Windows drive ผ่าน /mnt) — $DRVFS_REASON"
+  warn "repo is on $ROOT (Windows drive via /mnt) — $DRVFS_REASON"
 else
-  pass "repo path อยู่บน Linux filesystem ($ROOT)"
+  pass "repo path is on a Linux filesystem ($ROOT)"
 fi
 
 if [[ -n "$MC_DATA_DIR" ]]; then
   if under_mnt "$MC_DATA_DIR"; then
-    warn "MC_DATA_DIR อยู่บน $MC_DATA_DIR (Windows drive ผ่าน /mnt) — $DRVFS_REASON"
+    warn "MC_DATA_DIR is on $MC_DATA_DIR (Windows drive via /mnt) — $DRVFS_REASON"
   else
-    pass "MC_DATA_DIR อยู่บน Linux filesystem ($MC_DATA_DIR)"
+    pass "MC_DATA_DIR is on a Linux filesystem ($MC_DATA_DIR)"
   fi
 fi
 
 echo "=================="
 if [[ "$fail_hard" -ne 0 ]]; then
-  echo "preflight: FAILED (แก้ FAIL ด้านบนก่อน)"
+  echo "preflight: FAILED (fix the FAIL items above first)"
   exit 1
 fi
-echo "preflight: OK (ดู WARN ด้านบนถ้ามี)"
+echo "preflight: OK (see WARN items above, if any)"

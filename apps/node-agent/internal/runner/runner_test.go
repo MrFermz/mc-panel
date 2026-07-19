@@ -28,10 +28,10 @@ func TestHeapMBAlwaysLeavesRoom(t *testing.T) {
 	for mem := 256; mem <= 65536; mem += 37 {
 		heap := HeapMB(mem)
 		if heap <= 0 {
-			t.Fatalf("HeapMB(%d) = %d, ต้องมากกว่า 0", mem, heap)
+			t.Fatalf("HeapMB(%d) = %d, must be greater than 0", mem, heap)
 		}
 		if heap >= mem {
-			t.Fatalf("HeapMB(%d) = %d, ต้องน้อยกว่า limit", mem, heap)
+			t.Fatalf("HeapMB(%d) = %d, must be less than limit", mem, heap)
 		}
 	}
 }

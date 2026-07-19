@@ -27,7 +27,7 @@ func TestJavaTagForMC(t *testing.T) {
 	}
 	for _, c := range cases {
 		if got := javaTagForMC(c.version); got != c.want {
-			t.Errorf("javaTagForMC(%q) = %q ต้องการ %q", c.version, got, c.want)
+			t.Errorf("javaTagForMC(%q) = %q, want %q", c.version, got, c.want)
 		}
 	}
 }
@@ -37,27 +37,27 @@ func TestLaunchScript_ExecsJavaLast(t *testing.T) {
 	for _, serverType := range []string{"vanilla", "paper", "fabric", "velocity", "forge"} {
 		script := launchScript(serverType)
 		if !strings.HasPrefix(script, "#!/bin/sh\n") {
-			t.Errorf("%s: launch script ต้องขึ้นต้นด้วย shebang", serverType)
+			t.Errorf("%s: launch script must start with a shebang", serverType)
 		}
 		if !strings.Contains(script, "exec ") {
-			t.Errorf("%s: launch script ต้องมี exec", serverType)
+			t.Errorf("%s: launch script must contain exec", serverType)
 		}
 		if !strings.Contains(script, "${MC_MEMORY_MB") {
-			t.Errorf("%s: launch script ต้องอ่าน MC_MEMORY_MB จาก env", serverType)
+			t.Errorf("%s: launch script must read MC_MEMORY_MB from env", serverType)
 		}
 	}
 
 	if !strings.Contains(launchScript("velocity"), "velocity.jar") {
-		t.Error("velocity ต้องรัน velocity.jar")
+		t.Error("velocity must run velocity.jar")
 	}
 	if !strings.Contains(launchScript("paper"), "server.jar nogui") {
-		t.Error("paper ต้องรัน server.jar nogui")
+		t.Error("paper must run server.jar nogui")
 	}
 	forge := launchScript("forge")
 	if !strings.Contains(forge, "run.sh") || !strings.Contains(forge, "forge-*.jar") {
-		t.Error("forge ต้องรองรับทั้ง run.sh (ใหม่) และ forge-*.jar (เก่า)")
+		t.Error("forge must support both run.sh (new) and forge-*.jar (old)")
 	}
 	if !strings.Contains(forge, "user_jvm_args.txt") {
-		t.Error("forge ใหม่ต้องเขียน jvm args ลง user_jvm_args.txt")
+		t.Error("new forge must write jvm args to user_jvm_args.txt")
 	}
 }

@@ -31,10 +31,10 @@ func TestSafeJoin_BlocksTraversal(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := SafeJoin(jail, c.input)
 			if c.wantErr && err == nil {
-				t.Errorf("คาดว่าจะ error แต่ไม่ error สำหรับ input: %s", c.input)
+				t.Errorf("expected error but got none for input: %s", c.input)
 			}
 			if !c.wantErr && err != nil {
-				t.Errorf("ไม่คาดว่าจะ error แต่ error: %v", err)
+				t.Errorf("unexpected error: %v", err)
 			}
 		})
 	}
@@ -45,7 +45,7 @@ func TestSafeJoin_ReturnsResolvedPathInsideJail(t *testing.T) {
 
 	got, err := SafeJoin(jail, "newdir/newfile.txt")
 	if err != nil {
-		t.Fatalf("ไม่คาดว่าจะ error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	// jail จาก t.TempDir บน mac อยู่ใต้ /var ที่เป็น symlink — ผลลัพธ์ต้องอยู่ใต้ jail ที่ resolve แล้ว
 	resolvedJail, err := filepath.EvalSymlinks(jail)
@@ -54,7 +54,7 @@ func TestSafeJoin_ReturnsResolvedPathInsideJail(t *testing.T) {
 	}
 	want := filepath.Join(resolvedJail, "newdir", "newfile.txt")
 	if got != want {
-		t.Errorf("ได้ %q ต้องการ %q", got, want)
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestSafeJoin_BlocksSymlinkEscape(t *testing.T) {
 
 	t.Run("symlink itself", func(t *testing.T) {
 		if _, err := SafeJoin(jail, "link"); err == nil {
-			t.Error("คาดว่าจะ block symlink ที่ชี้ออกนอก jail")
+			t.Error("expected to block symlink pointing outside jail")
 		}
 	})
 
@@ -78,7 +78,7 @@ func TestSafeJoin_BlocksSymlinkEscape(t *testing.T) {
 	// แล้วโค้ดเก่าปล่อยผ่านโดยไม่เช็ค symlink ของ ancestor เลย
 	t.Run("new file under escaping symlink", func(t *testing.T) {
 		if _, err := SafeJoin(jail, "link/newfile.txt"); err == nil {
-			t.Error("คาดว่าจะ block การสร้างไฟล์ใหม่ผ่าน symlink ที่ชี้ออกนอก jail")
+			t.Error("expected to block creating a new file through a symlink pointing outside jail")
 		}
 	})
 
@@ -87,7 +87,7 @@ func TestSafeJoin_BlocksSymlinkEscape(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := SafeJoin(jail, "link/secret.txt"); err == nil {
-			t.Error("คาดว่าจะ block การอ่านไฟล์ผ่าน symlink ที่ชี้ออกนอก jail")
+			t.Error("expected to block reading a file through a symlink pointing outside jail")
 		}
 	})
 }
@@ -111,7 +111,7 @@ func TestSafeJoin_BlocksNestedSymlinkEscape(t *testing.T) {
 	}
 
 	if _, err := SafeJoin(jail, "sub/inner/newfile.txt"); err == nil {
-		t.Error("คาดว่าจะ block nested symlink ที่สุดท้ายชี้ออกนอก jail")
+		t.Error("expected to block nested symlink that ultimately points outside jail")
 	}
 }
 
@@ -128,9 +128,9 @@ func TestSafeJoin_AllowsSymlinkInsideJail(t *testing.T) {
 
 	got, err := SafeJoin(jail, "alias/file.txt")
 	if err != nil {
-		t.Fatalf("symlink ที่ชี้อยู่ใน jail ต้องผ่านได้: %v", err)
+		t.Fatalf("symlink pointing inside jail should be allowed: %v", err)
 	}
 	if !strings.HasSuffix(got, filepath.Join("real", "file.txt")) {
-		t.Errorf("ต้องคืน path ที่ resolve แล้ว ได้ %q", got)
+		t.Errorf("expected resolved path, got %q", got)
 	}
 }

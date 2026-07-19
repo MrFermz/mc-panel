@@ -104,13 +104,13 @@ func TestObserveLineTPSPaper(t *testing.T) {
 	// paper แทรก color code — ต้องถูกตัดก่อน parse
 	shown := tr.ObserveLine("s1", "[12:34:56 INFO]: §6TPS from last 1m, 5m, 15m: §a19.98, §a20.0, §a20.0")
 	if shown {
-		t.Error("reply ของคำสั่งที่ tracker ยิงเองต้องถูกซ่อนจาก console ของ user")
+		t.Error("reply to a tracker-issued command must be hidden from the user's console")
 	}
 	if tps := tr.Snapshot("s1").TPS; tps != 19.98 {
 		t.Fatalf("want tps 19.98, got %v", tps)
 	}
 	if st.tpsUnsupported {
-		t.Error("paper รองรับ tps — ไม่ควรถูก mark unsupported")
+		t.Error("paper supports tps — should not be marked unsupported")
 	}
 }
 
@@ -121,7 +121,7 @@ func TestUnknownCommandMarksTPSUnsupported(t *testing.T) {
 
 	shown := tr.ObserveLine("s1", "[12:34:56] [Server thread/INFO]: Unknown or incomplete command, see below for error")
 	if shown {
-		t.Error("error ของ probe ต้องไม่โผล่ใน console ของ user")
+		t.Error("probe error must not appear in the user's console")
 	}
 	if !st.tpsUnsupported {
 		t.Fatal("want tpsUnsupported after unknown command")
@@ -138,7 +138,7 @@ func TestUserTypedListReplyStaysVisible(t *testing.T) {
 
 	shown := tr.ObserveLine("s1", "[12:34:56] [Server thread/INFO]: There are 1 of a max of 20 players online: CreeperKing")
 	if !shown {
-		t.Error("reply ที่ user สั่งเองต้องไม่ถูกซ่อน")
+		t.Error("reply to a user-issued command must not be hidden")
 	}
 }
 
@@ -185,14 +185,14 @@ func TestAttachThenImmediateDetachLeavesNoState(t *testing.T) {
 	tr.OnDetach("s1")
 
 	if got := tr.Snapshot("s1"); len(got.Online) != 0 {
-		t.Fatalf("state ค้างหลัง detach: %v", got.Online)
+		t.Fatalf("state left over after detach: %v", got.Online)
 	}
 	// attach รอบใหม่ต้องสร้าง state ได้อีก (ของเก่าถูกลบออกจาก map จริง)
 	tr.OnAttach("s1")
 	tr.ObserveLine("s1", "[12:00:10] [Server thread/INFO]: Steve_Builder joined the game")
 	got := tr.Snapshot("s1").Online
 	if len(got) != 1 || got[0] != "Steve_Builder" {
-		t.Fatalf("attach รอบใหม่ไม่ทำงาน: %v", got)
+		t.Fatalf("re-attach did not work: %v", got)
 	}
 	tr.OnDetach("s1")
 }
@@ -208,7 +208,7 @@ func TestUserTypoDoesNotDisableTPSOnPaper(t *testing.T) {
 	tr.ObserveLine("s1", "[12:00:01] [Server thread/INFO]: Unknown or incomplete command, see below for error")
 
 	if st.tpsUnsupported {
-		t.Fatal("server ที่เคยให้ค่า TPS ได้ ไม่ควรถูก mark unsupported")
+		t.Fatal("a server that previously reported TPS should not be marked unsupported")
 	}
 	if tps := tr.Snapshot("s1").TPS; tps != 19.98 {
 		t.Fatalf("want tps 19.98, got %v", tps)

@@ -22,7 +22,7 @@ DATA_DIR="/srv/mcpanel/servers"
 IMAGE="mcpanel/node-agent:local"
 
 usage() {
-  echo "ใช้: $0 --token=<node-token> --grpc=<host:9090> --nats=<nats://agent:pass@host:4222> [--data-dir=$DATA_DIR] [--image=$IMAGE]"
+  echo "Usage: $0 --token=<node-token> --grpc=<host:9090> --nats=<nats://agent:pass@host:4222> [--data-dir=$DATA_DIR] [--image=$IMAGE]"
   exit 1
 }
 
@@ -40,16 +40,16 @@ done
 
 [[ -z "$TOKEN" || -z "$GRPC_ADDR" || -z "$NATS_URL" ]] && usage
 
-command -v docker >/dev/null || { echo "ต้องติดตั้ง Docker Engine ก่อน"; exit 1; }
+command -v docker >/dev/null || { echo "Docker Engine must be installed first"; exit 1; }
 
 # กัน docker ไป pull image local โดยบังเอิญจาก Docker Hub namespace สาธารณะ:
 # ถ้าใช้ค่า default (build เอง) image ต้องมีอยู่ในเครื่องนี้แล้วเท่านั้น — ไม่งั้น error
 # (ถ้าระบุ --image= เป็น registry ส่วนตัวเอง จะข้ามเช็คนี้และปล่อยให้ docker pull ตามปกติ)
 if [[ "$IMAGE" == "mcpanel/node-agent:local" ]] && ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-  echo "ไม่พบ image '$IMAGE' บนเครื่องนี้"
-  echo "  build บน build host: make agent-image  แล้ว load เข้าเครื่อง node (docker save | docker load)"
-  echo "  หรือระบุ --image=<registry ส่วนตัวของคุณ>/node-agent:<tag> เอง"
-  echo "  (จงใจไม่ pull จาก Docker Hub namespace สาธารณะที่โปรเจกต์ไม่ได้ควบคุม)"
+  echo "image '$IMAGE' not found on this host"
+  echo "  build on a build host: make agent-image  then load it onto the node (docker save | docker load)"
+  echo "  or pass --image=<your-private-registry>/node-agent:<tag> yourself"
+  echo "  (intentionally does not pull from a public Docker Hub namespace the project does not control)"
   exit 1
 fi
 
@@ -70,4 +70,4 @@ docker run -d \
   -v "$DATA_DIR":"$DATA_DIR" \
   "$IMAGE"
 
-echo "node-agent รันแล้ว — ดูสถานะ node ได้ที่หน้า /admin/nodes"
+echo "node-agent is running — check node status at /admin/nodes"
