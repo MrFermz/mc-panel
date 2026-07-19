@@ -155,10 +155,29 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		if rmErr := r.removeContainer(ctx, name); rmErr != nil {
 			log.Printf("remove container after failed start: server=%s err=%v", cfg.ID, rmErr)
 		}
-		return fmt.Errorf("start container: %w", err)
+		return classifyStartError(err, cfg.Port)
 	}
 	log.Printf("container started: server=%s image=%s memory_mb=%d heap_mb=%d host_port=%d", cfg.ID, cfg.Image, cfg.MemoryMB, heapMB, cfg.Port)
 	return nil
+}
+
+// classifyStartError แปลง error ดิบจาก ContainerStart เป็นข้อความที่ user อ่านรู้เรื่อง
+// เคสเจอบ่อยสุดคือ host port ถูกใช้อยู่แล้วโดยของนอก mc-panel — DB unique (node_id, host_port)
+// จับไม่ได้เพราะมันเช็คแค่ server ที่ panel จัดการ ไม่รู้จักโปรเซสอื่นบน host หรือ port ที่ OS จองไว้
+// (เช่น winnat/Hyper-V excluded range บน Windows/WSL ที่คืน 500 จาก /forwards/expose).
+// docker แต่ละ backend ขึ้นข้อความคนละแบบ (Linux: "port is already allocated" /
+// Docker Desktop: "ports are not available") จึง match หลาย substring เป็น lowercase
+func classifyStartError(err error, port int) error {
+	msg := strings.ToLower(err.Error())
+	portInUse := strings.Contains(msg, "port is already allocated") ||
+		strings.Contains(msg, "address already in use") ||
+		strings.Contains(msg, "ports are not available") ||
+		strings.Contains(msg, "/forwards/expose") ||
+		strings.Contains(msg, "bind for")
+	if portInUse && port > 0 {
+		return fmt.Errorf("host port %d is already in use on this node (another process or the OS is holding it — e.g. a reserved port range on Windows/WSL); free that port or set a different host port for this server: %w", port, err)
+	}
+	return fmt.Errorf("start container: %w", err)
 }
 
 func (r *DockerRunner) Stop(id string, graceful bool) error {
