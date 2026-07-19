@@ -26,6 +26,10 @@ const (
 	// replyWindow — ช่วงที่ถือว่าบรรทัดที่เข้ามาเป็น reply ของคำสั่งที่ tracker เพิ่งยิง
 	// (จึงกรองออกจาก console ของ user). กว้างพอสำหรับ server ที่ tick ช้า
 	replyWindow = 3 * time.Second
+	// readyFallback — ยิงคำสั่งแรกช้าสุดเท่านี้ถ้ายังไม่เห็นบรรทัด "Done (...)"
+	// จำเป็นสำหรับเคส agent re-attach เข้า server ที่ start เสร็จไปนานแล้ว (ไม่มี Done ให้เห็นอีก) —
+	// server ที่รันอยู่แล้วยิง list/tps ได้ปลอดภัย ส่วน fresh start จะรอ Done จริงก่อนเสมอ
+	readyFallback = 60 * time.Second
 )
 
 // CommandWriter คือส่วนของ console.Manager ที่ tracker ต้องใช้ (แยก interface ตัดวงจร import)
@@ -54,6 +58,10 @@ type serverState struct {
 	listSentAt time.Time
 	tpsSentAt  time.Time
 	stop       chan struct{}
+	// ready ปิดเมื่อเห็นบรรทัด "Done (...)" = world โหลดเสร็จ ยิงคำสั่งเข้า console ได้ปลอดภัย —
+	// ยิงก่อนหน้านั้น Paper/vanilla จะ NPE (CommandSourceStack.getLevel() == null). ปิดครั้งเดียว
+	ready       chan struct{}
+	readyClosed bool
 }
 
 type Tracker struct {
@@ -81,11 +89,11 @@ func (t *Tracker) OnAttach(serverID string) {
 		t.mu.Unlock()
 		return
 	}
-	st := &serverState{online: make(map[string]struct{}), stop: make(chan struct{})}
+	st := &serverState{online: make(map[string]struct{}), stop: make(chan struct{}), ready: make(chan struct{})}
 	t.servers[serverID] = st
 	t.mu.Unlock()
 
-	go t.pollLoop(serverID, st.stop)
+	go t.pollLoop(serverID, st.stop, st.ready)
 }
 
 // OnDetach ล้างสถานะทิ้ง — server หยุด/console หลุด = ไม่มีใครออนไลน์อีกต่อไป
@@ -117,12 +125,15 @@ func (t *Tracker) Snapshot(serverID string) Snapshot {
 }
 
 // pollLoop ยิง `list` (และ probe `tps` ครั้งแรก) จนกว่า console จะ detach
-func (t *Tracker) pollLoop(serverID string, stop <-chan struct{}) {
-	// หน่วงรอบแรก — server ที่เพิ่ง start ยังรับคำสั่งไม่ได้จนกว่า world จะโหลดเสร็จ
+func (t *Tracker) pollLoop(serverID string, stop <-chan struct{}, ready <-chan struct{}) {
+	// รอ server ประกาศ start เสร็จ ("Done (...)") ก่อนยิงคำสั่งแรก — ยิงตอน world ยังโหลดไม่เสร็จ
+	// ทำให้ Paper/vanilla NPE (CommandSourceStack.getLevel() == null) สแปม console ทุกรอบ
+	// fallback เผื่อ re-attach เข้า server ที่ start ไปนานแล้ว (ไม่มีบรรทัด Done ให้เห็นอีก)
 	select {
 	case <-stop:
 		return
-	case <-time.After(5 * time.Second):
+	case <-ready:
+	case <-time.After(readyFallback):
 	}
 
 	ticker := time.NewTicker(resyncInterval)
@@ -196,6 +207,14 @@ func (t *Tracker) ObserveLine(serverID, line string) bool {
 	}
 	now := time.Now()
 
+	// "Done (12.345s)! For help, type ..." = start เสร็จ world พร้อมรับคำสั่ง → ปลดล็อก pollLoop
+	// (บรรทัดนี้ยังให้ user เห็นตามปกติ — เป็น log จริงของ server ไม่ใช่ reply ของ tracker)
+	if !st.readyClosed && isStartupDone(msg) {
+		st.readyClosed = true
+		close(st.ready)
+		return true
+	}
+
 	// reply ของ `list` — ยึดเป็น source of truth แทน set เดิมทั้งชุด
 	if m := listReplyRe.FindStringSubmatch(msg); m != nil {
 		if max := firstNonEmpty(m[2], m[3]); max != "" {
@@ -255,7 +274,14 @@ func mayBeInteresting(line string) bool {
 		strings.Contains(line, "players online") ||
 		strings.Contains(line, "TPS from last") ||
 		strings.Contains(line, "Unknown") ||
-		strings.Contains(line, "<--[HERE]")
+		strings.Contains(line, "<--[HERE]") ||
+		strings.Contains(line, "Done (")
+}
+
+// isStartupDone จับบรรทัดที่ vanilla/paper/fabric/forge พิมพ์เมื่อ start เสร็จ:
+// `Done (12.345s)! For help, type "help"` — world โหลดเสร็จ ยิงคำสั่งเข้า console ได้แล้ว
+func isStartupDone(msg string) bool {
+	return strings.HasPrefix(msg, "Done (") && strings.Contains(msg, ")")
 }
 
 // stripColor ตัด § color code — ข้ามไปเลยถ้าไม่มี (เลี่ยง alloc ของ regex ที่ไม่ได้แทนอะไร)
