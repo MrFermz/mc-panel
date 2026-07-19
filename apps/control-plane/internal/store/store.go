@@ -106,10 +106,12 @@ type Job struct {
 	Payload     []byte
 	Error       string
 	RequestedBy *uuid.UUID
-	// RequestedByEmail มาจาก LEFT JOIN users — null เมื่อ requested_by ถูก SET NULL
+	// RequestedByEmail/Name/Username มาจาก LEFT JOIN users — null เมื่อ requested_by ถูก SET NULL
 	// (user ถูกลบ) หรือ job เพิ่งสร้างจาก path ที่ไม่ได้ join
-	RequestedByEmail *string
-	CreatedAt        time.Time
-	StartedAt        *time.Time
-	CompletedAt      *time.Time
+	RequestedByEmail    *string
+	RequestedByName     *string
+	RequestedByUsername *string
+	CreatedAt           time.Time
+	StartedAt           *time.Time
+	CompletedAt         *time.Time
 }

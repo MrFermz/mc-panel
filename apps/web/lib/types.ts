@@ -138,8 +138,11 @@ export const jobSchema = z.object({
   type: jobTypeSchema,
   status: jobStatusSchema,
   error: z.string().default(""),
-  // อีเมลของคนสั่งงาน — null เมื่อ user ถูกลบ (requested_by เป็น SET NULL)
+  // ชื่อคนสั่งงาน — null เมื่อ user ถูกลบ (requested_by เป็น SET NULL)
+  // web ประกอบเป็น userTitle เอง (display_name → username → email)
   requested_by_email: z.string().nullable().default(null),
+  requested_by_name: z.string().nullable().default(null),
+  requested_by_username: z.string().nullable().default(null),
   created_at: z.string(),
   started_at: z.string().nullable().default(null),
   completed_at: z.string().nullable().default(null),

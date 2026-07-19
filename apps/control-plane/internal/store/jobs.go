@@ -24,14 +24,16 @@ func scanJob(row pgx.Row) (*Job, error) {
 	return &j, nil
 }
 
-// jobColsJoined ใช้กับ query ที่ LEFT JOIN users (alias j/u) เพื่อได้ requested_by_email
+// jobColsJoined ใช้กับ query ที่ LEFT JOIN users (alias j/u) เพื่อได้ชื่อคนสั่งงาน
+// (display_name/username/email — web ประกอบเป็น userTitle เอง)
 const jobColsJoined = `j.id, j.server_id, j.node_id, j.type, j.status, j.payload, j.error,
-	j.requested_by, j.created_at, j.started_at, j.completed_at, u.email`
+	j.requested_by, j.created_at, j.started_at, j.completed_at, u.email, u.display_name, u.username`
 
 func scanJobJoined(row pgx.Row) (*Job, error) {
 	var j Job
 	err := row.Scan(&j.ID, &j.ServerID, &j.NodeID, &j.Type, &j.Status, &j.Payload,
-		&j.Error, &j.RequestedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt, &j.RequestedByEmail)
+		&j.Error, &j.RequestedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt,
+		&j.RequestedByEmail, &j.RequestedByName, &j.RequestedByUsername)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

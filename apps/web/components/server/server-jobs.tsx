@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { jobsResponseSchema, type Job } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
+import { userTitle } from "@/lib/user-display";
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +25,23 @@ const jobStatusClasses: Record<Job["status"], string> = {
   failed: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
+// ชื่อคนสั่งงานที่แสดงต่อ user — display_name → username → email (ผ่าน userTitle)
+// null = ไม่มีคนสั่ง (job ระบบ) หรือ user ถูกลบไปแล้ว
+function requesterTitle(job: Job): string | null {
+  if (
+    !job.requested_by_name &&
+    !job.requested_by_username &&
+    !job.requested_by_email
+  ) {
+    return null;
+  }
+  return userTitle({
+    display_name: job.requested_by_name,
+    username: job.requested_by_username,
+    email: job.requested_by_email,
+  });
+}
+
 function JobStatusBadge({ status }: { status: Job["status"] }) {
   const t = useT();
   return (
@@ -36,6 +54,7 @@ function JobStatusBadge({ status }: { status: Job["status"] }) {
 // มือถือ: แสดงแต่ละ job เป็นการ์ด key/value แทน table เพราะ 6 คอลัมน์ล้นที่ 375px
 function JobCard({ job }: { job: Job }) {
   const t = useT();
+  const requester = requesterTitle(job);
   return (
     <div className="grid gap-2 rounded-md border p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
@@ -49,19 +68,19 @@ function JobCard({ job }: { job: Job }) {
           <dt className="text-muted-foreground shrink-0">
             {t("jobs.requestedBy")}
           </dt>
-          <dd className="truncate text-right" title={job.requested_by_email ?? undefined}>
-            {job.requested_by_email ?? (
+          <dd
+            className="truncate text-right"
+            title={requester ?? job.requested_by_email ?? undefined}
+          >
+            {requester ?? (
               <span className="text-muted-foreground">{t("jobs.system")}</span>
             )}
           </dd>
         </div>
         {job.error && (
-          <div className="flex justify-between gap-2">
+          <div className="grid gap-1">
             <dt className="text-muted-foreground shrink-0">{t("jobs.error")}</dt>
-            <dd
-              className="text-destructive truncate text-right"
-              title={job.error}
-            >
+            <dd className="text-destructive break-words whitespace-pre-wrap">
               {job.error}
             </dd>
           </div>
@@ -123,8 +142,10 @@ export default function ServerJobs({ serverId }: { serverId: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {jobs.data.jobs.map((job) => (
-              <TableRow key={job.id}>
+            {jobs.data.jobs.map((job) => {
+              const requester = requesterTitle(job);
+              return (
+              <TableRow key={job.id} className="align-top">
                 <TableCell className="text-xs">
                   {t(`jobType.${job.type}` as TranslationKey)}
                 </TableCell>
@@ -133,19 +154,22 @@ export default function ServerJobs({ serverId }: { serverId: string }) {
                 </TableCell>
                 <TableCell
                   className="max-w-48 truncate text-xs"
-                  title={job.requested_by_email ?? undefined}
+                  title={requester ?? job.requested_by_email ?? undefined}
                 >
-                  {job.requested_by_email ?? (
+                  {requester ?? (
                     <span className="text-muted-foreground">
                       {t("jobs.system")}
                     </span>
                   )}
                 </TableCell>
-                <TableCell
-                  className="text-destructive max-w-64 truncate"
-                  title={job.error || undefined}
-                >
-                  {job.error || "-"}
+                <TableCell className="text-destructive max-w-md text-xs">
+                  {job.error ? (
+                    <span className="break-words whitespace-pre-wrap">
+                      {job.error}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs">
                   {formatDateTime(job.created_at)}
@@ -154,7 +178,8 @@ export default function ServerJobs({ serverId }: { serverId: string }) {
                   {formatDateTime(job.completed_at)}
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

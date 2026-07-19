@@ -189,12 +189,12 @@ func toNodeView(n *store.Node) nodeView {
 }
 
 type serverStatsView struct {
-	CPUPercent    float64   `json:"cpu_percent"`
-	MemoryUsedMB  int64     `json:"memory_used_mb"`
-	MemoryLimitMB int64     `json:"memory_limit_mb"`
-	NetRxBps      float64   `json:"net_rx_bps"`
-	NetTxBps      float64   `json:"net_tx_bps"`
-	DiskReadBps   float64   `json:"disk_read_bps"`
+	CPUPercent    float64    `json:"cpu_percent"`
+	MemoryUsedMB  int64      `json:"memory_used_mb"`
+	MemoryLimitMB int64      `json:"memory_limit_mb"`
+	NetRxBps      float64    `json:"net_rx_bps"`
+	NetTxBps      float64    `json:"net_tx_bps"`
+	DiskReadBps   float64    `json:"disk_read_bps"`
 	DiskWriteBps  float64    `json:"disk_write_bps"`
 	StartedAt     *time.Time `json:"started_at"`
 	OnlinePlayers []string   `json:"online_players"`
@@ -236,28 +236,42 @@ func toServerView(s *store.Server, stats *serverStatsView) serverView {
 }
 
 type jobView struct {
-	ID               uuid.UUID  `json:"id"`
-	ServerID         *uuid.UUID `json:"server_id"`
-	Type             string     `json:"type"`
-	Status           string     `json:"status"`
-	Error            string     `json:"error"`
-	RequestedByEmail *string    `json:"requested_by_email"`
-	CreatedAt        time.Time  `json:"created_at"`
-	StartedAt        *time.Time `json:"started_at"`
-	CompletedAt      *time.Time `json:"completed_at"`
+	ID                  uuid.UUID  `json:"id"`
+	ServerID            *uuid.UUID `json:"server_id"`
+	Type                string     `json:"type"`
+	Status              string     `json:"status"`
+	Error               string     `json:"error"`
+	RequestedByEmail    *string    `json:"requested_by_email"`
+	RequestedByName     *string    `json:"requested_by_name"`
+	RequestedByUsername *string    `json:"requested_by_username"`
+	CreatedAt           time.Time  `json:"created_at"`
+	StartedAt           *time.Time `json:"started_at"`
+	CompletedAt         *time.Time `json:"completed_at"`
+}
+
+// fillJobRequester เติมชื่อคนสั่งงานลง job ที่เพิ่งสร้าง (ยังไม่ได้ join users)
+// ให้ response ตรงกับที่ list endpoint คืน (web ประกอบเป็น userTitle เอง)
+func fillJobRequester(j *store.Job, u *store.User) {
+	email := u.Email
+	j.RequestedByEmail = &email
+	name := u.DisplayName
+	j.RequestedByName = &name
+	j.RequestedByUsername = u.Username
 }
 
 func toJobView(j *store.Job) jobView {
 	return jobView{
-		ID:               j.ID,
-		ServerID:         j.ServerID,
-		Type:             j.Type,
-		Status:           j.Status,
-		Error:            j.Error,
-		RequestedByEmail: j.RequestedByEmail,
-		CreatedAt:        j.CreatedAt,
-		StartedAt:        j.StartedAt,
-		CompletedAt:      j.CompletedAt,
+		ID:                  j.ID,
+		ServerID:            j.ServerID,
+		Type:                j.Type,
+		Status:              j.Status,
+		Error:               j.Error,
+		RequestedByEmail:    j.RequestedByEmail,
+		RequestedByName:     j.RequestedByName,
+		RequestedByUsername: j.RequestedByUsername,
+		CreatedAt:           j.CreatedAt,
+		StartedAt:           j.StartedAt,
+		CompletedAt:         j.CompletedAt,
 	}
 }
 

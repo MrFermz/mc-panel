@@ -270,8 +270,8 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// job เพิ่งสร้าง ยังไม่ได้ join users — เติม email ของคนสั่ง (ตัว requester เอง) ให้ response ครบ
-	job.RequestedByEmail = &user.Email
+	// job เพิ่งสร้าง ยังไม่ได้ join users — เติมชื่อคนสั่ง (ตัว requester เอง) ให้ response ครบ
+	fillJobRequester(job, user)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"server": toServerView(srv, a.statsViewFor(srv)),
 		"job":    toJobView(job),
@@ -409,7 +409,7 @@ func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	// audit `server_deleted` เกิดตอน job สำเร็จจริง (result consumer)
 	// เพราะจุดนี้ข้อมูลยังไม่ถูกลบ
 
-	job.RequestedByEmail = &user.Email
+	fillJobRequester(job, user)
 	writeJSON(w, http.StatusOK, map[string]any{"job": toJobView(job)})
 }
 
@@ -468,7 +468,7 @@ func (a *API) handleServerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job.RequestedByEmail = &user.Email
+	fillJobRequester(job, user)
 	writeJSON(w, http.StatusOK, map[string]any{"job": toJobView(job)})
 }
 

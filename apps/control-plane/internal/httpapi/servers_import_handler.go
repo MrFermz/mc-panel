@@ -287,7 +287,7 @@ func (a *API) streamImportArchive(w http.ResponseWriter, r *http.Request, user *
 		return
 	}
 
-	job.RequestedByEmail = &user.Email
+	fillJobRequester(job, user)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"server": toServerView(srv, a.statsViewFor(srv)),
 		"job":    toJobView(job),
