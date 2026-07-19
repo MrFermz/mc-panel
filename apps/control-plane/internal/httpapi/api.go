@@ -14,6 +14,7 @@ import (
 	"github.com/mc-panel/control-plane/internal/console"
 	"github.com/mc-panel/control-plane/internal/events"
 	"github.com/mc-panel/control-plane/internal/jobs"
+	"github.com/mc-panel/control-plane/internal/playerface"
 	"github.com/mc-panel/control-plane/internal/serverstats"
 	"github.com/mc-panel/control-plane/internal/store"
 	"github.com/mc-panel/control-plane/internal/versions"
@@ -29,6 +30,7 @@ type API struct {
 	hub      *agenthub.Hub
 	events   *events.Hub
 	js       jetstream.JetStream
+	faces    *playerface.Cache
 	log      *slog.Logger
 }
 
@@ -43,6 +45,7 @@ func New(st *store.Store, am *auth.Manager, disp *jobs.Dispatcher, vs *versions.
 		hub:      hub,
 		events:   ev,
 		js:       js,
+		faces:    playerface.NewCache(st),
 		log:      log,
 	}
 }
@@ -128,6 +131,8 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 				Put("/servers/{id}/properties", a.handleUpdateProperties)
 
 			pr.With(a.requireCap(capPlayersView)).Get("/servers/{id}/players", a.handleListPlayers)
+			pr.With(a.requireCap(capPlayersView)).
+				Get("/servers/{id}/players/{uuid}/face", a.handlePlayerFace)
 			pr.With(a.requireCap(capPlayersManage)).Post("/servers/{id}/players", a.handleAddPlayer)
 			pr.With(a.requireCap(capPlayersManage)).
 				Delete("/servers/{id}/players/{uuid}", a.handleRemovePlayer)

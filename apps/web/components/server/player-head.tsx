@@ -1,9 +1,10 @@
 "use client";
 
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 // สีประจำผู้เล่น — เลือกจาก hash ของชื่อ ให้คนเดิมได้สีเดิมเสมอทุกหน้า/ทุก session
-// (ไม่ใช้ skin renderer ภายนอกเพราะต้องมี uuid และเพิ่ม host ที่ต้องเชื่อใจ)
+// ใช้เป็น fallback ตอนไม่มี uuid หรือดึงรูป (skin) ไม่ได้ (offline-mode uuid / โปรไฟล์ไม่มี texture)
 // tuple แบบไม่ว่าง — บอก TS ว่า PALETTE[0] มีจริงเสมอ (noUncheckedIndexedAccess เปิดอยู่)
 const PALETTE: [string, ...string[]] = [
   "bg-red-400 text-red-950",
@@ -26,12 +27,48 @@ function paletteFor(name: string): string {
 
 export function PlayerHead({
   name,
+  serverId,
+  uuid,
   className,
 }: {
   name: string;
+  // ต้องมีทั้งคู่ถึงจะดึงรูปหน้าได้ (control-plane crop จาก skin ของ Mojang เสิร์ฟที่ endpoint นี้)
+  // uuid ว่าง = ผู้เล่นที่เห็นจาก console แต่ยังไม่มีในไฟล์ไหน → ตกไปใช้ตัวอักษรย่อ
+  serverId?: string;
+  uuid?: string;
   className?: string;
 }) {
+  const [failed, setFailed] = React.useState(false);
   const letter = name.trim().charAt(0).toUpperCase() || "?";
+
+  const faceUrl =
+    serverId && uuid && !failed
+      ? `/api/servers/${serverId}/players/${encodeURIComponent(uuid)}/face`
+      : null;
+
+  // reset สถานะ error เมื่อ uuid เปลี่ยน (row เดิมกลายเป็นคนใหม่ตอน list refetch)
+  React.useEffect(() => setFailed(false), [uuid]);
+
+  if (faceUrl) {
+    return (
+      // next/image ไม่ช่วยอะไรที่นี่: รูปมาจาก API ของเราเองที่ต้องส่ง cookie ไปด้วย
+      // และ crop มาเป็นหน้าเล็ก ๆ แล้ว — optimizer จะเป็นแค่ hop เพิ่ม
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={faceUrl}
+        alt=""
+        aria-hidden
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+        className={cn(
+          "size-8 shrink-0 rounded object-cover [image-rendering:pixelated]",
+          className,
+        )}
+      />
+    );
+  }
+
   return (
     <div
       aria-hidden

@@ -388,7 +388,11 @@ export default function ServerPlayers({
                     className="grid gap-3 rounded-md border p-3"
                   >
                     <div className="flex items-center gap-3">
-                      <PlayerHead name={player.username} />
+                      <PlayerHead
+                        name={player.username}
+                        serverId={serverId}
+                        uuid={player.uuid}
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{player.username}</p>
                         <StatusCell player={player} />
@@ -447,7 +451,11 @@ export default function ServerPlayers({
                       <TableRow key={player.uuid || player.username}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <PlayerHead name={player.username} />
+                            <PlayerHead
+                        name={player.username}
+                        serverId={serverId}
+                        uuid={player.uuid}
+                      />
                             <div className="min-w-0">
                               <p className="truncate font-medium">
                                 {player.username}

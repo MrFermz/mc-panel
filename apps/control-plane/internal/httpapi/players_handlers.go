@@ -19,6 +19,7 @@ import (
 	"github.com/mc-panel/control-plane/internal/agenthub"
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/mojang"
+	"github.com/mc-panel/control-plane/internal/playerface"
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
@@ -213,6 +214,40 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 		"whitelist_enabled": whitelistEnabled,
 		"players":           players,
 	})
+}
+
+// handlePlayerFace เสิร์ฟรูปหน้าผู้เล่น (crop จาก skin ของ Mojang) เป็น PNG — control-plane เป็น
+// ตัวดึงเอง ไม่ให้ browser ยิง third-party host (leak IP + เพิ่ม host ที่ต้องเชื่อใจ)
+// uuid ที่ไม่มี skin (offline-mode/ไม่มี texture) ตอบ 404 → web fallback ไปตัวอักษรย่อ
+func (a *API) handlePlayerFace(w http.ResponseWriter, r *http.Request) {
+	// สิทธิ์เท่ากับดูรายชื่อผู้เล่น (รูปโผล่ในลิสต์เดียวกัน) — ยึด access ต่อ server ไม่ให้เป็น open proxy
+	if _, ok := a.loadServerForFiles(w, r); !ok {
+		return
+	}
+
+	playerUUID, err := uuidParam(r, "uuid")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "uuid must be a valid UUID")
+		return
+	}
+
+	facePNG, err := a.faces.Face(r.Context(), playerUUID)
+	if errors.Is(err, playerface.ErrNoSkin) {
+		writeError(w, http.StatusNotFound, "not_found", "no skin for this player")
+		return
+	}
+	if err != nil {
+		a.log.Warn("player face fetch failed", "uuid", playerUUID, "error", err)
+		writeError(w, http.StatusBadGateway, "mojang_unavailable", "could not reach Mojang for the player skin")
+		return
+	}
+
+	// skin เปลี่ยนถูก refresh ฝั่ง control-plane ด้วย TTL — browser cache สั้น ๆ พอ ให้เห็นรูปใหม่ไว
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	w.Write(facePNG)
 }
 
 // readServerFile อ่านไฟล์ text/JSON ผ่าน agent. คืน (content, found, offline, err):
