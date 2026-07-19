@@ -35,15 +35,37 @@ func (a *API) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"users": views})
 }
 
+// handleGetUser: โหลด user คนเดียว — หน้า permission ต่อ user เปิดตรงจาก URL ได้
+// โดยไม่ต้องโหลดทั้ง list
+func (a *API) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user_not_found", "user not found")
+		return
+	}
+	user, err := a.st.GetUserByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "user_not_found", "user not found")
+		return
+	}
+	if err != nil {
+		a.log.Error("get user failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": toUserView(user)})
+}
+
 // directoryUserView = shape เบาสำหรับ access picker (ดู docs/api.md)
 type directoryUserView struct {
 	ID          uuid.UUID `json:"id"`
 	Email       string    `json:"email"`
 	Username    *string   `json:"username"`
 	DisplayName string    `json:"display_name"`
+	AvatarURL   *string   `json:"avatar_url"`
 }
 
-// handleUserDirectory เปิดให้ทุก user ที่ login แล้ว (ไม่ต้องมี users.manage) —
+// handleUserDirectory เปิดให้ทุก user ที่ login แล้ว (ไม่ต้องมี users.view) —
 // owner ใช้เลือก collaborator ตอน grant server_permission ผ่าน email/id
 func (a *API) handleUserDirectory(w http.ResponseWriter, r *http.Request) {
 	users, err := a.st.ListUserDirectory(r.Context())
@@ -59,6 +81,7 @@ func (a *API) handleUserDirectory(w http.ResponseWriter, r *http.Request) {
 			Email:       u.Email,
 			Username:    u.Username,
 			DisplayName: u.DisplayName,
+			AvatarURL:   avatarURL(u.ID, u.AvatarUpdatedAt),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": views})
@@ -70,7 +93,6 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email        string   `json:"email"`
 		Username     string   `json:"username"`
-		DisplayName  string   `json:"display_name"`
 		IsAdmin      bool     `json:"is_admin"`
 		Capabilities []string `json:"capabilities"`
 	}
@@ -80,7 +102,6 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	req.Username = strings.TrimSpace(req.Username)
-	req.DisplayName = strings.TrimSpace(req.DisplayName)
 
 	// ต้องมี email หรือ username อย่างน้อยหนึ่งอย่าง (username-only account ได้)
 	if req.Email == "" && req.Username == "" {
@@ -89,10 +110,6 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Email != "" && (len(req.Email) > 255 || !strings.Contains(req.Email, "@")) {
 		writeError(w, http.StatusBadRequest, "invalid_email", "a valid email is required")
-		return
-	}
-	if len(req.DisplayName) > 100 {
-		writeError(w, http.StatusBadRequest, "invalid_display_name", "display_name must be at most 100 characters")
 		return
 	}
 	var username *string
@@ -122,7 +139,7 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := a.st.CreateUser(r.Context(), req.Email, username, hash, req.DisplayName, req.IsAdmin, req.Capabilities)
+	user, err := a.st.CreateUser(r.Context(), req.Email, username, hash, req.IsAdmin, req.Capabilities)
 	if store.IsUniqueViolation(err) {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == "idx_users_username_lower" {
@@ -158,7 +175,6 @@ func (a *API) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		DisplayName  *string   `json:"display_name"`
 		IsAdmin      *bool     `json:"is_admin"`
 		IsActive     *bool     `json:"is_active"`
 		Capabilities *[]string `json:"capabilities"`
@@ -168,14 +184,6 @@ func (a *API) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.DisplayName != nil {
-		trimmed := strings.TrimSpace(*req.DisplayName)
-		if len(trimmed) > 100 {
-			writeError(w, http.StatusBadRequest, "invalid_display_name", "display_name must be at most 100 characters")
-			return
-		}
-		req.DisplayName = &trimmed
-	}
 	if req.Capabilities != nil && !validateCapabilities(*req.Capabilities) {
 		writeError(w, http.StatusBadRequest, "invalid_capability", "capabilities must be keys from the catalog")
 		return
@@ -190,7 +198,7 @@ func (a *API) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	user, err := a.st.UpdateUser(r.Context(), id, req.DisplayName, req.IsAdmin, req.IsActive, req.Capabilities)
+	user, err := a.st.UpdateUser(r.Context(), id, req.IsAdmin, req.IsActive, req.Capabilities)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "user_not_found", "user not found")
 		return
@@ -202,9 +210,6 @@ func (a *API) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	detail := map[string]any{"user_id": user.ID.String()}
-	if req.DisplayName != nil {
-		detail["display_name"] = *req.DisplayName
-	}
 	if req.IsAdmin != nil {
 		detail["is_admin"] = *req.IsAdmin
 	}

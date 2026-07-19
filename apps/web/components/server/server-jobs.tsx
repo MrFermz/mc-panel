@@ -85,7 +85,7 @@ function JobCard({ job }: { job: Job }) {
   );
 }
 
-export default function JobsTab({ serverId }: { serverId: string }) {
+export default function ServerJobs({ serverId }: { serverId: string }) {
   const t = useT();
   // ไม่ poll แล้ว — control-plane ส่ง event server_jobs ผ่าน WS แล้ว invalidate query นี้ (useEvents)
   const jobs = useQuery({

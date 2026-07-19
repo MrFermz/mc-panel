@@ -32,7 +32,8 @@ func (s *Store) GetPermission(ctx context.Context, userID, serverID uuid.UUID) (
 func (s *Store) ListServerPermissions(ctx context.Context, serverID uuid.UUID) ([]*PermissionWithUser, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.id, p.user_id, p.server_id, p.role, p.can_console_write,
-		       p.can_manage_files, p.created_at, u.email, u.display_name
+		       p.can_manage_files, p.created_at, u.email, u.username,
+		       u.display_name, u.avatar_updated_at
 		FROM server_permissions p
 		JOIN users u ON u.id = p.user_id
 		WHERE p.server_id = $1
@@ -45,10 +46,15 @@ func (s *Store) ListServerPermissions(ctx context.Context, serverID uuid.UUID) (
 	var perms []*PermissionWithUser
 	for rows.Next() {
 		var p PermissionWithUser
+		// email เป็น NULL ได้ (username-only account) — scan ผ่าน *string แล้วแปลง NULL เป็น ""
+		var email *string
 		if err := rows.Scan(&p.ID, &p.UserID, &p.ServerID, &p.Role,
 			&p.CanConsoleWrite, &p.CanManageFiles, &p.CreatedAt,
-			&p.Email, &p.DisplayName); err != nil {
+			&email, &p.Username, &p.DisplayName, &p.AvatarUpdatedAt); err != nil {
 			return nil, err
+		}
+		if email != nil {
+			p.Email = *email
 		}
 		perms = append(perms, &p)
 	}

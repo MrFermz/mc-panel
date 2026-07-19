@@ -31,7 +31,7 @@ const (
 // (นิยามซ้ำที่นี่แทน import httpapi เพื่อกัน import cycle)
 const (
 	capViewAllServers = "servers.view_all"
-	capManageNodes    = "nodes.manage"
+	capNodesView      = "nodes.view"
 )
 
 type WSHandler struct {
@@ -66,9 +66,9 @@ func (h *WSHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// scope ต่อ connection: admin/servers.view_all เห็นทุก server, admin/nodes.manage เห็น node
+	// scope ต่อ connection: admin/servers.view_all เห็นทุก server, admin/nodes.view เห็น node
 	seeAllServers := user.IsAdmin || slices.Contains(user.Capabilities, capViewAllServers)
-	seeNodes := user.IsAdmin || slices.Contains(user.Capabilities, capManageNodes)
+	seeNodes := user.IsAdmin || slices.Contains(user.Capabilities, capNodesView)
 
 	allowed, err := h.accessibleSet(r.Context(), user, seeAllServers)
 	if err != nil {

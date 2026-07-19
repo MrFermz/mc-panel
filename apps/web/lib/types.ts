@@ -10,7 +10,9 @@ export const userSchema = z.object({
   id: z.string(),
   email: z.string(),
   username: z.string().nullable().default(null),
-  display_name: z.string(),
+  display_name: z.string().default(""),
+  // avatar_url ชี้ /api/users/{id}/avatar?v=... (null = ยังไม่ตั้งรูป — UI ตกไปใช้ตัวอักษรย่อ)
+  avatar_url: z.string().nullable().default(null),
   is_admin: z.boolean(),
   is_active: z.boolean(),
   must_change_password: z.boolean(),
@@ -22,6 +24,9 @@ export type User = z.infer<typeof userSchema>;
 // catalog ของ capability keys จาก GET /api/meta/capabilities
 export const capabilitySchema = z.object({
   key: z.string(),
+  // group/action ใช้จัดกลุ่ม + หา i18n key ฝั่ง web (label/description เป็น fallback อังกฤษ)
+  group: z.string(),
+  action: z.string(),
   label: z.string(),
   description: z.string(),
 });
@@ -82,6 +87,14 @@ export const serverStatsSchema = z.object({
   net_tx_bps: z.number().default(0),
   disk_read_bps: z.number().default(0),
   disk_write_bps: z.number().default(0),
+  // เวลาที่ container เริ่มรันรอบนี้ — null เมื่อ agent ไม่รู้ (payload เก่า/เพิ่งเริ่ม)
+  started_at: z.string().nullable().default(null),
+  // สถานะในเกมที่ agent อ่านจาก console (คนละแหล่งกับ container stats)
+  // online_players ว่าง = ยังไม่ได้ resync รอบแรก หรือไม่มีใครออนไลน์
+  online_players: z.array(z.string()).default([]),
+  max_players: z.number().default(0),
+  // tps 0 = server type ไม่มีคำสั่ง `tps` (vanilla/fabric/forge) — มีเฉพาะ paper/spigot
+  tps: z.number().default(0),
   updated_at: z.string(),
 });
 export type ServerStats = z.infer<typeof serverStatsSchema>;
@@ -139,7 +152,9 @@ export type PermissionRole = z.infer<typeof permissionRoleSchema>;
 export const permissionSchema = z.object({
   user_id: z.string(),
   email: z.string(),
+  username: z.string().nullable().default(null),
   display_name: z.string().default(""),
+  avatar_url: z.string().nullable().default(null),
   role: permissionRoleSchema,
   can_console_write: z.boolean(),
   can_manage_files: z.boolean(),
@@ -218,6 +233,10 @@ export const serverPlayerSchema = z.object({
   seen: z.boolean().default(false),
   op: z.boolean().default(false),
   banned: z.boolean().default(false),
+  // online มาจาก stats ที่ agent อ่านจาก console (ไม่ใช่ไฟล์) — false เมื่อ server ไม่ได้รัน
+  online: z.boolean().default(false),
+  // 0 = ไม่รู้ (ยังไม่เคยเล่น / อ่าน world stats ไม่ได้ / เกิน cap ฝั่ง backend)
+  playtime_seconds: z.number().default(0),
 });
 export type ServerPlayer = z.infer<typeof serverPlayerSchema>;
 
@@ -235,6 +254,7 @@ export type AddPlayerResponse = z.infer<typeof addPlayerResponseSchema>;
 // ---------- response wrappers ----------
 
 export const userResponseSchema = z.object({ user: userSchema });
+export type UserResponse = z.infer<typeof userResponseSchema>;
 export const usersResponseSchema = z.object({ users: z.array(userSchema) });
 export const createUserResponseSchema = z.object({
   user: userSchema,
@@ -278,6 +298,7 @@ export const directoryUserSchema = z.object({
   email: z.string().default(""),
   username: z.string().nullable().default(null),
   display_name: z.string().default(""),
+  avatar_url: z.string().nullable().default(null),
 });
 export type DirectoryUser = z.infer<typeof directoryUserSchema>;
 
@@ -324,6 +345,17 @@ export const eventsServerMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("node_stats"), node: nodeSchema }),
   z.object({ type: z.literal("server_jobs"), server_id: z.string() }),
+  // ความคืบหน้าของ lifecycle job ตัวหนึ่ง — pending/running ตอน dispatch,
+  // succeeded/failed ตอนจบ (error มีข้อความจริงจาก agent). restart = ขา stop ของ restart
+  z.object({
+    type: z.literal("job_update"),
+    server_id: z.string(),
+    job_id: z.string(),
+    job_type: jobTypeSchema,
+    status: jobStatusSchema,
+    error: z.string().default(""),
+    restart: z.boolean().default(false),
+  }),
   // list เปลี่ยน (สร้าง/import/ลบ server) — web invalidate ["servers"] ให้ dashboard สดโดยไม่ต้อง refresh
   z.object({ type: z.literal("server_added"), server_id: z.string() }),
   z.object({ type: z.literal("server_removed"), server_id: z.string() }),

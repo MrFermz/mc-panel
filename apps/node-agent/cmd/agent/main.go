@@ -29,6 +29,7 @@ import (
 	"github.com/mc-panel/node-agent/internal/grpcclient"
 	"github.com/mc-panel/node-agent/internal/heartbeat"
 	"github.com/mc-panel/node-agent/internal/jobs"
+	"github.com/mc-panel/node-agent/internal/mcstate"
 	"github.com/mc-panel/node-agent/internal/provision"
 	"github.com/mc-panel/node-agent/internal/reconcile"
 	"github.com/mc-panel/node-agent/internal/runner"
@@ -122,7 +123,11 @@ func run() error {
 
 	dockerRunner := runner.NewDockerRunner(dockerCli, cfg.mcDataDir, cfg.mcNetwork)
 	grpcCli := grpcclient.New(cfg.controlPlaneGRPC, cfg.agentToken, buildHello(cfg.mcDataDir))
-	consoles := console.NewManager(dockerRunner, grpcCli)
+	// tracker อ่านสถานะในเกมจาก console (ผู้เล่นออนไลน์/TPS) แล้ว serverstats แนบไปกับ stats
+	// สองตัวอ้างถึงกัน: Manager ต้องมี observer ตั้งแต่สร้าง / tracker เขียน stdin ผ่าน Manager
+	mcTracker := mcstate.NewTracker()
+	consoles := console.NewManager(dockerRunner, grpcCli, mcTracker)
+	mcTracker.SetWriter(consoles)
 	defer consoles.DetachAll()
 
 	// ตั้ง handler ก่อน Run เพื่อไม่พลาด ConsoleInput ที่มาทันทีหลัง Welcome
@@ -188,7 +193,7 @@ func run() error {
 	go func() { jobsDone <- consumer.Run(ctx) }()
 
 	go heartbeat.Run(ctx, dockerCli, grpcCli, cfg.mcDataDir)
-	go serverstats.Run(ctx, dockerCli, dockerRunner, grpcCli)
+	go serverstats.Run(ctx, dockerCli, dockerRunner, grpcCli, mcTracker)
 
 	log.Printf("node-agent ready: node_id=%s", nodeID)
 

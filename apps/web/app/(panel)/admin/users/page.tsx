@@ -3,12 +3,8 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  KeyRoundIcon,
-  PlusIcon,
-  SlidersHorizontalIcon,
-  Trash2Icon,
-} from "lucide-react";
+import Link from "next/link";
+import { KeyRoundIcon, PlusIcon } from "lucide-react";
 import { apiGet, apiSend, deleteUser, ApiError } from "@/lib/api";
 import {
   capabilitiesResponseSchema,
@@ -16,19 +12,18 @@ import {
   resetPasswordResponseSchema,
   userResponseSchema,
   usersResponseSchema,
-  type Capability,
   type User,
 } from "@/lib/types";
-import { formatDateTime } from "@/lib/format";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
+import { detectRole } from "@/lib/user-roles";
+import { userIdent } from "@/lib/user-display";
 import { useMe } from "@/lib/use-me";
-import { useT, type TranslateFn, type TranslationKey } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -37,14 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -56,72 +43,11 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SecretDialog } from "@/components/secret-dialog";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
-
-// map capability key จาก backend เป็นคำแปลฝั่ง web (อย่าพึ่ง label อังกฤษจาก API ตรง ๆ)
-const CAP_LABEL_KEYS: Record<string, TranslationKey> = {
-  "users.manage": "cap.users.manage.label",
-  "nodes.manage": "cap.nodes.manage.label",
-  "servers.create": "cap.servers.create.label",
-  "servers.view_all": "cap.servers.view_all.label",
-};
-
-function capLabel(t: TranslateFn, key: string, fallback: string): string {
-  const tk = CAP_LABEL_KEYS[key];
-  return tk ? t(tk) : fallback;
-}
-
-// identifier ที่แสดงต่อ user — email มาก่อน, ถ้าไม่มี (user แบบ username-only) ตกไปที่ username
-function userIdent(u: Pick<User, "email" | "username" | "display_name">): string {
-  return u.email || u.username || u.display_name || "user";
-}
-
-// username: 3-64 ตัว [A-Za-z0-9_.-] — ตรงกับ backend
-const USERNAME_RE = /^[A-Za-z0-9_.-]{3,64}$/;
-
-function CapabilityCheckboxes({
-  catalog,
-  selected,
-  onToggle,
-  idPrefix,
-}: {
-  catalog: Capability[];
-  selected: string[];
-  onToggle: (key: string, on: boolean) => void;
-  idPrefix: string;
-}) {
-  const t = useT();
-  if (catalog.length === 0) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        {t("users.noCapabilities")}
-      </p>
-    );
-  }
-  return (
-    <div className="grid gap-3">
-      {catalog.map((cap) => {
-        const id = `${idPrefix}-${cap.key}`;
-        return (
-          <div key={cap.key} className="flex items-start gap-2">
-            <Checkbox
-              id={id}
-              checked={selected.includes(cap.key)}
-              onCheckedChange={(v) => onToggle(cap.key, v === true)}
-            />
-            <div className="grid gap-0.5">
-              <Label htmlFor={id} className="font-normal">
-                {capLabel(t, cap.key, cap.label)}
-              </Label>
-              <span className="text-muted-foreground text-xs">
-                {cap.description}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+import { UserIdentity } from "@/components/user/user-identity";
+import {
+  CreateUserDialog,
+  type CreateUserBody,
+} from "@/components/user/create-user-dialog";
 
 export default function AdminUsersPage() {
   const t = useT();
@@ -134,16 +60,14 @@ export default function AdminUsersPage() {
   const queryClient = useQueryClient();
   const { data: meData } = useMe();
   const me = meData?.user;
-  const canManage = hasCapability(me, CAPABILITY.usersManage);
+  // สิทธิ์ต่อ action — ปุ่มที่ใช้ไม่ได้ให้ซ่อน ไม่ใช่ให้กดแล้วเจอ 403
+  const canView = hasCapability(me, CAPABILITY.usersView);
+  const canCreateUser = hasCapability(me, CAPABILITY.usersCreate);
+  const canEditUser = hasCapability(me, CAPABILITY.usersEdit);
+  const canDeleteUser = hasCapability(me, CAPABILITY.usersDelete);
+  const canResetPassword = hasCapability(me, CAPABILITY.usersResetPassword);
 
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [email, setEmail] = React.useState("");
-  const [username, setUsername] = React.useState("");
-  const [displayName, setDisplayName] = React.useState("");
-  const [isAdmin, setIsAdmin] = React.useState(false);
-  const [createCaps, setCreateCaps] = React.useState<string[]>([]);
-  const [editTarget, setEditTarget] = React.useState<User | null>(null);
-  const [editCaps, setEditCaps] = React.useState<string[]>([]);
   const [secret, setSecret] = React.useState<{
     title: string;
     password: string;
@@ -174,57 +98,28 @@ export default function AdminUsersPage() {
       const qs = params.toString();
       return apiGet(`/api/users${qs ? `?${qs}` : ""}`, usersResponseSchema);
     },
-    enabled: canManage,
+    enabled: canView,
   });
 
   const caps = useQuery({
     queryKey: ["meta", "capabilities"],
     queryFn: () => apiGet("/api/meta/capabilities", capabilitiesResponseSchema),
-    enabled: canManage,
+    enabled: canView,
     staleTime: 300_000,
   });
   const catalog = React.useMemo(
     () => caps.data?.capabilities ?? [],
     [caps.data],
   );
-  const capLabels = React.useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of catalog) map.set(c.key, c.label);
-    return map;
-  }, [catalog]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["users"] });
 
-  const toggle =
-    (setter: React.Dispatch<React.SetStateAction<string[]>>) =>
-    (key: string, on: boolean) =>
-      setter((prev) =>
-        on ? [...new Set([...prev, key])] : prev.filter((k) => k !== key),
-      );
-
   const createUser = useMutation({
-    mutationFn: () =>
-      apiSend(
-        "POST",
-        "/api/users",
-        {
-          // ส่งทั้งคู่เสมอ — backend ต้องมีอย่างน้อยหนึ่ง, string ว่าง = "ไม่ระบุ"
-          email: email.trim(),
-          username: username.trim(),
-          display_name: displayName.trim(),
-          is_admin: isAdmin,
-          capabilities: createCaps,
-        },
-        createUserResponseSchema,
-      ),
+    mutationFn: (body: CreateUserBody) =>
+      apiSend("POST", "/api/users", body, createUserResponseSchema),
     onSuccess: (data) => {
       setCreateOpen(false);
-      setEmail("");
-      setUsername("");
-      setDisplayName("");
-      setIsAdmin(false);
-      setCreateCaps([]);
       setSecret({
         title: t("users.initialPasswordFor", { email: userIdent(data.user) }),
         password: data.initial_password,
@@ -271,7 +166,7 @@ export default function AdminUsersPage() {
     }: {
       id: string;
       body: Partial<
-        Pick<User, "display_name" | "is_admin" | "is_active" | "capabilities">
+        Pick<User, "is_admin" | "is_active" | "capabilities">
       >;
     }) => apiSend("PATCH", `/api/users/${id}`, body, userResponseSchema),
     onSuccess: () => {
@@ -280,26 +175,6 @@ export default function AdminUsersPage() {
     },
     onError: (err) => {
       toast.error(err instanceof ApiError ? err.message : t("users.failedUpdate"));
-    },
-  });
-
-  const saveCapabilities = useMutation({
-    mutationFn: ({ id, capabilities }: { id: string; capabilities: string[] }) =>
-      apiSend(
-        "PATCH",
-        `/api/users/${id}`,
-        { capabilities },
-        userResponseSchema,
-      ),
-    onSuccess: () => {
-      toast.success(t("users.capsUpdated"));
-      setEditTarget(null);
-      invalidate();
-    },
-    onError: (err) => {
-      toast.error(
-        err instanceof ApiError ? err.message : t("users.failedCaps"),
-      );
     },
   });
 
@@ -326,31 +201,25 @@ export default function AdminUsersPage() {
     },
   });
 
-  const openEdit = (user: User) => {
-    setEditTarget(user);
-    setEditCaps(user.capabilities);
-  };
-
-  // ต้องมี email (มี "@") หรือ username (ตรง pattern) อย่างน้อยหนึ่ง ถึงจะ submit ได้
-  const emailValid = email.trim().includes("@");
-  const usernameValid = USERNAME_RE.test(username.trim());
-  const canCreate = emailValid || usernameValid;
-
   // กันเข้าตรง URL — menu ซ่อนอยู่แล้วแต่ต้องกันซ้ำ
-  if (me && !canManage) {
+  if (me && !canView) {
     return (
       <p className="text-muted-foreground text-sm">{t("common.noAccess")}</p>
     );
   }
 
+  const userList = users.data?.users ?? [];
+
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t("users.title")}</h1>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <PlusIcon />
-          {t("users.create")}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-muted-foreground text-sm">{t("users.subtitle")}</p>
+        {canCreateUser && (
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <PlusIcon />
+            {t("users.create")}
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -360,10 +229,7 @@ export default function AdminUsersPage() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
         />
-        <Select
-          value={role}
-          onValueChange={(v) => setRole(v as typeof role)}
-        >
+        <Select value={role} onValueChange={(v) => setRole(v as typeof role)}>
           <SelectTrigger
             className="w-full sm:w-40"
             aria-label={t("users.filterRole")}
@@ -395,261 +261,144 @@ export default function AdminUsersPage() {
       </div>
 
       {users.isPending ? (
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-64 w-full" />
       ) : users.isError ? (
         <p className="text-destructive text-sm">{t("users.failedLoad")}</p>
+      ) : userList.length === 0 ? (
+        <Card className="py-10">
+          <CardContent className="text-muted-foreground text-center text-sm">
+            {t("users.empty")}
+          </CardContent>
+        </Card>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("users.colUser")}</TableHead>
-              <TableHead>{t("users.colAdmin")}</TableHead>
-              <TableHead>{t("users.colActive")}</TableHead>
-              <TableHead>{t("users.colCapabilities")}</TableHead>
-              <TableHead>{t("users.colCreated")}</TableHead>
-              <TableHead className="w-64" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.data.users.map((user) => {
-              const self = user.id === me?.id;
-              return (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="grid">
-                      <span className="flex items-center gap-2">
-                        {user.display_name || user.email || user.username}
-                        {self && (
-                          <Badge variant="secondary">{t("users.you")}</Badge>
-                        )}
-                        {user.must_change_password && (
-                          <Badge
-                            variant="outline"
-                            className="border-yellow-500/30 bg-yellow-500/15 text-yellow-400"
-                          >
-                            {t("users.pendingPassword")}
-                          </Badge>
-                        )}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {user.email && <span>{user.email}</span>}
-                        {user.email && user.username && " · "}
-                        {user.username && (
-                          <span className="font-mono">@{user.username}</span>
-                        )}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={user.is_admin}
-                      disabled={self || patchUser.isPending}
-                      onCheckedChange={(v) =>
-                        patchUser.mutate({ id: user.id, body: { is_admin: v } })
-                      }
-                      aria-label={t("users.toggleAdmin", { email: user.email })}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={user.is_active}
-                      disabled={self || patchUser.isPending}
-                      onCheckedChange={(v) =>
-                        patchUser.mutate({ id: user.id, body: { is_active: v } })
-                      }
-                      aria-label={t("users.toggleActive", { email: user.email })}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {user.is_admin ? (
-                      <span className="text-muted-foreground text-xs">
-                        {t("users.allAdmin")}
-                      </span>
-                    ) : user.capabilities.length === 0 ? (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    ) : (
-                      <div className="flex max-w-56 flex-wrap gap-1">
-                        {user.capabilities.map((key) => (
-                          <Badge key={key} variant="secondary">
-                            {capLabel(t, key, capLabels.get(key) ?? key)}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {formatDateTime(user.created_at)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={user.is_admin}
-                        onClick={() => openEdit(user)}
-                      >
-                        <SlidersHorizontalIcon />
-                        {t("users.capabilitiesBtn")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setResetTarget(user)}
-                      >
-                        <KeyRoundIcon />
-                        {t("users.resetPassword")}
-                      </Button>
-                      {!self && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => setDeleteTarget(user)}
-                          aria-label={`${t("users.delete")} ${userIdent(user)}`}
-                        >
-                          <Trash2Icon />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+        <Card className="py-0">
+          <CardContent className="overflow-x-auto px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("users.colUser")}</TableHead>
+                  <TableHead>{t("users.colAccess")}</TableHead>
+                  <TableHead>{t("users.colStatus")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("users.colActions")}
+                  </TableHead>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {userList.map((user) => {
+                  const self = user.id === me?.id;
+                  const roleKey = detectRole(user);
+                  return (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <UserIdentity
+                          user={user}
+                          panelRole={roleKey}
+                          trailing={
+                            <>
+                              {self && (
+                                <span className="text-muted-foreground font-normal">
+                                  ({t("users.you")})
+                                </span>
+                              )}
+                              {user.must_change_password && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-yellow-500/30 bg-yellow-500/15 text-yellow-400"
+                                >
+                                  {t("users.pendingPassword")}
+                                </Badge>
+                              )}
+                            </>
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {user.is_admin
+                          ? t("users.accessAll")
+                          : t("users.accessCount", {
+                              count: user.capabilities.length,
+                              total: catalog.length,
+                            })}
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-2 text-sm">
+                          <span
+                            className={cn(
+                              "size-2 rounded-full",
+                              user.is_active ? "bg-emerald-500" : "bg-amber-500",
+                            )}
+                          />
+                          {user.is_active
+                            ? t("users.statusActive")
+                            : t("users.statusSuspended")}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/admin/users/${user.id}/permissions`}>
+                              {t("users.permissions")}
+                            </Link>
+                          </Button>
+                          {canEditUser && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-amber-400 hover:text-amber-300"
+                              disabled={self || patchUser.isPending}
+                              onClick={() =>
+                                patchUser.mutate({
+                                  id: user.id,
+                                  body: { is_active: !user.is_active },
+                                })
+                              }
+                            >
+                              {user.is_active
+                                ? t("users.suspend")
+                                : t("users.activate")}
+                            </Button>
+                          )}
+                          {canResetPassword && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="size-8"
+                              onClick={() => setResetTarget(user)}
+                              aria-label={`${t("users.resetPassword")} — ${userIdent(user)}`}
+                            >
+                              <KeyRoundIcon />
+                            </Button>
+                          )}
+                          {canDeleteUser && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              disabled={self}
+                              onClick={() => setDeleteTarget(user)}
+                            >
+                              {t("users.delete")}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("users.createTitle")}</DialogTitle>
-            <DialogDescription>{t("users.createDesc")}</DialogDescription>
-          </DialogHeader>
-          <form
-            className="grid gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!createUser.isPending && canCreate) createUser.mutate();
-            }}
-          >
-            <p className="text-muted-foreground text-sm">
-              {t("users.identifierHint")}
-            </p>
-            <div className="grid gap-2">
-              <Label htmlFor="u-email">{t("users.emailOptional")}</Label>
-              <Input
-                id="u-email"
-                type="email"
-                autoComplete="off"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="u-username">{t("users.usernameOptional")}</Label>
-              <Input
-                id="u-username"
-                minLength={3}
-                maxLength={64}
-                pattern="[a-zA-Z0-9_.\-]+"
-                autoComplete="off"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="u-name">{t("users.displayName")}</Label>
-              <Input
-                id="u-name"
-                maxLength={100}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="u-admin"
-                checked={isAdmin}
-                onCheckedChange={(v) => setIsAdmin(v === true)}
-              />
-              <Label htmlFor="u-admin" className="font-normal">
-                {t("users.administrator")}
-              </Label>
-            </div>
-            {!isAdmin && (
-              <div className="grid gap-2">
-                <Label>{t("users.capabilities")}</Label>
-                <CapabilityCheckboxes
-                  catalog={catalog}
-                  selected={createCaps}
-                  onToggle={toggle(setCreateCaps)}
-                  idPrefix="create-cap"
-                />
-              </div>
-            )}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateOpen(false)}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button type="submit" disabled={createUser.isPending || !canCreate}>
-                {createUser.isPending
-                  ? t("users.creating")
-                  : t("users.create.submit")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={editTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditTarget(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {t("users.capabilitiesFor", {
-                name: editTarget?.display_name || editTarget?.email || "",
-              })}
-            </DialogTitle>
-            <DialogDescription>{t("users.capabilitiesDesc")}</DialogDescription>
-          </DialogHeader>
-          <CapabilityCheckboxes
-            catalog={catalog}
-            selected={editCaps}
-            onToggle={toggle(setEditCaps)}
-            idPrefix="edit-cap"
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEditTarget(null)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              disabled={saveCapabilities.isPending}
-              onClick={() => {
-                if (editTarget)
-                  saveCapabilities.mutate({
-                    id: editTarget.id,
-                    capabilities: editCaps,
-                  });
-              }}
-            >
-              {saveCapabilities.isPending ? t("common.saving") : t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateUserDialog
+        open={createOpen}
+        catalog={catalog}
+        pending={createUser.isPending}
+        onOpenChange={setCreateOpen}
+        onSubmit={(body) => createUser.mutate(body)}
+      />
 
       <ConfirmDialog
         open={resetTarget !== null}

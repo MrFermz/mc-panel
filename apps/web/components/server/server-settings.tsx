@@ -56,7 +56,7 @@ function isStoppedLike(status: ServerStatus): boolean {
   return status === "stopped" || status === "errored";
 }
 
-export default function SettingsTab({ server }: { server: Server }) {
+export default function ServerSettings({ server }: { server: Server }) {
   const t = useT();
   const router = useRouter();
   const queryClient = useQueryClient();

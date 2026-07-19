@@ -1,11 +1,41 @@
 import type { User } from "@/lib/types";
 
-// global RBAC keys (แยกจาก server_permissions) — sync กับ docs/api.md หัวข้อ Capabilities
+// global RBAC keys (แยกจาก server_permissions) — sync กับ catalog ใน
+// control-plane `internal/httpapi/capabilities.go` + docs/api.md
+// key = "{group}.{action}" ทุกตัว
 export const CAPABILITY = {
-  usersManage: "users.manage",
-  nodesManage: "nodes.manage",
-  serversCreate: "servers.create",
+  usersView: "users.view",
+  usersCreate: "users.create",
+  usersEdit: "users.edit",
+  usersDelete: "users.delete",
+  usersResetPassword: "users.reset_password",
+
+  nodesView: "nodes.view",
+  nodesCreate: "nodes.create",
+  nodesDelete: "nodes.delete",
+
   serversViewAll: "servers.view_all",
+  serversCreate: "servers.create",
+  serversEdit: "servers.edit",
+  serversDelete: "servers.delete",
+  serversPower: "servers.power",
+
+  consoleView: "console.view",
+  consoleWrite: "console.write",
+
+  filesView: "files.view",
+  filesWrite: "files.write",
+  filesDelete: "files.delete",
+
+  playersView: "players.view",
+  playersManage: "players.manage",
+  playersModerate: "players.moderate",
+
+  settingsView: "settings.view",
+  settingsEdit: "settings.edit",
+
+  accessView: "access.view",
+  accessManage: "access.manage",
 } as const;
 
 export type CapabilityKey = (typeof CAPABILITY)[keyof typeof CAPABILITY];

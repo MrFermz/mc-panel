@@ -14,17 +14,21 @@ import (
 
 	jobv1 "github.com/mc-panel/proto/gen/go/mcpanel/job/v1"
 
+	"github.com/mc-panel/control-plane/internal/events"
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
 type Dispatcher struct {
-	st  *store.Store
-	js  jetstream.JetStream
-	log *slog.Logger
+	st *store.Store
+	js jetstream.JetStream
+	// events push ความคืบหน้าของ job + สถานะ transition ตอน dispatch ไป browser
+	// (nil ได้ในเทสต์ — emit* เช็คก่อนใช้)
+	events *events.Hub
+	log    *slog.Logger
 }
 
-func NewDispatcher(st *store.Store, js jetstream.JetStream, log *slog.Logger) *Dispatcher {
-	return &Dispatcher{st: st, js: js, log: log}
+func NewDispatcher(st *store.Store, js jetstream.JetStream, ev *events.Hub, log *slog.Logger) *Dispatcher {
+	return &Dispatcher{st: st, js: js, events: ev, log: log}
 }
 
 func (d *Dispatcher) CreateServer(ctx context.Context, srv *store.Server, acceptEula bool, requestedBy uuid.UUID) (*store.Job, error) {
@@ -152,7 +156,16 @@ func (d *Dispatcher) dispatch(ctx context.Context, srv *store.Server, requestedB
 		if err := d.st.UpdateServerStatus(ctx, srv.ID, statusAfter); err != nil {
 			d.log.Error("update server status after dispatch failed",
 				"server_id", srv.ID, "status", statusAfter, "error", err)
+		} else if d.events != nil {
+			// transition ขาเข้า (stopped→starting / running→stopping) เกิดที่นี่ที่เดียว
+			// ไม่มี JobResult/agent event พามาทีหลัง — ไม่ push ตรงนี้ browser ตัวอื่น
+			// (และคนที่ไม่ได้กดปุ่มเอง) จะไม่เห็นจนกว่าจะ refetch
+			d.events.ServerStatus(srv.ID, statusAfter)
 		}
+	}
+
+	if d.events != nil {
+		d.events.JobUpdate(srv.ID, jobID, jobType, job.Status, "", restartIntent)
 	}
 
 	d.log.Info("job dispatched", "job_id", jobID, "type", jobType,

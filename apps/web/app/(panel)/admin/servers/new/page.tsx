@@ -22,9 +22,9 @@ import {
   ApiError,
 } from "@/lib/api";
 import { MemoryPresets } from "@/components/server/memory-presets";
-import { ServerPropertiesCard } from "@/components/server/settings-tab";
-import AccessTab from "@/components/server/access-tab";
-import PlayersTab from "@/components/server/players-tab";
+import { ServerPropertiesCard } from "@/components/server/server-settings";
+import ServerAccess from "@/components/server/server-access";
+import ServerPlayers from "@/components/server/server-players";
 import {
   createServerResponseSchema,
   jobResponseSchema,
@@ -39,6 +39,7 @@ import {
 } from "@/lib/types";
 import { formatMb } from "@/lib/format";
 import { useT, type TranslationKey } from "@/lib/i18n";
+import { useSettingsStore } from "@/lib/settings/store";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1003,6 +1004,7 @@ function NewServerWizard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const setDashboardServerId = useSettingsStore((st) => st.setDashboardServerId);
   const mode = searchParams.get("mode") === "import" ? "import" : "new";
 
   const [createdId, setCreatedId] = React.useState<string | null>(null);
@@ -1077,9 +1079,13 @@ function NewServerWizard() {
     [queryClient],
   );
 
+  // ไม่มีหน้า detail ต่อ server แล้ว — จบ wizard = ตั้งตัวที่เพิ่งสร้างเป็น active
+  // แล้วไป dashboard (เมนู console/files/… ทำงานกับ active server ตัวนี้ต่อ)
   const goToServer = React.useCallback(() => {
-    if (createdId) router.push(`/servers/${createdId}`);
-  }, [createdId, router]);
+    if (!createdId) return;
+    setDashboardServerId(createdId);
+    router.push("/");
+  }, [createdId, router, setDashboardServerId]);
 
   // step ที่อ่านไฟล์จริงบนโหนด (properties/players) เปิดได้เมื่อไฟล์พร้อม (ready)
   const filesReady = created && ready;
@@ -1113,11 +1119,16 @@ function NewServerWizard() {
     }
     // step 3: access (DB อย่างเดียว — พร้อมทันทีหลังสร้าง)
     if (step === 2) {
-      return <AccessTab serverId={server.id} />;
+      return <ServerAccess serverId={server.id} />;
     }
     // step 4: players/whitelist (ต้องรอไฟล์พร้อม)
+    // เพิ่งสร้างเสร็จ ยังไม่ได้ start — ปุ่ม action ที่สั่งผ่าน console จึงยังกดไม่ได้
     return filesReady ? (
-      <PlayersTab serverId={server.id} />
+      <ServerPlayers
+        serverId={server.id}
+        isRunning={server.status === "running"}
+        onlineNames={server.stats?.online_players ?? []}
+      />
     ) : (
       <ProvisioningCard />
     );

@@ -10,7 +10,7 @@ import { I18nProvider, type Locale } from "@/lib/i18n";
 function AppToaster() {
   // sonner ไม่รู้จัก CSS variable — ป้อน theme ที่ resolve แล้วให้ตรงกับ light/dark ปัจจุบัน
   const { resolvedTheme } = useTheme();
-  return <Toaster theme={resolvedTheme} richColors position="top-right" />;
+  return <Toaster theme={resolvedTheme} richColors position="bottom-right" />;
 }
 
 export function Providers({

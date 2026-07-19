@@ -16,7 +16,9 @@ type Config struct {
 	RedisURL    string
 	NATSURL     string
 	JWTSecret   string
-	AdminEmail  string
+	// AdminIdentifier = login ของ admin คนแรกที่ seed ตอน boot — เป็น username (default "admin",
+	// สร้างเป็น username-only account) หรือ email ถ้ามี "@" (สร้างเป็น email account)
+	AdminIdentifier string
 	// NodeToken (optional) ใช้ seed node "local" ตัวแรกใน compose แบบ all-in-one
 	NodeToken    string
 	CookieSecure bool
@@ -31,14 +33,14 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
-		GRPCAddr:    getenv("GRPC_ADDR", ":9090"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		RedisURL:    os.Getenv("REDIS_URL"),
-		NATSURL:     os.Getenv("NATS_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
-		AdminEmail:  getenv("ADMIN_EMAIL", "admin@mcpanel.local"),
-		NodeToken:   os.Getenv("NODE_TOKEN"),
+		HTTPAddr:        getenv("HTTP_ADDR", ":8080"),
+		GRPCAddr:        getenv("GRPC_ADDR", ":9090"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		RedisURL:        os.Getenv("REDIS_URL"),
+		NATSURL:         os.Getenv("NATS_URL"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
+		AdminIdentifier: getenv("ADMIN_USERNAME", "admin"),
+		NodeToken:       os.Getenv("NODE_TOKEN"),
 		// default 1 = production หลัง Caddy 1 hop; dev set 0 ผ่าน env
 		TrustedProxyCount: 1,
 	}

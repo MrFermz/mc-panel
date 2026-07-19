@@ -42,7 +42,7 @@ func NewResultConsumer(st *store.Store, rings *console.Registry, ws *console.Hub
 
 func (rc *ResultConsumer) Start(ctx context.Context, js jetstream.JetStream) (jetstream.ConsumeContext, error) {
 	// dispatcher แยกอินสแตนซ์ (stateless) สำหรับ chain start ของ restart
-	rc.disp = NewDispatcher(rc.st, js, rc.log)
+	rc.disp = NewDispatcher(rc.st, js, rc.events, rc.log)
 
 	cons, err := EnsureResultsConsumer(ctx, js)
 	if err != nil {
@@ -116,7 +116,7 @@ func (rc *ResultConsumer) handle(msg jetstream.Msg) {
 	if job.Type == "import_server" && res.Success && job.ServerID != nil {
 		rc.applyDetectedMCVersion(ctx, *job.ServerID, res.Detail)
 	}
-	rc.afterCommit(ctx, job, plan, changed, restartStart, deleted)
+	rc.afterCommit(ctx, job, plan, changed, restartStart, deleted, res.Success, res.Error)
 	msg.Ack()
 }
 
@@ -169,7 +169,7 @@ func planTransition(job *store.Job, success bool) (store.TransitionPlan, bool) {
 
 // afterCommit side effect ที่ทำหลัง tx commit แล้ว (broadcast/ring drop/audit/chain start)
 // พวกนี้ไม่ durable โดยดีไซน์ — พลาดได้ แล้วรอ heartbeat/poll รอบถัดไป reconcile
-func (rc *ResultConsumer) afterCommit(ctx context.Context, job *store.Job, plan store.TransitionPlan, changed, restartStart bool, deleted *store.Server) {
+func (rc *ResultConsumer) afterCommit(ctx context.Context, job *store.Job, plan store.TransitionPlan, changed, restartStart bool, deleted *store.Server, success bool, jobErr string) {
 	if job.ServerID == nil {
 		return
 	}
@@ -178,6 +178,10 @@ func (rc *ResultConsumer) afterCommit(ctx context.Context, job *store.Job, plan 
 	// job result ถูก apply แล้ว → job list ของ server นี้เปลี่ยน (ไม่ว่าสถานะ server
 	// จะเปลี่ยนหรือไม่) ให้ browser refetch jobs
 	rc.events.ServerJobs(serverID)
+	// ...และ push ผลลัพธ์ตรง ๆ ด้วย: stop/start ที่ล้มบางเคสไม่มี server_status ตามมาเลย
+	// (planTransition ปล่อยให้ heartbeat reconcile) — ถ้าไม่มี event นี้ user จะไม่รู้ว่าพัง
+	rc.events.JobUpdate(serverID, job.ID, job.Type, jobStatusOf(success), jobErr,
+		hasRestartIntent(job.Payload))
 
 	if plan.DeleteRow {
 		rc.rings.Drop(serverID)
@@ -262,6 +266,8 @@ func (rc *ResultConsumer) reapOnce(ctx context.Context) {
 			"created_at", job.CreatedAt)
 		if job.ServerID != nil {
 			rc.events.ServerJobs(*job.ServerID)
+			rc.events.JobUpdate(*job.ServerID, job.ID, job.Type, "failed",
+				"job reaped: stuck beyond threshold with no result", hasRestartIntent(job.Payload))
 		}
 		if changed && plan.NewStatus != "" && job.ServerID != nil {
 			rc.ws.BroadcastStatus(*job.ServerID, plan.NewStatus)
@@ -316,6 +322,14 @@ func (rc *ResultConsumer) applyDetectedMCVersion(ctx context.Context, serverID u
 	}
 	rc.log.Info("server mc_version updated from import detection",
 		"server_id", serverID, "mc_version", d.MCVersion)
+}
+
+// jobStatusOf แปลงผล JobResult เป็นค่า status ของ jobs table (ให้ตรงกับที่ CompleteJobTx เขียน)
+func jobStatusOf(success bool) string {
+	if success {
+		return "succeeded"
+	}
+	return "failed"
 }
 
 // hasRestartIntent อ่าน marker ที่ dispatcher แทรกไว้ใน payload (_meta.restart)

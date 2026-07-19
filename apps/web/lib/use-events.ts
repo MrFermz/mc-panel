@@ -2,7 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { eventsWsUrl } from "@/lib/ws";
+import { useT, type TranslationKey } from "@/lib/i18n";
 import {
   eventsServerMessageSchema,
   type EventsServerMessage,
@@ -18,6 +20,8 @@ const BASE_BACKOFF_MS = 1_000;
 type ServersCache = { servers: Server[] } | undefined;
 type ServerDetailCache = { server: Server } | undefined;
 type NodesCache = { nodes: Node[] } | undefined;
+
+type TranslateFn = ReturnType<typeof useT>;
 
 type StatsHistoryApi = {
   push: (serverId: string, point: StatPoint) => void;
@@ -54,9 +58,38 @@ function toNodeStatPoint(node: Node): StatPoint {
   };
 }
 
+// notifyJobUpdate แจ้งผลของ lifecycle job เป็น toast — จุดเดียวที่ user รู้ว่างานที่สั่งไว้
+// (start/stop/restart/kill) จบยังไง เพราะปุ่มโยน toast แค่ตอน "ส่งคำสั่งแล้ว" เท่านั้น
+function notifyJobUpdate(
+  qc: QueryClient,
+  t: TranslateFn,
+  msg: Extract<EventsServerMessage, { type: "job_update" }>,
+) {
+  if (msg.status !== "succeeded" && msg.status !== "failed") return;
+
+  const cache = qc.getQueryData<ServersCache>(["servers"]);
+  const server =
+    cache?.servers.find((s) => s.id === msg.server_id)?.name ?? msg.server_id;
+  const job = t(`jobType.${msg.job_type}` as TranslationKey);
+
+  if (msg.status === "failed") {
+    toast.error(t("jobEvent.failed", { server, job }), {
+      description: msg.error || undefined,
+    });
+    return;
+  }
+  // ขา stop ของ restart ยังไม่จบงาน — ขา start ตามมาเป็น job ใหม่ที่จะ toast เอง
+  if (msg.restart && msg.job_type === "stop_server") {
+    toast.info(t("jobEvent.restarting", { server }));
+    return;
+  }
+  toast.success(t("jobEvent.succeeded", { server, job }));
+}
+
 function applyEvent(
   qc: QueryClient,
   stats: StatsHistoryApi,
+  t: TranslateFn,
   msg: EventsServerMessage,
 ) {
   switch (msg.type) {
@@ -117,6 +150,12 @@ function applyEvent(
       qc.invalidateQueries({ queryKey: ["servers", msg.server_id, "jobs"] });
       break;
     }
+    case "job_update": {
+      // dispatch-time ไม่มี server_jobs ตามมา — invalidate เองให้ตาราง jobs เห็นงานใหม่ทันที
+      qc.invalidateQueries({ queryKey: ["servers", msg.server_id, "jobs"] });
+      notifyJobUpdate(qc, t, msg);
+      break;
+    }
     case "server_added": {
       // server ใหม่ (create/import) — refetch list ให้ dashboard เห็นทันทีไม่ต้อง refresh
       qc.invalidateQueries({ queryKey: ["servers"] });
@@ -139,13 +178,14 @@ function applyEvent(
 // โครง reconnect (exponential backoff + StrictMode-safe identity) มิเรอร์จาก use-server-console
 export function useEvents() {
   const queryClient = useQueryClient();
+  const t = useT();
   const pushStats = useStatsHistoryStore((s) => s.push);
   const resetStats = useStatsHistoryStore((s) => s.reset);
 
   // เก็บ handler ใน ref เพื่อไม่ต้อง reconnect เมื่อ callback เปลี่ยน identity
   const applyRef = useRef<(msg: EventsServerMessage) => void>(() => {});
   applyRef.current = (msg) =>
-    applyEvent(queryClient, { push: pushStats, reset: resetStats }, msg);
+    applyEvent(queryClient, { push: pushStats, reset: resetStats }, t, msg);
 
   const resyncRef = useRef<() => void>(() => {});
   resyncRef.current = () => {

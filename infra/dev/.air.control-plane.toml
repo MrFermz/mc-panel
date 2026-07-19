@@ -1,0 +1,21 @@
+# hot reload ของ control-plane ใน dev container (ใช้โดย infra/docker-compose.dev.app.yml)
+# cwd = /src/apps/control-plane; GOWORK=off มาจาก compose env เพื่อให้ replace ../../packages/proto
+# resolve ได้ (repo root ถูก mount ไว้ที่ /src) — เหมือนที่ docker build จริงทำ
+root = "."
+tmp_dir = "/tmp/air-control-plane"
+
+[build]
+cmd = "go build -o /tmp/air-control-plane/server ./cmd/server"
+bin = "/tmp/air-control-plane/server"
+delay = 300
+include_ext = ["go"]
+exclude_dir = ["tmp"]
+stop_on_error = true
+send_interrupt = true
+kill_delay = "3s"
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true

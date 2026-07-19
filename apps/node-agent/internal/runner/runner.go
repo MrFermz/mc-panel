@@ -15,6 +15,25 @@ const (
 	LabelProjectValue   = "mc-panel"
 )
 
+// HeapMB แปลง memory_mb ที่ user จัดสรร (= hard limit ของทั้ง container) เป็น -Xmx ของ JVM
+// JVM กินนอก heap อีกมาก (metaspace, code cache, thread stacks, direct buffers, GC overhead)
+// วัดจริง: Paper 1.21 heap 1G โดน OOM kill ที่ limit 1.25x ตอน world-gen เลยกันไว้ ~1/3
+// (limit ≈ 1.5x heap) แต่ไม่เกิน 2GB เพื่อไม่ให้เครื่องใหญ่เสียเปล่า และไม่เกินครึ่งของ limit
+// เพื่อให้ instance เล็ก (256MB ซึ่งเป็นขั้นต่ำที่ API ยอม) ยังเหลือ heap พอ start ได้
+func HeapMB(memoryMB int) int {
+	reserve := memoryMB / 3
+	if reserve < 256 {
+		reserve = 256
+	}
+	if reserve > 2048 {
+		reserve = 2048
+	}
+	if reserve > memoryMB/2 {
+		reserve = memoryMB / 2
+	}
+	return memoryMB - reserve
+}
+
 // ServerConfig คือค่าที่ใช้ start instance หนึ่งตัว
 type ServerConfig struct {
 	ID             string

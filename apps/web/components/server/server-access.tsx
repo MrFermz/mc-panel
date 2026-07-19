@@ -12,11 +12,12 @@ import {
   type PermissionRole,
 } from "@/lib/types";
 import { useMe } from "@/lib/use-me";
-import { useT, type TranslationKey } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
+import { userIdent, userTitle } from "@/lib/user-display";
+import { UserIdentity } from "@/components/user/user-identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -61,22 +62,14 @@ const emptyForm: FormState = {
   can_manage_files: false,
 };
 
-function roleKey(role: PermissionRole): TranslationKey {
-  if (role === "owner") return "access.roleOwner";
-  if (role === "operator") return "access.roleOperator";
-  return "access.roleViewer";
-}
-
-// label ของ user ใน dropdown — display_name + (email หรือ @username)
+// label ของ user ใน dropdown — username + email ถ้ามีทั้งคู่
 function directoryLabel(u: DirectoryUser): string {
-  const secondary = u.email || (u.username ? `@${u.username}` : "");
-  const primary = u.display_name || u.email || u.username || u.id;
-  return secondary && secondary !== primary
-    ? `${primary} (${secondary})`
-    : primary;
+  const primary = userTitle(u);
+  const secondary = userIdent(u);
+  return secondary !== primary ? `${primary} (${secondary})` : primary;
 }
 
-export default function AccessTab({ serverId }: { serverId: string }) {
+export default function ServerAccess({ serverId }: { serverId: string }) {
   const t = useT();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -161,10 +154,12 @@ export default function AccessTab({ serverId }: { serverId: string }) {
   };
 
   const openEdit = (perm: Permission) => {
-    setEditingEmail(perm.email);
+    setEditingEmail(userIdent(perm));
     setForm({
-      userId: "",
-      email: perm.email,
+      // ยึด user_id ตอนแก้ไข — collaborator ที่เป็น username-only account มี email = ""
+      // ถ้าปล่อยให้ไปทาง email จะส่งค่าว่างแล้วได้ user_not_found
+      userId: perm.user_id,
+      email: userIdent(perm),
       role: perm.role,
       can_console_write: perm.can_console_write,
       can_manage_files: perm.can_manage_files,
@@ -195,7 +190,6 @@ export default function AccessTab({ serverId }: { serverId: string }) {
           <TableHeader>
             <TableRow>
               <TableHead>{t("access.user")}</TableHead>
-              <TableHead>{t("access.role")}</TableHead>
               <TableHead>{t("access.consoleWrite")}</TableHead>
               <TableHead>{t("access.manageFiles")}</TableHead>
               <TableHead className="w-24" />
@@ -205,15 +199,11 @@ export default function AccessTab({ serverId }: { serverId: string }) {
             {permissions.data.permissions.map((perm) => (
               <TableRow key={perm.user_id}>
                 <TableCell>
-                  <div className="grid">
-                    <span>{perm.display_name || perm.email}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {perm.email}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{t(roleKey(perm.role))}</Badge>
+                  <UserIdentity
+                    user={{ id: perm.user_id, ...perm }}
+                    serverRole={perm.role}
+                    size="sm"
+                  />
                 </TableCell>
                 <TableCell>
                   {perm.can_console_write ? t("common.yes") : t("common.no")}
@@ -227,7 +217,7 @@ export default function AccessTab({ serverId }: { serverId: string }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => openEdit(perm)}
-                      aria-label={`${t("common.edit")} ${perm.email}`}
+                      aria-label={`${t("common.edit")} ${userTitle(perm)}`}
                     >
                       <PencilIcon />
                     </Button>
@@ -236,7 +226,7 @@ export default function AccessTab({ serverId }: { serverId: string }) {
                       size="icon"
                       className="text-destructive"
                       onClick={() => setRemoveTarget(perm)}
-                      aria-label={`${t("common.remove")} ${perm.email}`}
+                      aria-label={`${t("common.remove")} ${userTitle(perm)}`}
                     >
                       <Trash2Icon />
                     </Button>
@@ -383,7 +373,7 @@ export default function AccessTab({ serverId }: { serverId: string }) {
         title={t("access.removeTitle")}
         description={
           removeTarget
-            ? t("access.removeDesc", { email: removeTarget.email })
+            ? t("access.removeDesc", { email: userTitle(removeTarget) })
             : ""
         }
         confirmLabel={t("common.remove")}

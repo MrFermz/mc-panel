@@ -34,8 +34,8 @@ func TestLoad(t *testing.T) {
 	if cfg.HTTPAddr != ":8080" || cfg.GRPCAddr != ":9090" {
 		t.Errorf("default addrs = %q %q", cfg.HTTPAddr, cfg.GRPCAddr)
 	}
-	if cfg.AdminEmail != "admin@mcpanel.local" {
-		t.Errorf("default admin email = %q", cfg.AdminEmail)
+	if cfg.AdminIdentifier != "admin" {
+		t.Errorf("default admin identifier = %q", cfg.AdminIdentifier)
 	}
 	if !cfg.CookieSecure {
 		t.Error("CookieSecure = false, want true")

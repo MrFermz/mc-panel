@@ -34,7 +34,7 @@ const XTERM_THEMES: Record<
   },
 };
 
-export default function ConsoleTab({
+export default function ServerConsole({
   serverId,
   canWrite,
 }: {
@@ -73,27 +73,36 @@ export default function ConsoleTab({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
-    fit.fit();
     termRef.current = term;
+
+    // FitAddon.proposeDimensions() อ่าน _core._renderService.dimensions โดยไม่เช็คว่า
+    // renderer พร้อมหรือยัง — ถ้า container ยังไม่มีขนาด/terminal ถูก dispose ไปแล้ว
+    // (StrictMode remount, สลับหน้า) จะโยน "reading 'dimensions'" ทิ้ง ต้องกันทุกจุดที่เรียก fit
+    const safeFit = () => {
+      if (!termRef.current) return;
+      if (container.clientWidth === 0 || container.clientHeight === 0) return;
+      try {
+        fit.fit();
+      } catch {
+        // renderer ยังไม่พร้อม — ปล่อยให้ ResizeObserver รอบถัดไป fit ให้เอง
+      }
+    };
+    // รอ layout รอบแรกให้ container มีขนาดจริงก่อนค่อย fit
+    const raf = requestAnimationFrame(safeFit);
 
     if (pendingRef.current.length > 0) {
       for (const line of pendingRef.current) term.writeln(line);
       pendingRef.current = [];
     }
 
-    const observer = new ResizeObserver(() => {
-      try {
-        fit.fit();
-      } catch {
-        // fit พังได้ตอน container ถูกซ่อน (สลับ tab) — ปล่อยผ่าน
-      }
-    });
+    const observer = new ResizeObserver(safeFit);
     observer.observe(container);
 
     return () => {
+      cancelAnimationFrame(raf);
       observer.disconnect();
-      term.dispose();
       termRef.current = null;
+      term.dispose();
     };
     // สร้าง terminal ครั้งเดียว — theme sync แยกใน effect ด้านล่าง
     // eslint-disable-next-line react-hooks/exhaustive-deps

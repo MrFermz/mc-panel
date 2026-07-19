@@ -32,18 +32,29 @@ type Sender interface {
 	SendConsoleOutput(serverID string, lines []string) error
 }
 
+// Observer ดักดู log ทุกบรรทัดเพื่อสกัดสถานะในเกม (ผู้เล่นออนไลน์/TPS — ดู internal/mcstate)
+// ObserveLine คืน false = บรรทัดนั้นเป็น reply ของคำสั่งที่ observer ยิงเอง ให้ทิ้ง ไม่ต้องส่งให้ user
+// nil ได้ (agent ยังทำงานปกติ แค่ไม่มีข้อมูลผู้เล่น)
+type Observer interface {
+	OnAttach(serverID string)
+	OnDetach(serverID string)
+	ObserveLine(serverID, line string) bool
+}
+
 type Manager struct {
 	attacher Attacher
 	sender   Sender
+	observer Observer
 
 	mu       sync.Mutex
 	sessions map[string]io.ReadWriteCloser
 }
 
-func NewManager(attacher Attacher, sender Sender) *Manager {
+func NewManager(attacher Attacher, sender Sender, observer Observer) *Manager {
 	return &Manager{
 		attacher: attacher,
 		sender:   sender,
+		observer: observer,
 		sessions: make(map[string]io.ReadWriteCloser),
 	}
 }
@@ -73,6 +84,13 @@ func (m *Manager) Attach(serverID string) error {
 	m.sessions[serverID] = rwc
 	m.mu.Unlock()
 
+	// ต้อง OnAttach ก่อนสตาร์ท pump เสมอ — pump defer notifyDetach ไว้ ถ้า container
+	// ตายทันที (attach ผ่านแต่ EOF เลย) pump จะจบก่อนแล้ว OnDetach วิ่งตอน observer
+	// ยังไม่รู้จัก server นี้ กลายเป็น no-op → state ที่ OnAttach สร้างทีหลังไม่มีใครล้าง
+	// (poll loop ค้างถาวร + รายชื่อผู้เล่นค้างของ session ที่ตายไปแล้ว)
+	if m.observer != nil {
+		m.observer.OnAttach(serverID)
+	}
 	go m.pump(serverID, rwc)
 	log.Printf("console attached: server=%s", serverID)
 	return nil
@@ -94,7 +112,14 @@ func (m *Manager) Detach(serverID string) {
 	m.mu.Unlock()
 	if ok {
 		rwc.Close()
+		m.notifyDetach(serverID)
 		log.Printf("console detached: server=%s", serverID)
+	}
+}
+
+func (m *Manager) notifyDetach(serverID string) {
+	if m.observer != nil {
+		m.observer.OnDetach(serverID)
 	}
 }
 
@@ -111,6 +136,7 @@ func (m *Manager) detachIf(serverID string, rwc io.ReadWriteCloser) {
 	delete(m.sessions, serverID)
 	m.mu.Unlock()
 	rwc.Close()
+	m.notifyDetach(serverID)
 	log.Printf("console detached: server=%s", serverID)
 }
 
@@ -177,6 +203,11 @@ func (m *Manager) pump(serverID string, rwc io.ReadWriteCloser) {
 				// container ตาย/ถูก detach — flush ที่เหลือแล้วจบ session
 				flush()
 				return
+			}
+			// observer อ่านทุกบรรทัดก่อน batch — ที่มันบอกว่าเป็น reply ของคำสั่งตัวเอง
+			// (เช่น `list`/`tps` ที่ยิงเก็บสถานะ) ถูกทิ้งไม่ให้ไปโผล่ใน console ของ user
+			if m.observer != nil && !m.observer.ObserveLine(serverID, line) {
+				continue
 			}
 			batch = append(batch, line)
 			batchBytes += len(line)

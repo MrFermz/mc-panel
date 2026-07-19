@@ -95,24 +95,18 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 	}
 
 	pidsLimit := int64(512)
-	// MemoryMB ของ user = Xmx (heap) — แต่ JVM กินนอก heap อีกมาก
-	// (metaspace, code cache, thread stacks, direct buffers, GC)
-	// วัดจริง: Paper 1.21 heap 1G โดน OOM kill ที่ limit 1.25x ตอน world-gen
-	// เลยเผื่อ max(50%, 768MB) แต่ไม่เกิน 2GB เพื่อไม่ให้เครื่องใหญ่เปลืองเกินเหตุ
-	overheadMB := int64(cfg.MemoryMB) / 2
-	if overheadMB < 768 {
-		overheadMB = 768
-	}
-	if overheadMB > 2048 {
-		overheadMB = 2048
-	}
-	memoryBytes := (int64(cfg.MemoryMB) + overheadMB) * 1024 * 1024
+	memoryBytes := int64(cfg.MemoryMB) * 1024 * 1024
+	heapMB := HeapMB(cfg.MemoryMB)
 
 	config := &container.Config{
 		Image: cfg.Image,
+		// สั่ง launch.sh ตรง ๆ ไม่พึ่ง CMD ของ image — runtime image ที่ agent auto-pull
+		// (eclipse-temurin re-tag) ไม่มี CMD ของเรา entrypoint เลย exec ว่างแล้ว exit 0 ทันที
+		// (เฉพาะ image ที่ build ด้วย make runtime-images ถึงจะมี CMD launch.sh) ตั้งตรงนี้ครอบทั้งสองแบบ
+		Cmd: []string{"/bin/sh", "/mc/.mcpanel/launch.sh"},
 		// HOME=/mc: image hardened ของเราตั้ง HOME ให้แล้ว แต่ base eclipse-temurin ที่ pull มา cache
 		// ไม่ได้ตั้ง — modded server บางตัวเขียน cache ลง $HOME ต้องชี้เข้า /mc ที่ write ได้
-		Env:        []string{fmt.Sprintf("MC_MEMORY_MB=%d", cfg.MemoryMB), "HOME=/mc"},
+		Env:        []string{fmt.Sprintf("MC_MEMORY_MB=%d", heapMB), "HOME=/mc"},
 		User:       "1000:1000",
 		WorkingDir: "/mc",
 		OpenStdin:  true,
@@ -163,7 +157,7 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		}
 		return fmt.Errorf("start container: %w", err)
 	}
-	log.Printf("container started: server=%s image=%s memory_mb=%d host_port=%d", cfg.ID, cfg.Image, cfg.MemoryMB, cfg.Port)
+	log.Printf("container started: server=%s image=%s memory_mb=%d heap_mb=%d host_port=%d", cfg.ID, cfg.Image, cfg.MemoryMB, heapMB, cfg.Port)
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -74,9 +75,30 @@ func (a *API) statsViewFor(s *store.Server) *serverStatsView {
 		NetTxBps:      st.NetTxBps,
 		DiskReadBps:   st.DiskReadBps,
 		DiskWriteBps:  st.DiskWriteBps,
+		StartedAt:     nilIfZero(st.StartedAt),
+		OnlinePlayers: emptyIfNil(st.OnlinePlayers),
+		MaxPlayers:    st.MaxPlayers,
+		TPS:           st.TPS,
 		UpdatedAt:     st.UpdatedAt,
 	}
 }
+
+// nilIfZero แปลง zero time เป็น nil เพื่อให้ JSON เป็น null (agent ไม่รู้เวลาเริ่ม)
+func nilIfZero(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+// emptyIfNil ทำให้ online_players เป็น [] ใน JSON เสมอ ไม่ใช่ null —
+// contract ฝั่ง web คาดว่าเป็น array (ดู docs/api.md)
+func emptyIfNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 
 func canOperate(user *store.User, perm *store.Permission) bool {
 	if user.IsAdmin {
@@ -130,7 +152,7 @@ func (a *API) handleListServers(w http.ResponseWriter, r *http.Request) {
 		err     error
 	)
 	// servers.view_all (และ is_admin) เห็นทุก server; ที่เหลือเห็นเฉพาะที่มี server_permission
-	if hasCapability(user, capViewAllServers) {
+	if hasCapability(user, capServersViewAll) {
 		servers, err = a.st.ListAllServers(r.Context())
 	} else {
 		servers, err = a.st.ListServersForUser(r.Context(), user.ID)

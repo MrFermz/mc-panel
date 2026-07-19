@@ -26,11 +26,15 @@ func IsUniqueViolation(err error) bool {
 }
 
 type User struct {
-	ID                 uuid.UUID
-	Email              string
-	Username           *string
+	ID       uuid.UUID
+	Email    string
+	Username *string
+	// DisplayName เจ้าของบัญชีตั้งเอง — ว่างได้ (ตกไปใช้ username/email ตอนแสดงผล)
+	DisplayName string
+	// AvatarUpdatedAt = nil แปลว่ายังไม่มีรูป (bytes ไม่เคยถูกโหลดมากับ User —
+	// อ่านแยกผ่าน GetUserAvatar เพราะหนักเกินจะติดมาทุก query)
+	AvatarUpdatedAt    *time.Time
 	PasswordHash       string
-	DisplayName        string
 	IsAdmin            bool
 	IsActive           bool
 	MustChangePassword bool
@@ -87,8 +91,10 @@ type Permission struct {
 
 type PermissionWithUser struct {
 	Permission
-	Email       string
-	DisplayName string
+	Email           string
+	Username        *string
+	DisplayName     string
+	AvatarUpdatedAt *time.Time
 }
 
 type Job struct {

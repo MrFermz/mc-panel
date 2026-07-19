@@ -45,7 +45,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       NATS_URL: nats://${NATS_CONTROL_USER}:${NATS_CONTROL_PASSWORD}@nats:4222
       JWT_SECRET: ${JWT_SECRET:?run 'make env' first}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
       NODE_TOKEN: ${NODE_TOKEN}
       # อยู่หลัง caddy ที่ terminate http — ถ้า front ด้วย TLS แล้วให้เปลี่ยนเป็น true
       COOKIE_SECURE: "false"

@@ -42,9 +42,10 @@ JWT_SECRET=$(rand 32)
 # เป็น opaque token (เก็บเป็น SHA-256 ใน DB) — production หลาย node ให้สร้าง node ผ่าน API แทน
 NODE_TOKEN=$(rand 32)
 
-# admin คนแรก — password จะถูก generate ตอน control-plane boot ครั้งแรก
-# แล้วพิมพ์ลง log ครั้งเดียว (docker compose logs control-plane | grep -A3 "INITIAL ADMIN")
-ADMIN_EMAIL=admin@mcpanel.local
+# admin คนแรก — login คือค่านี้ (username-only account; ใส่ email ที่มี "@" ก็ได้ถ้าต้องการ)
+# password จะถูก generate ตอน control-plane boot ครั้งแรก แล้วพิมพ์ลง log ครั้งเดียว
+# (docker compose logs control-plane | grep -A3 "INITIAL ADMIN")
+ADMIN_USERNAME=admin
 
 # path บน host สำหรับข้อมูล MC servers — ต้องเป็น absolute path
 # สำคัญ: path นี้ต้องมองเห็นเหมือนกันทั้งจากใน agent container และจาก docker daemon

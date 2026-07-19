@@ -8,13 +8,16 @@ export type ServerView = "grid" | "list";
 interface SettingsState {
   serverView: ServerView;
   setServerView: (view: ServerView) => void;
-  // sidebar โหมดย่อ (collapsed rail + auto-drawer เมื่อ hover) vs เปิดค้าง (pinned)
+  // sidebar โหมดย่อ (ซ่อนออกนอกจอ + drawer เมื่อ hover ขอบซ้าย) vs เปิดค้าง (pinned)
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
   // หน้า detail: การ์ด live-resources เปิด/ปิด (จำค่าไว้ข้าม visit) — default เปิด
   detailResourcesOpen: boolean;
   setDetailResourcesOpen: (open: boolean) => void;
+  // dashboard overview: server ที่เลือกดูภาพรวมอยู่ (null = ยังไม่เลือก → หน้าใช้ตัวแรก)
+  dashboardServerId: string | null;
+  setDashboardServerId: (id: string | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -29,6 +32,8 @@ export const useSettingsStore = create<SettingsState>()(
       detailResourcesOpen: true,
       setDetailResourcesOpen: (detailResourcesOpen) =>
         set({ detailResourcesOpen }),
+      dashboardServerId: null,
+      setDashboardServerId: (dashboardServerId) => set({ dashboardServerId }),
     }),
     {
       name: "mc_settings",

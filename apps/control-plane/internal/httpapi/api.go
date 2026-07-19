@@ -73,53 +73,68 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.Get("/auth/me", a.handleMe)
 			pr.Post("/auth/change-password", a.handleChangePassword)
 
-			// user directory: authed ทุกคน (ไม่ใช่ users.manage) — owner ใช้เลือก collaborator
+			// profile ของตัวเอง: ไม่ผูก capability — เจ้าของบัญชีแก้ข้อมูลตัวเองได้เสมอ
+			// (เส้นเดียวกับ change-password) และไม่มีทางแตะ user คนอื่นเพราะยึด id จาก session
+			pr.Patch("/auth/me", a.handleUpdateProfile)
+			pr.Put("/auth/me/avatar", a.handleUploadAvatar)
+			pr.Delete("/auth/me/avatar", a.handleDeleteAvatar)
+			// avatar ของ user คนไหนก็อ่านได้เมื่อ login แล้ว (เหมือน /users/directory)
+			pr.Get("/users/{id}/avatar", a.handleGetAvatar)
+
+			// user directory: authed ทุกคน (ไม่ใช่ users.view) — owner ใช้เลือก collaborator
 			pr.Get("/users/directory", a.handleUserDirectory)
 
-			pr.Group(func(um chi.Router) {
-				um.Use(a.requireCap(capManageUsers))
-				um.Get("/users", a.handleListUsers)
-				um.Post("/users", a.handleCreateUser)
-				um.Patch("/users/{id}", a.handleUpdateUser)
-				um.Delete("/users/{id}", a.handleDeleteUser)
-				um.Post("/users/{id}/reset-password", a.handleResetPassword)
-			})
+			// ตารางนี้คือ map "endpoint → capability" ที่เดียวของระบบ —
+			// route ใหม่ทุกเส้นต้องผูก capability ที่นี่ (ดู CLAUDE.md กฎข้อ 3)
+			pr.With(a.requireCap(capUsersView)).Get("/users", a.handleListUsers)
+			pr.With(a.requireCap(capUsersView)).Get("/users/{id}", a.handleGetUser)
+			pr.With(a.requireCap(capUsersCreate)).Post("/users", a.handleCreateUser)
+			pr.With(a.requireCap(capUsersEdit)).Patch("/users/{id}", a.handleUpdateUser)
+			pr.With(a.requireCap(capUsersDelete)).Delete("/users/{id}", a.handleDeleteUser)
+			pr.With(a.requireCap(capUsersResetPassword)).
+				Post("/users/{id}/reset-password", a.handleResetPassword)
 
-			pr.Group(func(nm chi.Router) {
-				nm.Use(a.requireCap(capManageNodes))
-				nm.Get("/nodes", a.handleListNodes)
-				nm.Post("/nodes", a.handleCreateNode)
-				nm.Delete("/nodes/{id}", a.handleDeleteNode)
-			})
+			pr.With(a.requireCap(capNodesView)).Get("/nodes", a.handleListNodes)
+			pr.With(a.requireCap(capNodesCreate)).Post("/nodes", a.handleCreateNode)
+			pr.With(a.requireCap(capNodesDelete)).Delete("/nodes/{id}", a.handleDeleteNode)
 
 			pr.Get("/servers", a.handleListServers)
-			pr.With(a.requireCap(capCreateServers)).Post("/servers", a.handleCreateServer)
-			pr.With(a.requireCap(capCreateServers)).Post("/servers/import", a.handleImportServer)
+			pr.With(a.requireCap(capServersCreate)).Post("/servers", a.handleCreateServer)
+			pr.With(a.requireCap(capServersCreate)).Post("/servers/import", a.handleImportServer)
 			pr.Get("/servers/{id}", a.handleGetServer)
-			pr.Patch("/servers/{id}", a.handleUpdateServer)
-			pr.Delete("/servers/{id}", a.handleDeleteServer)
-			pr.Post("/servers/{id}/actions", a.handleServerAction)
+			pr.With(a.requireCap(capServersEdit)).Patch("/servers/{id}", a.handleUpdateServer)
+			pr.With(a.requireCap(capServersDelete)).Delete("/servers/{id}", a.handleDeleteServer)
+			pr.With(a.requireCap(capServersPower)).Post("/servers/{id}/actions", a.handleServerAction)
 			pr.Get("/servers/{id}/jobs", a.handleListServerJobs)
-			pr.Get("/servers/{id}/console/history", a.handleConsoleHistory)
-			pr.Get("/servers/{id}/permissions", a.handleListPermissions)
-			pr.Post("/servers/{id}/permissions", a.handleUpsertPermission)
-			pr.Delete("/servers/{id}/permissions/{user_id}", a.handleDeletePermission)
+			pr.With(a.requireCap(capConsoleView)).
+				Get("/servers/{id}/console/history", a.handleConsoleHistory)
+			pr.With(a.requireCap(capAccessView)).
+				Get("/servers/{id}/permissions", a.handleListPermissions)
+			pr.With(a.requireCap(capAccessManage)).
+				Post("/servers/{id}/permissions", a.handleUpsertPermission)
+			pr.With(a.requireCap(capAccessManage)).
+				Delete("/servers/{id}/permissions/{user_id}", a.handleDeletePermission)
 
-			pr.Get("/servers/{id}/files", a.handleListFiles)
-			pr.Get("/servers/{id}/files/content", a.handleReadFile)
-			pr.Put("/servers/{id}/files/content", a.handleWriteFile)
-			pr.Post("/servers/{id}/files/dir", a.handleMakeDir)
-			pr.Post("/servers/{id}/files/rename", a.handleRenameFile)
-			pr.Delete("/servers/{id}/files", a.handleDeleteFile)
+			pr.With(a.requireCap(capFilesView)).Get("/servers/{id}/files", a.handleListFiles)
+			pr.With(a.requireCap(capFilesView)).Get("/servers/{id}/files/content", a.handleReadFile)
+			pr.With(a.requireCap(capFilesWrite)).Put("/servers/{id}/files/content", a.handleWriteFile)
+			pr.With(a.requireCap(capFilesWrite)).Post("/servers/{id}/files/dir", a.handleMakeDir)
+			pr.With(a.requireCap(capFilesWrite)).Post("/servers/{id}/files/rename", a.handleRenameFile)
+			pr.With(a.requireCap(capFilesDelete)).Delete("/servers/{id}/files", a.handleDeleteFile)
 
-			pr.Get("/servers/{id}/properties", a.handleGetProperties)
-				pr.Put("/servers/{id}/properties", a.handleUpdateProperties)
+			pr.With(a.requireCap(capSettingsView)).
+				Get("/servers/{id}/properties", a.handleGetProperties)
+			pr.With(a.requireCap(capSettingsEdit)).
+				Put("/servers/{id}/properties", a.handleUpdateProperties)
 
-				pr.Get("/servers/{id}/players", a.handleListPlayers)
-				pr.Post("/servers/{id}/players", a.handleAddPlayer)
-				pr.Delete("/servers/{id}/players/{uuid}", a.handleRemovePlayer)
+			pr.With(a.requireCap(capPlayersView)).Get("/servers/{id}/players", a.handleListPlayers)
+			pr.With(a.requireCap(capPlayersManage)).Post("/servers/{id}/players", a.handleAddPlayer)
+			pr.With(a.requireCap(capPlayersManage)).
+				Delete("/servers/{id}/players/{uuid}", a.handleRemovePlayer)
+			pr.With(a.requireCap(capPlayersModerate)).
+				Post("/servers/{id}/players/action", a.handlePlayerAction)
 
-				pr.Get("/jobs/{id}", a.handleGetJob)
+			pr.Get("/jobs/{id}", a.handleGetJob)
 
 			pr.Get("/meta/server-types", a.handleServerTypes)
 			pr.Get("/meta/versions", a.handleVersions)

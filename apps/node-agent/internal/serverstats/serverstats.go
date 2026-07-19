@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/mc-panel/node-agent/internal/mcstate"
 	"github.com/mc-panel/node-agent/internal/runner"
 	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
 )
@@ -25,6 +26,12 @@ type Statter interface {
 	Stats(id string) (runner.ResourceStats, error)
 }
 
+// Snapshotter คือส่วนของ mcstate.Tracker ที่ reporter ต้องใช้ — สถานะในเกมที่อ่านจาก console
+// (nil ได้: ไม่มี tracker = ส่ง stats เฉพาะ resource เหมือนเดิม)
+type Snapshotter interface {
+	Snapshot(serverID string) mcstate.Snapshot
+}
+
 // ioSample เก็บ counter สะสมของรอบก่อน เพื่อคำนวณ rate/sec จาก delta ต่อ container
 type ioSample struct {
 	rx, tx, read, write uint64
@@ -32,7 +39,7 @@ type ioSample struct {
 }
 
 // Run ค้างจน ctx ถูกยกเลิก
-func Run(ctx context.Context, cli *client.Client, statter Statter, sender Sender) {
+func Run(ctx context.Context, cli *client.Client, statter Statter, sender Sender, state Snapshotter) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	// prev per-container — จำ counter สะสมรอบก่อนไว้แปลงเป็น rate (state อยู่ที่ agent เท่านั้น)
@@ -42,12 +49,12 @@ func Run(ctx context.Context, cli *client.Client, statter Statter, sender Sender
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			report(ctx, cli, statter, sender, prev)
+			report(ctx, cli, statter, sender, state, prev)
 		}
 	}
 }
 
-func report(ctx context.Context, cli *client.Client, statter Statter, sender Sender, prev map[string]ioSample) {
+func report(ctx context.Context, cli *client.Client, statter Statter, sender Sender, state Snapshotter, prev map[string]ioSample) {
 	// ContainerList (ไม่ตั้ง All) คืนเฉพาะ container ที่รันอยู่ — ตรงกับที่ heartbeat ใช้ collect
 	f := filters.NewArgs(filters.Arg("label", runner.LabelManagedBy+"="+runner.LabelManagedByValue))
 	containers, err := cli.ContainerList(ctx, container.ListOptions{Filters: f})
@@ -81,6 +88,11 @@ func report(ctx context.Context, cli *client.Client, statter Statter, sender Sen
 			}
 		}
 		prev[id] = cur
+		// สถานะในเกมมาจาก console (คนละแหล่งกับ container stats) — ไม่มี tracker ก็ส่งเป็นค่าว่าง
+		var snap mcstate.Snapshot
+		if state != nil {
+			snap = state.Snapshot(id)
+		}
 		if err := sender.SendServerStats(&agentv1.ServerStats{
 			ServerId:      id,
 			CpuPercent:    st.CPUPercent,
@@ -90,6 +102,12 @@ func report(ctx context.Context, cli *client.Client, statter Statter, sender Sen
 			NetTxBps:      netTx,
 			DiskReadBps:   dRead,
 			DiskWriteBps:  dWrite,
+			// agent สร้าง container ใหม่ทุกครั้งที่ start (ลบทิ้งตอน stop/crash)
+			// Created จึงเท่ากับเวลาที่เริ่มรันรอบนี้ — ไม่ต้อง inspect เพิ่มทุก 5 วิ
+			StartedAtUnix: c.Created,
+			OnlinePlayers: snap.Online,
+			MaxPlayers:    int32(snap.MaxPlayers),
+			Tps:           snap.TPS,
 		}); err != nil {
 			// stream หลุด — ข้ามทั้งรอบ รอบถัดไปมาใหม่
 			return

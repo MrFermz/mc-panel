@@ -84,6 +84,16 @@ message ServerStats {
   double net_tx_bps = 6;       // container network transmit rate
   double disk_read_bps = 7;    // container block I/O read rate
   double disk_write_bps = 8;   // container block I/O write rate
+  // เวลาที่ container ของรอบนี้ถูกสร้าง (unix seconds) ใช้คำนวณ uptime ฝั่ง UI —
+  // agent สร้าง container ใหม่ทุกครั้งที่ start และลบทิ้งตอน stop/crash ค่านี้จึงเท่ากับเวลาที่เริ่มรัน
+  // 0 = ไม่รู้
+  int64 started_at_unix = 9;
+  // ผู้เล่นที่ออนไลน์ ณ ตอนนี้ — MC ไม่มี API บอก agent จึงอ่านจาก console เอง
+  // (คำสั่ง `list` ตอน attach/resync เป็นค่าตั้งต้น + บรรทัด joined/left the game ระหว่างนั้น)
+  repeated string online_players = 10;
+  int32 max_players = 11; // จาก reply ของ `list` — 0 = ยังไม่ได้ resync รอบแรก
+  // TPS จากคำสั่ง `tps` ของ Paper/Spigot — 0 = server type นี้ไม่มีคำสั่งนี้ (vanilla/fabric/forge)
+  double tps = 12;
 }
 
 // ---------- control plane -> agent ----------

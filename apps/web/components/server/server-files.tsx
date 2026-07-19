@@ -51,7 +51,7 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { cn } from "@/lib/utils";
 
-// CodeMirror แตะ window/DOM ตั้งแต่ import — ปิด SSR กัน hydration mismatch (แบบเดียวกับ ConsoleTab)
+// CodeMirror แตะ window/DOM ตั้งแต่ import — ปิด SSR กัน hydration mismatch (แบบเดียวกับ ServerConsole)
 const CodeEditor = dynamic(() => import("@/components/server/code-editor"), {
   ssr: false,
   loading: () => <Skeleton className="h-80 w-full" />,
@@ -93,7 +93,7 @@ function baseName(path: string): string {
 
 type NameMode = "newFolder" | "newFile" | "rename";
 
-export default function FilesTab({ serverId }: { serverId: string }) {
+export default function ServerFiles({ serverId }: { serverId: string }) {
   const t = useT();
   const queryClient = useQueryClient();
 

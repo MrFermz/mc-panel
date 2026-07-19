@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,6 +77,10 @@ type mergedPlayerView struct {
 	Seen        bool   `json:"seen"`
 	Op          bool   `json:"op"`
 	Banned      bool   `json:"banned"`
+	// Online มาจาก serverstats cache (agent อ่านจาก console) ไม่ใช่ไฟล์ — ไม่มี I/O เพิ่ม
+	Online bool `json:"online"`
+	// PlaytimeSeconds จาก world stats ของ MC — 0 = ไม่รู้ (ยังไม่เคยเล่น/อ่านไม่ได้/เกิน cap)
+	PlaytimeSeconds int64 `json:"playtime_seconds"`
 }
 
 // normUUID ทำ key รวม: ตัด dash + lowercase (ไฟล์ MC ใช้ dashed, DB ก็ dashed แต่กันเคสไม่ตรง)
@@ -132,14 +138,19 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 
 	whitelistEnabled := false
 	offline := false
+	levelName := defaultLevelName
 
-	// server.properties → white-list flag (best-effort)
+	// server.properties → white-list flag + level-name (ใช้หา world stats ต่อ) best-effort
 	if content, found, off, ferr := a.readServerFile(r.Context(), srv, propertiesFileName); off {
 		offline = true
 	} else if ferr != nil {
 		a.log.Warn("players: read properties failed", "server_id", srv.ID, "error", ferr)
 	} else if found {
-		whitelistEnabled = parseProperties(string(content))["white-list"] == "true"
+		props := parseProperties(string(content))
+		whitelistEnabled = props["white-list"] == "true"
+		if lv := strings.TrimSpace(props["level-name"]); lv != "" && isSafeLevelName(lv) {
+			levelName = lv
+		}
 	}
 
 	// อ่านไฟล์ผู้เล่น 3 ตัวเฉพาะเมื่อ node ยัง online — ไม่งั้น degrade เหลือ DB whitelist
@@ -166,9 +177,33 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// ผู้เล่นที่ออนไลน์ — match ด้วยชื่อ (console บอกแค่ username ไม่มี uuid)
+	if st, ok := a.stats.Get(srv.ID); ok && srv.Status == "running" {
+		byName := make(map[string]*mergedPlayerView, len(acc))
+		for _, p := range acc {
+			byName[strings.ToLower(p.Username)] = p
+		}
+		for _, name := range st.OnlinePlayers {
+			if p, found := byName[strings.ToLower(name)]; found {
+				p.Online = true
+				continue
+			}
+			// อยู่ในเกมแต่ไม่โผล่ในไฟล์ไหนเลย — usercache.json flush ช้ากว่าคนเพิ่ง join
+			// ถ้าไม่ใส่เข้าไป คนที่กำลังเล่นอยู่จะหายจากรายชื่อทั้งที่เห็นใน dashboard
+			// (ไม่มี uuid ให้ — UI key ด้วย uuid ก่อนแล้ว fallback username)
+			acc["online:"+strings.ToLower(name)] = &mergedPlayerView{
+				Username: name,
+				Online:   true,
+			}
+		}
+	}
+
 	players := make([]mergedPlayerView, 0, len(acc))
 	for _, p := range acc {
 		players = append(players, *p)
+	}
+	if !offline {
+		a.fillPlaytimes(r.Context(), srv, levelName, players)
 	}
 	sort.Slice(players, func(i, j int) bool {
 		return strings.ToLower(players[i].Username) < strings.ToLower(players[j].Username)
@@ -349,4 +384,151 @@ func (a *API) reloadWhitelistIfRunning(srv *store.Server) {
 	if err := a.hub.SendConsoleInput(srv.NodeID, srv.ID, "whitelist reload"); err != nil {
 		a.log.Warn("whitelist reload skipped", "server_id", srv.ID, "error", err)
 	}
+}
+
+// ---------- playtime (world stats ของ MC) ----------
+
+const (
+	defaultLevelName = "world"
+	// playtimeMaxPlayers จำกัดจำนวนไฟล์ที่อ่านต่อ 1 request — stats เป็นไฟล์ละคน
+	// server ที่มีผู้เล่นเยอะจะกลายเป็น N round-trip ต่อการเปิดหน้า จึงตัดที่เพดานนี้
+	// (เกินเพดาน = playtime_seconds 0 → UI โชว์ "—" ไม่ใช่ค่าผิด)
+	playtimeMaxPlayers = 50
+	playtimeWorkers    = 8
+	// ticks ต่อวินาทีของ MC — stat เก็บเป็น tick
+	ticksPerSecond = 20
+)
+
+// isSafeLevelName กัน level-name จาก server.properties พาไปนอก jail (ค่ามาจากไฟล์ที่ user แก้ได้)
+// agent มี SafeJoin อยู่แล้ว แต่ปฏิเสธตั้งแต่ต้นทางชัดกว่า
+func isSafeLevelName(s string) bool {
+	if s == "" || strings.Contains(s, "/") || strings.Contains(s, `\`) || strings.Contains(s, "..") {
+		return false
+	}
+	return true
+}
+
+// mcStatsFile = shape ของ world/stats/{uuid}.json เท่าที่ต้องใช้
+// play_time (1.17+) กับ play_one_minute (เวอร์ชันเก่า) เก็บ tick เหมือนกัน คนละ key
+type mcStatsFile struct {
+	Stats struct {
+		Custom map[string]int64 `json:"minecraft:custom"`
+	} `json:"stats"`
+}
+
+// fillPlaytimes อ่าน world/stats/{uuid}.json ของแต่ละคนแบบขนาน (best-effort)
+// อ่านไม่ได้/ไม่มีไฟล์ = ปล่อย 0 ไม่ทำให้ทั้ง request ล่ม
+func (a *API) fillPlaytimes(ctx context.Context, srv *store.Server, levelName string, players []mergedPlayerView) {
+	targets := make([]int, 0, len(players))
+	for i := range players {
+		// ไม่เคยเข้าเซิร์ฟเวอร์ = ไม่มีไฟล์ stats แน่นอน ไม่ต้องยิงถาม
+		if players[i].Seen && players[i].UUID != "" {
+			targets = append(targets, i)
+		}
+	}
+	if len(targets) > playtimeMaxPlayers {
+		a.log.Info("players: playtime lookup capped", "server_id", srv.ID,
+			"players", len(targets), "cap", playtimeMaxPlayers)
+		targets = targets[:playtimeMaxPlayers]
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, playtimeWorkers)
+	for _, idx := range targets {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			players[i].PlaytimeSeconds = a.readPlaytime(ctx, srv, levelName, players[i].UUID)
+		}(idx)
+	}
+	wg.Wait()
+}
+
+func (a *API) readPlaytime(ctx context.Context, srv *store.Server, levelName, playerUUID string) int64 {
+	// uuid มาจากไฟล์ที่ user ที่มีสิทธิ์ file manager เขียนเองได้ (usercache/ops/banned) —
+	// displayUUID คืนค่าดิบเมื่อ parse ไม่ผ่าน จึงต้องบังคับให้เป็น uuid จริงก่อนเอาไปต่อเป็น path
+	// (agent มี SafeJoin กันอยู่แล้ว แต่ห้ามพึ่งชั้นเดียว — เหมือนที่ทำกับ level-name)
+	parsed, err := uuid.Parse(strings.TrimSpace(playerUUID))
+	if err != nil {
+		return 0
+	}
+	path := levelName + "/stats/" + parsed.String() + ".json"
+	content, found, offline, err := a.readServerFile(ctx, srv, path)
+	if offline || err != nil || !found || len(content) == 0 {
+		return 0
+	}
+	var f mcStatsFile
+	if err := json.Unmarshal(content, &f); err != nil {
+		return 0
+	}
+	ticks := f.Stats.Custom["minecraft:play_time"]
+	if ticks == 0 {
+		ticks = f.Stats.Custom["minecraft:play_one_minute"]
+	}
+	return ticks / ticksPerSecond
+}
+
+// ---------- player action (op/deop/kick/ban/pardon) ----------
+
+// playerCommands map action -> คำสั่ง console ของ MC (allow-list — ห้ามรับคำสั่งดิบจาก client)
+var playerCommands = map[string]string{
+	"op":     "op",
+	"deop":   "deop",
+	"kick":   "kick",
+	"ban":    "ban",
+	"pardon": "pardon",
+}
+
+// safeUsernameRe — ชื่อที่จะถูกต่อเข้าไปในคำสั่ง console ต้องไม่มี whitespace/newline
+// ไม่งั้นเป็น command injection เข้า server console ได้ตรง ๆ (WriteInput ต่อ "\n" ท้ายคำสั่ง)
+var safeUsernameRe = regexp.MustCompile(`^[A-Za-z0-9_.*-]{1,32}$`)
+
+// handlePlayerAction ส่งคำสั่งจัดการผู้เล่นเข้า console ของ server
+// สิทธิ์เท่าการจัดการผู้เล่น/ไฟล์ (loadServerForFiles) — ต้อง running เพราะสั่งผ่าน stdin
+func (a *API) handlePlayerAction(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	srv, ok := a.loadServerForFiles(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Action   string `json:"action"`
+		Username string `json:"username"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	cmd, known := playerCommands[req.Action]
+	if !known {
+		writeError(w, http.StatusBadRequest, "invalid_action", "unsupported player action")
+		return
+	}
+	username := strings.TrimSpace(req.Username)
+	if !safeUsernameRe.MatchString(username) {
+		writeError(w, http.StatusBadRequest, "invalid_username", "invalid minecraft username")
+		return
+	}
+	if srv.Status != "running" {
+		writeError(w, http.StatusConflict, "invalid_state", "server must be running")
+		return
+	}
+
+	if err := a.hub.SendConsoleInput(srv.NodeID, srv.ID, cmd+" "+username); err != nil {
+		a.log.Warn("player action failed", "server_id", srv.ID, "action", req.Action, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "node_offline", "the node is not reachable")
+		return
+	}
+
+	a.audit(r, &user.ID, &srv.ID, "player_action", map[string]any{
+		"action": req.Action, "username": username,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

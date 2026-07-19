@@ -133,7 +133,9 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 		"permission": permissionView{
 			UserID:          target.ID,
 			Email:           target.Email,
+			Username:        target.Username,
 			DisplayName:     target.DisplayName,
+			AvatarURL:       avatarURL(target.ID, target.AvatarUpdatedAt),
 			Role:            updated.Role,
 			CanConsoleWrite: updated.CanConsoleWrite,
 			CanManageFiles:  updated.CanManageFiles,

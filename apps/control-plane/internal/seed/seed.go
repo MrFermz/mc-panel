@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -13,14 +14,23 @@ import (
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
-func Run(ctx context.Context, st *store.Store, log *slog.Logger, adminEmail, nodeToken string) error {
-	if err := seedAdmin(ctx, st, log, adminEmail); err != nil {
+func Run(ctx context.Context, st *store.Store, log *slog.Logger, adminIdentifier, nodeToken string) error {
+	if err := seedAdmin(ctx, st, log, adminIdentifier); err != nil {
 		return err
 	}
 	return seedLocalNode(ctx, st, log, nodeToken)
 }
 
-func seedAdmin(ctx context.Context, st *store.Store, log *slog.Logger, adminEmail string) error {
+// AdminCreateArgs แปลง identifier (username หรือ email) เป็น args ของ store.CreateUser —
+// มี "@" = email account, ไม่มี = username-only account (email เป็น NULL) ใช้ร่วมกันทั้ง seed + reset
+func AdminCreateArgs(identifier string) (email string, username *string) {
+	if strings.Contains(identifier, "@") {
+		return identifier, nil
+	}
+	return "", &identifier
+}
+
+func seedAdmin(ctx context.Context, st *store.Store, log *slog.Logger, adminIdentifier string) error {
 	n, err := st.CountUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("count users: %w", err)
@@ -37,7 +47,8 @@ func seedAdmin(ctx context.Context, st *store.Store, log *slog.Logger, adminEmai
 	if err != nil {
 		return fmt.Errorf("hash admin password: %w", err)
 	}
-	u, err := st.CreateUser(ctx, adminEmail, nil, hash, "Admin", true, nil)
+	email, username := AdminCreateArgs(adminIdentifier)
+	u, err := st.CreateUser(ctx, email, username, hash, true, nil)
 	if err != nil {
 		return fmt.Errorf("create initial admin: %w", err)
 	}
@@ -47,12 +58,12 @@ func seedAdmin(ctx context.Context, st *store.Store, log *slog.Logger, adminEmai
 	fmt.Fprintf(os.Stderr,
 		"\n==================================================\n"+
 			"INITIAL ADMIN credentials (shown only once)\n"+
-			"  email:    %s\n"+
+			"  login:    %s\n"+
 			"  password: %s\n"+
 			"Save this password now — it will NOT be shown again.\n"+
 			"==================================================\n\n",
-		u.Email, password)
-	log.Info("initial admin created", "email", u.Email, "user_id", u.ID)
+		adminIdentifier, password)
+	log.Info("initial admin created", "login", adminIdentifier, "user_id", u.ID)
 	return nil
 }
 

@@ -201,6 +201,31 @@ export interface ServerStats {
      * @generated from protobuf field: double disk_write_bps = 8
      */
     diskWriteBps: number; // container block I/O write rate
+    /**
+     * เวลาที่ container ของรอบนี้ถูกสร้าง (unix seconds) ใช้คำนวณ uptime ฝั่ง UI —
+     * agent สร้าง container ใหม่ทุกครั้งที่ start และลบทิ้งตอน stop/crash ค่านี้จึงเท่ากับเวลาที่เริ่มรัน
+     * 0 = ไม่รู้
+     *
+     * @generated from protobuf field: int64 started_at_unix = 9
+     */
+    startedAtUnix: bigint;
+    /**
+     * ผู้เล่นที่ออนไลน์ ณ ตอนนี้ — MC ไม่มี API บอก agent จึงอ่านจาก console เอง
+     * (คำสั่ง `list` ตอน attach/resync เป็นค่าตั้งต้น + บรรทัด joined/left the game ระหว่างนั้น)
+     *
+     * @generated from protobuf field: repeated string online_players = 10
+     */
+    onlinePlayers: string[];
+    /**
+     * @generated from protobuf field: int32 max_players = 11
+     */
+    maxPlayers: number; // จาก reply ของ `list` — 0 = ยังไม่ได้ resync รอบแรก
+    /**
+     * TPS จากคำสั่ง `tps` ของ Paper/Spigot — 0 = server type นี้ไม่มีคำสั่งนี้ (vanilla/fabric/forge)
+     *
+     * @generated from protobuf field: double tps = 12
+     */
+    tps: number;
 }
 // ---------- control plane -> agent ----------
 
@@ -904,7 +929,11 @@ class ServerStats$Type extends MessageType<ServerStats> {
             { no: 5, name: "net_rx_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
             { no: 6, name: "net_tx_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
             { no: 7, name: "disk_read_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
-            { no: 8, name: "disk_write_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ }
+            { no: 8, name: "disk_write_bps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 9, name: "started_at_unix", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
+            { no: 10, name: "online_players", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 11, name: "max_players", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
+            { no: 12, name: "tps", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ }
         ]);
     }
     create(value?: PartialMessage<ServerStats>): ServerStats {
@@ -917,6 +946,10 @@ class ServerStats$Type extends MessageType<ServerStats> {
         message.netTxBps = 0;
         message.diskReadBps = 0;
         message.diskWriteBps = 0;
+        message.startedAtUnix = 0n;
+        message.onlinePlayers = [];
+        message.maxPlayers = 0;
+        message.tps = 0;
         if (value !== undefined)
             reflectionMergePartial<ServerStats>(this, message, value);
         return message;
@@ -949,6 +982,18 @@ class ServerStats$Type extends MessageType<ServerStats> {
                     break;
                 case /* double disk_write_bps */ 8:
                     message.diskWriteBps = reader.double();
+                    break;
+                case /* int64 started_at_unix */ 9:
+                    message.startedAtUnix = reader.int64().toBigInt();
+                    break;
+                case /* repeated string online_players */ 10:
+                    message.onlinePlayers.push(reader.string());
+                    break;
+                case /* int32 max_players */ 11:
+                    message.maxPlayers = reader.int32();
+                    break;
+                case /* double tps */ 12:
+                    message.tps = reader.double();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -986,6 +1031,18 @@ class ServerStats$Type extends MessageType<ServerStats> {
         /* double disk_write_bps = 8; */
         if (message.diskWriteBps !== 0)
             writer.tag(8, WireType.Bit64).double(message.diskWriteBps);
+        /* int64 started_at_unix = 9; */
+        if (message.startedAtUnix !== 0n)
+            writer.tag(9, WireType.Varint).int64(message.startedAtUnix);
+        /* repeated string online_players = 10; */
+        for (let i = 0; i < message.onlinePlayers.length; i++)
+            writer.tag(10, WireType.LengthDelimited).string(message.onlinePlayers[i]);
+        /* int32 max_players = 11; */
+        if (message.maxPlayers !== 0)
+            writer.tag(11, WireType.Varint).int32(message.maxPlayers);
+        /* double tps = 12; */
+        if (message.tps !== 0)
+            writer.tag(12, WireType.Bit64).double(message.tps);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

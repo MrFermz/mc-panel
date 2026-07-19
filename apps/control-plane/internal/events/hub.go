@@ -1,5 +1,5 @@
 // Package events เป็น fan-out realtime ฝั่ง browser (WS /ws/events) — push
-// server_status/server_stats/node_stats/server_jobs จาก hook ใน agenthub/jobs
+// server_status/server_stats/node_stats/server_jobs/job_update จาก hook ใน agenthub/jobs
 // ไปหน้าเว็บ เพื่อเลิก poll REST. คนละ hub กับ console (console เป็น per-server
 // stream + ring history; อันนี้เป็น panel-wide event ที่ filter ต่อ subscriber
 // ตามสิทธิ์). ห้าม import httpapi เพื่อกัน import cycle — payload struct นิยามเอง
@@ -24,8 +24,12 @@ type ServerStatsPayload struct {
 	NetRxBps      float64   `json:"net_rx_bps"`
 	NetTxBps      float64   `json:"net_tx_bps"`
 	DiskReadBps   float64   `json:"disk_read_bps"`
-	DiskWriteBps  float64   `json:"disk_write_bps"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	DiskWriteBps  float64    `json:"disk_write_bps"`
+	StartedAt     *time.Time `json:"started_at"`
+	OnlinePlayers []string   `json:"online_players"`
+	MaxPlayers    int        `json:"max_players"`
+	TPS           float64    `json:"tps"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // NodePayload มิเรอร์ httpapi.nodeView field-for-field (หนึ่ง item ของ GET /api/nodes)
@@ -88,6 +92,22 @@ type serverJobsMsg struct {
 	ServerID uuid.UUID `json:"server_id"`
 }
 
+// jobUpdateMsg = ความคืบหน้าของ lifecycle job ตัวหนึ่ง (start/stop/kill/restart/create/
+// import/delete) ตั้งแต่ dispatch จนจบ — ต่างจาก server_jobs ที่บอกแค่ "list เปลี่ยน
+// ไป refetch เอง" อันนี้ carry ผลลัพธ์จริงรวม error ให้ UI แจ้ง user ได้ทันทีโดยไม่ต้อง
+// refetch. มี error text อยู่ในนั้นจึงต้อง fan-out แบบ filter ตามสิทธิ์เสมอ
+type jobUpdateMsg struct {
+	Type     string    `json:"type"`
+	ServerID uuid.UUID `json:"server_id"`
+	JobID    uuid.UUID `json:"job_id"`
+	JobType  string    `json:"job_type"`
+	Status   string    `json:"status"`
+	Error    string    `json:"error"`
+	// Restart = job นี้เป็นขา stop ของ restart (ขา start ตามมาทีหลังเป็นคนละ job) —
+	// web ใช้กันไม่ให้ขึ้น "stopped สำเร็จ" กลางคัน restart
+	Restart bool `json:"restart"`
+}
+
 // serverListMsg = server_added/server_removed — แจ้ง browser ว่า list ของ server
 // เปลี่ยน (create/import/delete) ให้ refetch ["servers"]. carry แค่ server_id จึง
 // broadcast แบบ unfiltered ได้ (ไม่มีข้อมูลรั่ว — refetch ฝั่ง web เช็คสิทธิ์เอง)
@@ -106,7 +126,7 @@ type subscriber struct {
 	ch chan json.RawMessage
 	// seeAllServers: is_admin หรือ servers.view_all → เห็น server event ทุกตัว
 	seeAllServers bool
-	// seeNodes: is_admin หรือ nodes.manage → เห็น node_stats
+	// seeNodes: is_admin หรือ nodes.view → เห็น node_stats
 	seeNodes bool
 
 	// allowed คือ set ของ server ที่ subscriber นี้เข้าถึงได้ (owner/permission)
@@ -172,6 +192,23 @@ func (h *Hub) ServerStats(serverID uuid.UUID, stat *ServerStatsPayload) {
 
 func (h *Hub) ServerStatus(serverID uuid.UUID, status string) {
 	data, err := json.Marshal(serverStatusMsg{Type: "server_status", ServerID: serverID, Status: status})
+	if err != nil {
+		return
+	}
+	h.fanoutServer(serverID, data)
+}
+
+// JobUpdate push สถานะล่าสุดของ job หนึ่งตัว (pending/running/succeeded/failed)
+func (h *Hub) JobUpdate(serverID, jobID uuid.UUID, jobType, status, errMsg string, restart bool) {
+	data, err := json.Marshal(jobUpdateMsg{
+		Type:     "job_update",
+		ServerID: serverID,
+		JobID:    jobID,
+		JobType:  jobType,
+		Status:   status,
+		Error:    errMsg,
+		Restart:  restart,
+	})
 	if err != nil {
 		return
 	}

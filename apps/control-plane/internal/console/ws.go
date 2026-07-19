@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,6 +18,13 @@ import (
 
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/store"
+)
+
+// capability key ที่กำหนดสิทธิ์คอนโซล — สะกดให้ตรง httpapi.capabilities
+// (นิยามซ้ำที่นี่แทน import httpapi เพื่อกัน import cycle)
+const (
+	capConsoleView  = "console.view"
+	capConsoleWrite = "console.write"
 )
 
 // InputSender ตัดวงจร import กับ agenthub — agenthub เป็นคน implement
@@ -89,6 +97,11 @@ func (h *WSHandler) HandleConsole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !user.IsAdmin {
+		// global capability ก่อน แล้วค่อยสิทธิ์ต่อ server (ต้องผ่านทั้งคู่)
+		if !slices.Contains(user.Capabilities, capConsoleView) {
+			writeErr(w, http.StatusForbidden, "forbidden", "insufficient capability")
+			return
+		}
 		if _, err := h.Store.GetPermission(r.Context(), user.ID, srv.ID); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeErr(w, http.StatusForbidden, "forbidden", "no access to this server")
@@ -192,6 +205,17 @@ func (h *WSHandler) handleInput(ctx context.Context, user *store.User, srv *stor
 	// เช็คสิทธิ์เขียนใหม่จาก DB ทุก message — สิทธิ์ที่ถูกถอดระหว่าง session
 	// ต้องมีผลทันที ไม่ใช่รอเปิด connection ใหม่
 	if !user.IsAdmin {
+		// โหลด capability ใหม่ด้วย — ค่าใน user เป็น snapshot ตอนเปิด connection
+		fresh, err := h.Store.GetUserByID(ctx, user.ID)
+		if err != nil {
+			h.Log.Error("ws reload user failed", "error", err)
+			sendErr("internal_error", "internal error")
+			return
+		}
+		if !fresh.IsAdmin && !slices.Contains(fresh.Capabilities, capConsoleWrite) {
+			sendErr("forbidden", "insufficient capability")
+			return
+		}
 		perm, err := h.Store.GetPermission(ctx, user.ID, srv.ID)
 		if errors.Is(err, store.ErrNotFound) {
 			sendErr("forbidden", "no access to this server")

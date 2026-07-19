@@ -1,0 +1,103 @@
+# ============================================================
+# mc-panel — dev override: รัน service หลักใน container พร้อม hot reload
+# ใช้ซ้อนบน docker-compose.dev.yml (infra) — เปิดด้วย `make dev`
+#   docker compose -f docker-compose.dev.yml -f docker-compose.dev.app.yml up
+#
+# ต่างจาก `make up` (full/prod): mount source เข้า container แล้ว watch+rebuild อัตโนมัติ
+#   - Go (control-plane/node-agent): air (github.com/air-verse/air) rebuild เมื่อ .go เปลี่ยน
+#   - web: next dev
+# topology จงใจให้เหมือน `make run-*` (dev นอก docker): browser -> web :3000, control-plane :8080,
+# ไม่มี Caddy คั่น จึงใช้ .env.development (NEXT_PUBLIC_WS_BASE) + cookie/WS ได้เหมือนเดิมเป๊ะ
+# ทุก published port bind 127.0.0.1 เท่านั้น (กฎเดียวกับ dev infra — ห้าม 0.0.0.0)
+# GOWORK=off + repo root mount ที่ /src ให้ replace ../../packages/proto ทำงานเหมือน docker build จริง
+# ============================================================
+name: mcpanel-dev
+
+services:
+  control-plane:
+    image: golang:1.24-alpine
+    restart: unless-stopped
+    working_dir: /src/apps/control-plane
+    command: ["go", "run", "github.com/air-verse/air@v1.62.0", "-c", "/src/infra/dev/.air.control-plane.toml"]
+    environment:
+      HTTP_ADDR: ":8080"
+      GRPC_ADDR: ":9090"
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      NATS_URL: nats://${NATS_CONTROL_USER}:${NATS_CONTROL_PASSWORD}@nats:4222
+      JWT_SECRET: ${JWT_SECRET:?run 'make env' first}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      NODE_TOKEN: ${NODE_TOKEN}
+      COOKIE_SECURE: "false"
+      ALLOWED_ORIGINS: http://localhost:3000
+      # dev รันตรงไม่มี Caddy หน้า → เชื่อ RemoteAddr ตรง ๆ (ดู comment run-control-plane ใน Makefile)
+      TRUSTED_PROXY_COUNT: "0"
+      GOWORK: "off"
+      GOCACHE: /gocache
+    volumes:
+      - ../:/src
+      - devgomod:/go/pkg/mod
+      - devgobuild:/gocache
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      nats:
+        condition: service_started
+
+  node-agent:
+    image: golang:1.24-alpine
+    restart: unless-stopped
+    working_dir: /src/apps/node-agent
+    command: ["go", "run", "github.com/air-verse/air@v1.62.0", "-c", "/src/infra/dev/.air.node-agent.toml"]
+    environment:
+      AGENT_TOKEN: ${NODE_TOKEN}
+      CONTROL_PLANE_GRPC: control-plane:9090
+      NATS_URL: nats://${NATS_AGENT_USER}:${NATS_AGENT_PASSWORD}@nats:4222
+      MC_DATA_DIR: ${MC_DATA_DIR}
+      MC_NETWORK: mcpanel-servers
+      MC_RUNTIME_IMAGE_PREFIX: mcpanel/mc-runtime
+      GOWORK: "off"
+      GOCACHE: /gocache
+    volumes:
+      - ../:/src
+      - devgomod:/go/pkg/mod
+      - devgobuild:/gocache
+      # agent สร้าง sibling container ผ่าน docker daemon ของ host (attack surface ใหญ่สุด — ดู architecture.md)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # ต้อง mount path เดียวกันทั้งสองฝั่ง เพราะ agent สั่ง bind mount ให้ MC container (daemon มองจาก host)
+      - ${MC_DATA_DIR:?run 'make env' first}:${MC_DATA_DIR}
+    depends_on:
+      control-plane:
+        condition: service_started
+
+  web:
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command: ["sh", "-c", "corepack enable pnpm && pnpm install --frozen-lockfile && pnpm exec next dev -H 0.0.0.0 -p 3000"]
+    environment:
+      # Next server-side rewrite /api,/healthz -> control-plane (ดู apps/web/next.config.ts)
+      API_PROXY_TARGET: http://control-plane:8080
+      NODE_ENV: development
+    volumes:
+      - ../apps/web:/app
+      # แยก node_modules/.next/pnpm-store ออกจาก bind mount (กัน artifact ของ host ปน + ให้ install เร็วขึ้น)
+      - devwebmodules:/app/node_modules
+      - devwebnext:/app/.next
+      - devpnpmstore:/root/.local/share/pnpm
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      control-plane:
+        condition: service_started
+
+volumes:
+  devgomod:
+  devgobuild:
+  devwebmodules:
+  devwebnext:
+  devpnpmstore:

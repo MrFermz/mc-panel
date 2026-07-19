@@ -9,6 +9,7 @@ import {
   playersResponseSchema,
   serverPropertiesResponseSchema,
   userDirectoryResponseSchema,
+  userResponseSchema,
   type AddPlayerResponse,
   type CreateServerResponse,
   type FileContentResponse,
@@ -16,6 +17,7 @@ import {
   type PlayersResponse,
   type ServerPropertiesResponse,
   type UserDirectoryResponse,
+  type UserResponse,
 } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -60,7 +62,10 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
     credentials: "same-origin",
     ...init,
     headers: {
-      ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      // FormData ต้องปล่อยให้ browser ใส่ multipart boundary เอง — set เองแล้ว parse ฝั่ง server พัง
+      ...(init?.body !== undefined && !(init.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...init?.headers,
     },
   });
@@ -271,11 +276,46 @@ export function addPlayer(
   );
 }
 
+// action ผ่าน console ของ server (op/deop/kick/ban/pardon) — ต้อง running
+export function playerAction(
+  serverId: string,
+  action: "op" | "deop" | "kick" | "ban" | "pardon",
+  username: string,
+): Promise<void> {
+  return apiSendVoid("POST", `/api/servers/${serverId}/players/action`, {
+    action,
+    username,
+  });
+}
+
 export function removePlayer(serverId: string, uuid: string): Promise<void> {
   return apiSendVoid(
     "DELETE",
     `/api/servers/${serverId}/players/${encodeURIComponent(uuid)}`,
   );
+}
+
+// ---------- profile ของตัวเอง (ไม่ต้องมี capability) ----------
+
+export function updateProfile(displayName: string): Promise<UserResponse> {
+  return apiSend(
+    "PATCH",
+    "/api/auth/me",
+    { display_name: displayName },
+    userResponseSchema,
+  );
+}
+
+export function uploadAvatar(file: File): Promise<UserResponse> {
+  const form = new FormData();
+  form.append("avatar", file);
+  return request("/api/auth/me/avatar", { method: "PUT", body: form }).then(
+    (body) => userResponseSchema.parse(body),
+  );
+}
+
+export function deleteAvatar(): Promise<UserResponse> {
+  return apiSend("DELETE", "/api/auth/me/avatar", undefined, userResponseSchema);
 }
 
 // ---------- users ----------

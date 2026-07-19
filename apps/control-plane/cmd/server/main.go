@@ -45,7 +45,7 @@ func main() {
 	resetAdmin := flag.Bool("reset-admin-password", false,
 		"reset (or create) the admin account's password, print a new one-time password, then exit")
 	resetEmail := flag.String("email", "",
-		"email of the account to reset with -reset-admin-password (default: ADMIN_EMAIL)")
+		"email or username of the account to reset with -reset-admin-password (default: ADMIN_USERNAME)")
 	flag.Parse()
 	if *healthcheck {
 		os.Exit(runHealthcheck())
@@ -95,9 +95,9 @@ func runHealthcheck() int {
 // runResetAdminPassword กู้กรณีลืม password admin — ต่อแค่ Postgres (password อยู่ที่นี่ที่เดียว
 // ไม่เกี่ยว Redis/NATS) สุ่ม password ใหม่ + must_change_password + bump token_version (session เก่าตายหมด)
 // รันผ่าน container ที่มี DATABASE_URL อยู่แล้ว ไม่ต้อง exec เข้า postgres เอง
-func runResetAdminPassword(cfg *config.Config, log *slog.Logger, email string) int {
-	if email == "" {
-		email = cfg.AdminEmail
+func runResetAdminPassword(cfg *config.Config, log *slog.Logger, identifier string) int {
+	if identifier == "" {
+		identifier = cfg.AdminIdentifier
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -121,17 +121,18 @@ func runResetAdminPassword(cfg *config.Config, log *slog.Logger, email string) i
 		return 1
 	}
 
-	u, err := st.GetUserByEmail(ctx, email)
+	u, err := st.GetUserByEmailOrUsername(ctx, identifier)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		// ไม่มี account นี้ — สร้างใหม่เป็น admin (เคส users ถูกลบหมด/พิมพ์ email ผิดตอน seed)
-		u, err = st.CreateUser(ctx, email, nil, hash, "Admin", true, nil)
+		// ไม่มี account นี้ — สร้างใหม่เป็น admin (เคส users ถูกลบหมด/พิมพ์ login ผิดตอน seed)
+		email, username := seed.AdminCreateArgs(identifier)
+		u, err = st.CreateUser(ctx, email, username, hash, true, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "reset-admin-password: create admin: %v\n", err)
 			return 1
 		}
 	case err != nil:
-		fmt.Fprintf(os.Stderr, "reset-admin-password: lookup %s: %v\n", email, err)
+		fmt.Fprintf(os.Stderr, "reset-admin-password: lookup %s: %v\n", identifier, err)
 		return 1
 	default:
 		if _, err := st.SetUserPassword(ctx, u.ID, hash, true); err != nil {
@@ -140,16 +141,20 @@ func runResetAdminPassword(cfg *config.Config, log *slog.Logger, email string) i
 		}
 	}
 
+	login := u.Email
+	if login == "" && u.Username != nil {
+		login = *u.Username
+	}
 	fmt.Fprintf(os.Stderr,
 		"\n==================================================\n"+
 			"ADMIN PASSWORD RESET (shown only once)\n"+
-			"  email:    %s\n"+
+			"  login:    %s\n"+
 			"  password: %s\n"+
 			"Log in with this password — you will be forced to change it.\n"+
 			"All existing sessions for this account are now invalid.\n"+
 			"==================================================\n\n",
-		u.Email, password)
-	log.Info("admin password reset", "email", u.Email, "user_id", u.ID)
+		login, password)
+	log.Info("admin password reset", "login", login, "user_id", u.ID)
 	return 0
 }
 
@@ -197,7 +202,7 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 
 	st := store.New(pool)
 
-	if err := seed.Run(ctx, st, log, cfg.AdminEmail, cfg.NodeToken); err != nil {
+	if err := seed.Run(ctx, st, log, cfg.AdminIdentifier, cfg.NodeToken); err != nil {
 		return fmt.Errorf("seed: %w", err)
 	}
 
@@ -221,7 +226,7 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	eventsHub := events.NewHub()
 	am := auth.NewManager(st, rdb, cfg.JWTSecret, cfg.CookieSecure, log)
 	hub := agenthub.NewHub(st, rings, wsHub, statsCache, eventsHub, log)
-	disp := jobs.NewDispatcher(st, js, log)
+	disp := jobs.NewDispatcher(st, js, eventsHub, log)
 	vs := versions.New()
 
 	resultConsumer := jobs.NewResultConsumer(st, rings, wsHub, eventsHub, log)

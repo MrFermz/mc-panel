@@ -270,6 +270,10 @@ func (h *Hub) handleServerStats(ctx context.Context, nodeID uuid.UUID, st *agent
 		NetTxBps:      st.NetTxBps,
 		DiskReadBps:   st.DiskReadBps,
 		DiskWriteBps:  st.DiskWriteBps,
+		StartedAt:     startedAt(st.StartedAtUnix),
+		OnlinePlayers: st.OnlinePlayers,
+		MaxPlayers:    int(st.MaxPlayers),
+		TPS:           st.Tps,
 		UpdatedAt:     time.Now(),
 	}
 	h.stats.Set(serverID, stat)
@@ -283,6 +287,10 @@ func (h *Hub) handleServerStats(ctx context.Context, nodeID uuid.UUID, st *agent
 			NetTxBps:      stat.NetTxBps,
 			DiskReadBps:   stat.DiskReadBps,
 			DiskWriteBps:  stat.DiskWriteBps,
+			StartedAt:     nilIfZeroTime(stat.StartedAt),
+			OnlinePlayers: emptyIfNil(stat.OnlinePlayers),
+			MaxPlayers:    stat.MaxPlayers,
+			TPS:           stat.TPS,
 			UpdatedAt:     stat.UpdatedAt,
 		})
 	} else {
@@ -344,3 +352,28 @@ func serverStateToStatus(s agentv1.ServerState) string {
 		return ""
 	}
 }
+
+// startedAt แปลง unix seconds จาก agent เป็น time — 0 = ไม่รู้ (คืน zero time)
+func startedAt(unix int64) time.Time {
+	if unix <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(unix, 0).UTC()
+}
+
+// nilIfZeroTime แปลง zero time เป็น nil เพื่อให้ JSON ของ event เป็น null
+func nilIfZeroTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+// emptyIfNil ทำให้ online_players เป็น [] ใน JSON เสมอ ไม่ใช่ null —
+// contract ฝั่ง web คาดว่าเป็น array (ดู docs/api.md)
+func emptyIfNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+

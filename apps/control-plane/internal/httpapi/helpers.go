@@ -107,11 +107,22 @@ func uuidParam(r *http.Request, name string) (uuid.UUID, error) {
 
 // ---------- JSON views ตาม object shape ใน docs/api.md ----------
 
+// avatarURL คืน URL ของรูป avatar พร้อม cache-buster — nil เมื่อ user ยังไม่ตั้งรูป
+// (ตั้ง ?v= จาก avatar_updated_at เพราะ path คงที่ต่อ user: เปลี่ยนรูปแล้วต้องไม่ติด cache เดิม)
+func avatarURL(id uuid.UUID, updatedAt *time.Time) *string {
+	if updatedAt == nil {
+		return nil
+	}
+	u := fmt.Sprintf("/api/users/%s/avatar?v=%d", id, updatedAt.Unix())
+	return &u
+}
+
 type userView struct {
 	ID                 uuid.UUID `json:"id"`
 	Email              string    `json:"email"`
 	Username           *string   `json:"username"`
 	DisplayName        string    `json:"display_name"`
+	AvatarURL          *string   `json:"avatar_url"`
 	IsAdmin            bool      `json:"is_admin"`
 	IsActive           bool      `json:"is_active"`
 	MustChangePassword bool      `json:"must_change_password"`
@@ -130,6 +141,7 @@ func toUserView(u *store.User) userView {
 		Email:              u.Email,
 		Username:           u.Username,
 		DisplayName:        u.DisplayName,
+		AvatarURL:          avatarURL(u.ID, u.AvatarUpdatedAt),
 		IsAdmin:            u.IsAdmin,
 		IsActive:           u.IsActive,
 		MustChangePassword: u.MustChangePassword,
@@ -183,8 +195,12 @@ type serverStatsView struct {
 	NetRxBps      float64   `json:"net_rx_bps"`
 	NetTxBps      float64   `json:"net_tx_bps"`
 	DiskReadBps   float64   `json:"disk_read_bps"`
-	DiskWriteBps  float64   `json:"disk_write_bps"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	DiskWriteBps  float64    `json:"disk_write_bps"`
+	StartedAt     *time.Time `json:"started_at"`
+	OnlinePlayers []string   `json:"online_players"`
+	MaxPlayers    int        `json:"max_players"`
+	TPS           float64    `json:"tps"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type serverView struct {
@@ -248,7 +264,9 @@ func toJobView(j *store.Job) jobView {
 type permissionView struct {
 	UserID          uuid.UUID `json:"user_id"`
 	Email           string    `json:"email"`
+	Username        *string   `json:"username"`
 	DisplayName     string    `json:"display_name"`
+	AvatarURL       *string   `json:"avatar_url"`
 	Role            string    `json:"role"`
 	CanConsoleWrite bool      `json:"can_console_write"`
 	CanManageFiles  bool      `json:"can_manage_files"`
@@ -258,7 +276,9 @@ func toPermissionView(p *store.PermissionWithUser) permissionView {
 	return permissionView{
 		UserID:          p.UserID,
 		Email:           p.Email,
+		Username:        p.Username,
 		DisplayName:     p.DisplayName,
+		AvatarURL:       avatarURL(p.UserID, p.AvatarUpdatedAt),
 		Role:            p.Role,
 		CanConsoleWrite: p.CanConsoleWrite,
 		CanManageFiles:  p.CanManageFiles,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,14 +13,16 @@ import (
 
 // deleted_at ไม่อยู่ใน userCols — ทุก query filter `deleted_at IS NULL` อยู่แล้ว
 // จึงไม่มีทาง surface แถวที่ถูกลบ (User.DeletedAt คงเป็น nil เสมอในเส้นทางปกติ)
-const userCols = `id, email, username, password_hash, display_name, is_admin, is_active,
+// คอลัมน์ avatar (bytes) จงใจไม่อยู่ในนี้ — หนักเกินจะติดมากับทุก query, อ่านผ่าน GetUserAvatar
+const userCols = `id, email, username, display_name, avatar_updated_at, password_hash, is_admin, is_active,
 	must_change_password, token_version, capabilities, last_login_at, created_at, updated_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
 	// email เป็น NULL ได้ (username-only account) — scan ผ่าน *string แล้วแปลง NULL เป็น ""
 	var email *string
-	err := row.Scan(&u.ID, &email, &u.Username, &u.PasswordHash, &u.DisplayName, &u.IsAdmin,
+	err := row.Scan(&u.ID, &email, &u.Username, &u.DisplayName, &u.AvatarUpdatedAt,
+		&u.PasswordHash, &u.IsAdmin,
 		&u.IsActive, &u.MustChangePassword, &u.TokenVersion, &u.Capabilities, &u.LastLoginAt,
 		&u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -72,7 +75,8 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
 		args = append(args, search)
 		p := "$" + strconv.Itoa(len(args))
 		where = append(where,
-			"(email ILIKE '%'||"+p+"||'%' OR coalesce(username,'') ILIKE '%'||"+p+"||'%' OR display_name ILIKE '%'||"+p+"||'%')")
+			"(email ILIKE '%'||"+p+"||'%' OR coalesce(username,'') ILIKE '%'||"+p+
+				"||'%' OR display_name ILIKE '%'||"+p+"||'%')")
 	}
 	switch f.Role {
 	case "admin":
@@ -107,20 +111,21 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
 
 // DirectoryUser = ชุด field เบาสำหรับ access picker (ไม่ leak hash/สิทธิ์/สถานะ)
 type DirectoryUser struct {
-	ID          uuid.UUID
-	Email       string
-	Username    *string
-	DisplayName string
+	ID              uuid.UUID
+	Email           string
+	Username        *string
+	DisplayName     string
+	AvatarUpdatedAt *time.Time
 }
 
 // ListUserDirectory คืน user ที่ active + ยังไม่ถูกลบ สำหรับให้ owner เลือก collaborator
-// (ไม่ต้องมี users.manage — เป็นข้อมูลเบา ๆ ที่ทุกคนใน panel เห็นได้)
+// (ไม่ต้องมี users.view — เป็นข้อมูลเบา ๆ ที่ทุกคนใน panel เห็นได้)
 func (s *Store) ListUserDirectory(ctx context.Context) ([]DirectoryUser, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, email, username, display_name
+		SELECT id, email, username, display_name, avatar_updated_at
 		FROM users
 		WHERE deleted_at IS NULL AND is_active = true
-		ORDER BY coalesce(username, email), created_at`)
+		ORDER BY coalesce(nullif(display_name, ''), username, email), created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +135,7 @@ func (s *Store) ListUserDirectory(ctx context.Context) ([]DirectoryUser, error) 
 	for rows.Next() {
 		var d DirectoryUser
 		var email *string
-		if err := rows.Scan(&d.ID, &email, &d.Username, &d.DisplayName); err != nil {
+		if err := rows.Scan(&d.ID, &email, &d.Username, &d.DisplayName, &d.AvatarUpdatedAt); err != nil {
 			return nil, err
 		}
 		if email != nil {
@@ -141,7 +146,7 @@ func (s *Store) ListUserDirectory(ctx context.Context) ([]DirectoryUser, error) 
 	return out, rows.Err()
 }
 
-func (s *Store) CreateUser(ctx context.Context, email string, username *string, passwordHash, displayName string, isAdmin bool, capabilities []string) (*User, error) {
+func (s *Store) CreateUser(ctx context.Context, email string, username *string, passwordHash string, isAdmin bool, capabilities []string) (*User, error) {
 	// pgx encode nil slice เป็น SQL NULL ไม่ใช่ '{}' — ชน NOT NULL ของ capabilities
 	// (โผล่ตอน seed admin บน DB เปล่า) จึงต้อง coalesce เป็น empty slice ก่อนเสมอ
 	if capabilities == nil {
@@ -154,29 +159,70 @@ func (s *Store) CreateUser(ctx context.Context, email string, username *string, 
 	}
 	// username nil -> NULL (partial unique index มองข้ามแถว username IS NULL)
 	return scanUser(s.pool.QueryRow(ctx, `
-		INSERT INTO users (email, username, password_hash, display_name, is_admin, capabilities, must_change_password)
-		VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+		INSERT INTO users (email, username, password_hash, is_admin, capabilities, must_change_password)
+		VALUES ($1, $2, $3, $4, $5, TRUE)
 		RETURNING `+userCols,
-		emailArg, username, passwordHash, displayName, isAdmin, capabilities))
+		emailArg, username, passwordHash, isAdmin, capabilities))
 }
 
 // UpdateUser: capabilities = nil หมายถึงไม่เปลี่ยน (ต่างจาก []string{} = ล้างทิ้ง)
 // ส่งเป็น NULL ให้ COALESCE คงค่าเดิม ; empty array ไม่ใช่ NULL จึงล้างได้จริง
-func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, displayName *string, isAdmin, isActive *bool, capabilities *[]string) (*User, error) {
+func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, isAdmin, isActive *bool, capabilities *[]string) (*User, error) {
 	var capsArg any
 	if capabilities != nil {
 		capsArg = *capabilities
 	}
 	return scanUser(s.pool.QueryRow(ctx, `
 		UPDATE users SET
-			display_name = COALESCE($2, display_name),
-			is_admin     = COALESCE($3, is_admin),
-			is_active    = COALESCE($4, is_active),
-			capabilities = COALESCE($5, capabilities),
+			is_admin     = COALESCE($2, is_admin),
+			is_active    = COALESCE($3, is_active),
+			capabilities = COALESCE($4, capabilities),
 			updated_at   = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING `+userCols,
-		id, displayName, isAdmin, isActive, capsArg))
+		id, isAdmin, isActive, capsArg))
+}
+
+// UpdateUserProfile แก้เฉพาะข้อมูลที่เจ้าของบัญชีตั้งเองได้ (ไม่แตะสิทธิ์/สถานะ)
+func (s *Store) UpdateUserProfile(ctx context.Context, id uuid.UUID, displayName string) (*User, error) {
+	return scanUser(s.pool.QueryRow(ctx, `
+		UPDATE users SET display_name = $2, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING `+userCols, id, displayName))
+}
+
+// SetUserAvatar เขียนรูปใหม่ทับของเดิม — avatar_updated_at เป็นทั้ง cache-buster และ ETag
+func (s *Store) SetUserAvatar(ctx context.Context, id uuid.UUID, data []byte, mime string) (*User, error) {
+	return scanUser(s.pool.QueryRow(ctx, `
+		UPDATE users SET avatar = $2, avatar_mime = $3, avatar_updated_at = now(), updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING `+userCols, id, data, mime))
+}
+
+func (s *Store) ClearUserAvatar(ctx context.Context, id uuid.UUID) (*User, error) {
+	return scanUser(s.pool.QueryRow(ctx, `
+		UPDATE users SET avatar = NULL, avatar_mime = '', avatar_updated_at = NULL, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING `+userCols, id))
+}
+
+// GetUserAvatar อ่าน bytes ของรูป — ErrNotFound เมื่อ user ไม่มีอยู่ *หรือ* ยังไม่ตั้งรูป
+// (ผู้เรียกไม่ต้องแยกสองเคสนี้ ทั้งคู่ตอบ 404 เหมือนกัน)
+func (s *Store) GetUserAvatar(ctx context.Context, id uuid.UUID) (data []byte, mime string, updatedAt time.Time, err error) {
+	var at *time.Time
+	err = s.pool.QueryRow(ctx, `
+		SELECT avatar, avatar_mime, avatar_updated_at FROM users
+		WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&data, &mime, &at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return nil, "", time.Time{}, err
+	}
+	if len(data) == 0 || at == nil {
+		return nil, "", time.Time{}, ErrNotFound
+	}
+	return data, mime, *at, nil
 }
 
 // SetUserPassword bump token_version เสมอ -> JWT เก่าทุกใบใช้ไม่ได้ทันที

@@ -526,10 +526,20 @@ type ServerStats struct {
 	MemoryUsedMb  int64                  `protobuf:"varint,3,opt,name=memory_used_mb,json=memoryUsedMb,proto3" json:"memory_used_mb,omitempty"`
 	MemoryLimitMb int64                  `protobuf:"varint,4,opt,name=memory_limit_mb,json=memoryLimitMb,proto3" json:"memory_limit_mb,omitempty"` // limit ที่ตั้งให้ container (heap + overhead)
 	// rate คำนวณจาก delta ระหว่าง sample ฝั่ง agent (bytes/sec) — realtime/ephemeral
-	NetRxBps      float64 `protobuf:"fixed64,5,opt,name=net_rx_bps,json=netRxBps,proto3" json:"net_rx_bps,omitempty"`             // container network receive rate
-	NetTxBps      float64 `protobuf:"fixed64,6,opt,name=net_tx_bps,json=netTxBps,proto3" json:"net_tx_bps,omitempty"`             // container network transmit rate
-	DiskReadBps   float64 `protobuf:"fixed64,7,opt,name=disk_read_bps,json=diskReadBps,proto3" json:"disk_read_bps,omitempty"`    // container block I/O read rate
-	DiskWriteBps  float64 `protobuf:"fixed64,8,opt,name=disk_write_bps,json=diskWriteBps,proto3" json:"disk_write_bps,omitempty"` // container block I/O write rate
+	NetRxBps     float64 `protobuf:"fixed64,5,opt,name=net_rx_bps,json=netRxBps,proto3" json:"net_rx_bps,omitempty"`             // container network receive rate
+	NetTxBps     float64 `protobuf:"fixed64,6,opt,name=net_tx_bps,json=netTxBps,proto3" json:"net_tx_bps,omitempty"`             // container network transmit rate
+	DiskReadBps  float64 `protobuf:"fixed64,7,opt,name=disk_read_bps,json=diskReadBps,proto3" json:"disk_read_bps,omitempty"`    // container block I/O read rate
+	DiskWriteBps float64 `protobuf:"fixed64,8,opt,name=disk_write_bps,json=diskWriteBps,proto3" json:"disk_write_bps,omitempty"` // container block I/O write rate
+	// เวลาที่ container ของรอบนี้ถูกสร้าง (unix seconds) ใช้คำนวณ uptime ฝั่ง UI —
+	// agent สร้าง container ใหม่ทุกครั้งที่ start และลบทิ้งตอน stop/crash ค่านี้จึงเท่ากับเวลาที่เริ่มรัน
+	// 0 = ไม่รู้
+	StartedAtUnix int64 `protobuf:"varint,9,opt,name=started_at_unix,json=startedAtUnix,proto3" json:"started_at_unix,omitempty"`
+	// ผู้เล่นที่ออนไลน์ ณ ตอนนี้ — MC ไม่มี API บอก agent จึงอ่านจาก console เอง
+	// (คำสั่ง `list` ตอน attach/resync เป็นค่าตั้งต้น + บรรทัด joined/left the game ระหว่างนั้น)
+	OnlinePlayers []string `protobuf:"bytes,10,rep,name=online_players,json=onlinePlayers,proto3" json:"online_players,omitempty"`
+	MaxPlayers    int32    `protobuf:"varint,11,opt,name=max_players,json=maxPlayers,proto3" json:"max_players,omitempty"` // จาก reply ของ `list` — 0 = ยังไม่ได้ resync รอบแรก
+	// TPS จากคำสั่ง `tps` ของ Paper/Spigot — 0 = server type นี้ไม่มีคำสั่งนี้ (vanilla/fabric/forge)
+	Tps           float64 `protobuf:"fixed64,12,opt,name=tps,proto3" json:"tps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -616,6 +626,34 @@ func (x *ServerStats) GetDiskReadBps() float64 {
 func (x *ServerStats) GetDiskWriteBps() float64 {
 	if x != nil {
 		return x.DiskWriteBps
+	}
+	return 0
+}
+
+func (x *ServerStats) GetStartedAtUnix() int64 {
+	if x != nil {
+		return x.StartedAtUnix
+	}
+	return 0
+}
+
+func (x *ServerStats) GetOnlinePlayers() []string {
+	if x != nil {
+		return x.OnlinePlayers
+	}
+	return nil
+}
+
+func (x *ServerStats) GetMaxPlayers() int32 {
+	if x != nil {
+		return x.MaxPlayers
+	}
+	return 0
+}
+
+func (x *ServerStats) GetTps() float64 {
+	if x != nil {
+		return x.Tps
 	}
 	return 0
 }
@@ -1539,7 +1577,7 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\fServerStatus\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x123\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x1d.mcpanel.agent.v1.ServerStateR\x05state\x12\x1b\n" +
-	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"\x9f\x02\n" +
+	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"\xa1\x03\n" +
 	"\vServerStats\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1f\n" +
 	"\vcpu_percent\x18\x02 \x01(\x01R\n" +
@@ -1551,7 +1589,13 @@ const file_mcpanel_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"net_tx_bps\x18\x06 \x01(\x01R\bnetTxBps\x12\"\n" +
 	"\rdisk_read_bps\x18\a \x01(\x01R\vdiskReadBps\x12$\n" +
-	"\x0edisk_write_bps\x18\b \x01(\x01R\fdiskWriteBps\"\xdd\x01\n" +
+	"\x0edisk_write_bps\x18\b \x01(\x01R\fdiskWriteBps\x12&\n" +
+	"\x0fstarted_at_unix\x18\t \x01(\x03R\rstartedAtUnix\x12%\n" +
+	"\x0eonline_players\x18\n" +
+	" \x03(\tR\ronlinePlayers\x12\x1f\n" +
+	"\vmax_players\x18\v \x01(\x05R\n" +
+	"maxPlayers\x12\x10\n" +
+	"\x03tps\x18\f \x01(\x01R\x03tps\"\xdd\x01\n" +
 	"\x0eControlMessage\x125\n" +
 	"\awelcome\x18\x01 \x01(\v2\x19.mcpanel.agent.v1.WelcomeH\x00R\awelcome\x12E\n" +
 	"\rconsole_input\x18\x02 \x01(\v2\x1e.mcpanel.agent.v1.ConsoleInputH\x00R\fconsoleInput\x12B\n" +
