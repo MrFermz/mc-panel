@@ -119,8 +119,7 @@ func avatarURL(id uuid.UUID, updatedAt *time.Time) *string {
 
 type userView struct {
 	ID                 uuid.UUID `json:"id"`
-	Email              string    `json:"email"`
-	Username           *string   `json:"username"`
+	Username           string    `json:"username"`
 	DisplayName        string    `json:"display_name"`
 	AvatarURL          *string   `json:"avatar_url"`
 	IsAdmin            bool      `json:"is_admin"`
@@ -138,7 +137,6 @@ func toUserView(u *store.User) userView {
 	}
 	return userView{
 		ID:                 u.ID,
-		Email:              u.Email,
 		Username:           u.Username,
 		DisplayName:        u.DisplayName,
 		AvatarURL:          avatarURL(u.ID, u.AvatarUpdatedAt),
@@ -241,7 +239,6 @@ type jobView struct {
 	Type                string     `json:"type"`
 	Status              string     `json:"status"`
 	Error               string     `json:"error"`
-	RequestedByEmail    *string    `json:"requested_by_email"`
 	RequestedByName     *string    `json:"requested_by_name"`
 	RequestedByUsername *string    `json:"requested_by_username"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -252,11 +249,10 @@ type jobView struct {
 // fillJobRequester เติมชื่อคนสั่งงานลง job ที่เพิ่งสร้าง (ยังไม่ได้ join users)
 // ให้ response ตรงกับที่ list endpoint คืน (web ประกอบเป็น userTitle เอง)
 func fillJobRequester(j *store.Job, u *store.User) {
-	email := u.Email
-	j.RequestedByEmail = &email
 	name := u.DisplayName
 	j.RequestedByName = &name
-	j.RequestedByUsername = u.Username
+	username := u.Username
+	j.RequestedByUsername = &username
 }
 
 func toJobView(j *store.Job) jobView {
@@ -266,7 +262,6 @@ func toJobView(j *store.Job) jobView {
 		Type:                j.Type,
 		Status:              j.Status,
 		Error:               j.Error,
-		RequestedByEmail:    j.RequestedByEmail,
 		RequestedByName:     j.RequestedByName,
 		RequestedByUsername: j.RequestedByUsername,
 		CreatedAt:           j.CreatedAt,
@@ -277,8 +272,7 @@ func toJobView(j *store.Job) jobView {
 
 type permissionView struct {
 	UserID      uuid.UUID `json:"user_id"`
-	Email       string    `json:"email"`
-	Username    *string   `json:"username"`
+	Username    string    `json:"username"`
 	DisplayName string    `json:"display_name"`
 	AvatarURL   *string   `json:"avatar_url"`
 	// Role = owner | member ; owner ได้ทุก server-scoped cap โดยปริยาย (capabilities ว่าง)
@@ -289,7 +283,6 @@ type permissionView struct {
 func toPermissionView(p *store.PermissionWithUser) permissionView {
 	return permissionView{
 		UserID:       p.UserID,
-		Email:        p.Email,
 		Username:     p.Username,
 		DisplayName:  p.DisplayName,
 		AvatarURL:    avatarURL(p.UserID, p.AvatarUpdatedAt),

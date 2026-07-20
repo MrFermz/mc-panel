@@ -40,7 +40,7 @@ git clone <repo-url> mc-panel && cd mc-panel
 make env              # สร้าง .env — สุ่ม secret ทุกตัว (ทำครั้งเดียว, ห้าม commit .env)
 make runtime-images   # build base image ของ MC (8/17/21/25) — ข้ามได้ agent auto-pull ให้ตอนใช้ครั้งแรก
 make up               # build image + เปิดทั้งระบบ
-make admin-password   # ดู email/password ของ admin คนแรก (พิมพ์ลง log ครั้งเดียว)
+make admin-password   # ดู username/password ของ admin คนแรก (พิมพ์ลง log ครั้งเดียว)
 ```
 
 เปิด `http://localhost:8000` → login → ระบบบังคับตั้ง password ใหม่ → ใช้งานได้เลย

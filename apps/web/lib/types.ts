@@ -8,8 +8,7 @@ export const errorBodySchema = z.object({
 
 export const userSchema = z.object({
   id: z.string(),
-  email: z.string(),
-  username: z.string().nullable().default(null),
+  username: z.string(),
   display_name: z.string().default(""),
   // avatar_url ชี้ /api/users/{id}/avatar?v=... (null = ยังไม่ตั้งรูป — UI ตกไปใช้ตัวอักษรย่อ)
   avatar_url: z.string().nullable().default(null),
@@ -139,8 +138,7 @@ export const jobSchema = z.object({
   status: jobStatusSchema,
   error: z.string().default(""),
   // ชื่อคนสั่งงาน — null เมื่อ user ถูกลบ (requested_by เป็น SET NULL)
-  // web ประกอบเป็น userTitle เอง (display_name → username → email)
-  requested_by_email: z.string().nullable().default(null),
+  // web ประกอบเป็น userTitle เอง (display_name → username)
   requested_by_name: z.string().nullable().default(null),
   requested_by_username: z.string().nullable().default(null),
   created_at: z.string(),
@@ -155,8 +153,7 @@ export type PermissionRole = z.infer<typeof permissionRoleSchema>;
 
 export const permissionSchema = z.object({
   user_id: z.string(),
-  email: z.string(),
-  username: z.string().nullable().default(null),
+  username: z.string(),
   display_name: z.string().default(""),
   avatar_url: z.string().nullable().default(null),
   role: permissionRoleSchema,
@@ -296,11 +293,9 @@ export const permissionsResponseSchema = z.object({
 });
 
 // GET /api/users/directory — รายชื่อ user ที่ active สำหรับเลือกใน access tab
-// email อาจว่าง (user ที่มีแต่ username), username อาจเป็น null
 export const directoryUserSchema = z.object({
   id: z.string(),
-  email: z.string().default(""),
-  username: z.string().nullable().default(null),
+  username: z.string(),
   display_name: z.string().default(""),
   avatar_url: z.string().nullable().default(null),
 });

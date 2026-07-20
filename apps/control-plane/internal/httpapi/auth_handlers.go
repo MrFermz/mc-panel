@@ -9,8 +9,8 @@ import (
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
-// dummy bcrypt hash สำหรับเทียบตอน email ไม่มีในระบบ — ให้เวลาตอบใกล้เคียง
-// กับเคส email ถูกแต่ password ผิด (กัน user enumeration ผ่าน timing)
+// dummy bcrypt hash สำหรับเทียบตอน username ไม่มีในระบบ — ให้เวลาตอบใกล้เคียง
+// กับเคส username ถูกแต่ password ผิด (กัน user enumeration ผ่าน timing)
 const dummyPasswordHash = "$2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
 
 func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -20,23 +20,17 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// รับได้ทั้ง `identifier` (email หรือ username) และ `email` แบบเดิม
 	var req struct {
-		Identifier string `json:"identifier"`
-		Email      string `json:"email"`
-		Password   string `json:"password"`
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	id := req.Identifier
-	if id == "" {
-		id = req.Email
-	}
-	id = strings.TrimSpace(id)
+	username := strings.TrimSpace(req.Username)
 
-	user, err := a.st.GetUserByEmailOrUsername(r.Context(), id)
+	user, err := a.st.GetUserByUsername(r.Context(), username)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		a.log.Error("login lookup failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
@@ -50,13 +44,13 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	passwordOK := auth.CheckPassword(hash, req.Password)
 
 	if user == nil || !passwordOK || !user.IsActive {
-		detail := map[string]any{"email": id}
+		detail := map[string]any{"username": username}
 		if user != nil {
 			a.audit(r, &user.ID, nil, "login_failed", detail)
 		} else {
 			a.audit(r, nil, nil, "login_failed", detail)
 		}
-		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
+		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid username or password")
 		return
 	}
 

@@ -50,7 +50,7 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		UserID       string   `json:"user_id"`
-		Email        string   `json:"email"`
+		Username     string   `json:"username"`
 		Role         string   `json:"role"`
 		Capabilities []string `json:"capabilities"`
 	}
@@ -74,7 +74,7 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 		caps = dedupStrings(req.Capabilities)
 	}
 
-	// user_id มาก่อน email (picker ส่ง id ตรง ๆ, ยังรองรับ email เดิมสำหรับพิมพ์มือ)
+	// user_id มาก่อน username (picker ส่ง id ตรง ๆ, username ไว้พิมพ์มือ)
 	var target *store.User
 	var err error
 	if strings.TrimSpace(req.UserID) != "" {
@@ -89,9 +89,9 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		target, err = a.st.GetUserByEmail(r.Context(), strings.TrimSpace(req.Email))
+		target, err = a.st.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
 		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "user_not_found", "no user with this email")
+			writeError(w, http.StatusNotFound, "user_not_found", "no user with this username")
 			return
 		}
 	}
@@ -140,7 +140,6 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"permission": permissionView{
 			UserID:       target.ID,
-			Email:        target.Email,
 			Username:     target.Username,
 			DisplayName:  target.DisplayName,
 			AvatarURL:    avatarURL(target.ID, target.AvatarUpdatedAt),

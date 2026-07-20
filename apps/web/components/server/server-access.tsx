@@ -62,22 +62,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface FormState {
-  // userId !== "" → ส่ง user_id (เลือกจาก dropdown); "" → ใช้ free-text email แทน
+  // userId !== "" → ส่ง user_id (เลือกจาก dropdown); "" → ใช้ free-text username แทน
   userId: string;
-  email: string;
+  username: string;
   role: "owner" | "member";
   capabilities: string[];
 }
 
 const emptyForm: FormState = {
   userId: "",
-  email: "",
+  username: "",
   role: "member",
   capabilities: SERVER_ROLE_PRESETS.find((p) => p.key === "viewer")!
     .capabilities,
 };
 
-// label ของ user ใน dropdown — username + email ถ้ามีทั้งคู่
+// label ของ user ใน dropdown — display name + username ถ้าต่างกัน
 function directoryLabel(u: DirectoryUser): string {
   const primary = userTitle(u);
   const secondary = userIdent(u);
@@ -185,7 +185,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
       };
       const body = payload.userId
         ? { ...base, user_id: payload.userId }
-        : { ...base, email: payload.email.trim() };
+        : { ...base, username: payload.username.trim() };
       return apiSendVoid("POST", `/api/servers/${serverId}/permissions`, body);
     },
     onSuccess: () => {
@@ -228,18 +228,17 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
   const openEdit = (perm: Permission) => {
     setEditingIdent(userIdent(perm));
     setForm({
-      // ยึด user_id ตอนแก้ไข — collaborator ที่เป็น username-only account มี email = ""
       userId: perm.user_id,
-      email: userIdent(perm),
+      username: userIdent(perm),
       role: perm.role,
       capabilities: perm.capabilities,
     });
     setDialogOpen(true);
   };
 
-  // ปุ่ม add ปิดไว้จนกว่าจะเลือก user หรือกรอก email (ตอนแก้ไขไม่ต้องเช็ค)
+  // ปุ่ม add ปิดไว้จนกว่าจะเลือก user หรือกรอก username (ตอนแก้ไขไม่ต้องเช็ค)
   const canSubmit =
-    editingIdent !== null || form.userId !== "" || form.email.trim() !== "";
+    editingIdent !== null || form.userId !== "" || form.username.trim() !== "";
 
   const toggle = (key: string, on: boolean) =>
     setForm((prev) => ({
@@ -345,7 +344,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
           <DialogHeader>
             <DialogTitle>
               {editingIdent
-                ? t("access.editTitle", { email: editingIdent })
+                ? t("access.editTitle", { name: editingIdent })
                 : t("access.addUser")}
             </DialogTitle>
             <DialogDescription>{t("access.accountRequired")}</DialogDescription>
@@ -363,8 +362,8 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
                 <Select
                   value={form.userId}
                   onValueChange={(v) =>
-                    // เลือก user → เคลียร์ช่อง email (ใช้ user_id แทน)
-                    setForm({ ...form, userId: v, email: "" })
+                    // เลือก user → เคลียร์ช่อง username (ใช้ user_id แทน)
+                    setForm({ ...form, userId: v, username: "" })
                   }
                   disabled={pickableUsers.length === 0}
                 >
@@ -391,16 +390,17 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
             )}
             {editingIdent === null && (
               <div className="grid gap-2">
-                <Label htmlFor="perm-email">{t("access.orEmail")}</Label>
+                <Label htmlFor="perm-username">
+                  {t("access.orUsername")}
+                </Label>
                 <Input
-                  id="perm-email"
-                  type="email"
+                  id="perm-username"
                   disabled={form.userId !== ""}
-                  placeholder={t("access.emailPlaceholder")}
-                  value={form.email}
+                  placeholder={t("access.usernamePlaceholder")}
+                  value={form.username}
                   onChange={(e) =>
-                    // พิมพ์ email → ล้าง user ที่เลือกไว้
-                    setForm({ ...form, email: e.target.value, userId: "" })
+                    // พิมพ์ username → ล้าง user ที่เลือกไว้
+                    setForm({ ...form, username: e.target.value, userId: "" })
                   }
                 />
               </div>
@@ -460,7 +460,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
         title={t("access.removeTitle")}
         description={
           removeTarget
-            ? t("access.removeDesc", { email: userTitle(removeTarget) })
+            ? t("access.removeDesc", { name: userTitle(removeTarget) })
             : ""
         }
         confirmLabel={t("common.remove")}

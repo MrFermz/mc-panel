@@ -17,7 +17,7 @@ import {
 
 export default function LoginPage() {
   const t = useT();
-  const [identifier, setIdentifier] = React.useState("");
+  const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
@@ -30,7 +30,7 @@ export default function LoginPage() {
       const { user } = await apiSend(
         "POST",
         "/api/auth/login",
-        { identifier, password },
+        { username, password },
         userResponseSchema,
       );
       // full navigation เพื่อให้ middleware เห็น cookie ใหม่แน่นอน
@@ -61,14 +61,14 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={onSubmit} className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="identifier">{t("login.identifier")}</Label>
+              <Label htmlFor="username">{t("login.username")}</Label>
               <Input
-                id="identifier"
+                id="username"
                 type="text"
                 autoComplete="username"
                 required
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
             </div>
             <div className="grid gap-2">

@@ -26,20 +26,15 @@ const jobStatusClasses: Record<Job["status"], string> = {
   failed: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
-// ชื่อคนสั่งงานที่แสดงต่อ user — display_name → username → email (ผ่าน userTitle)
+// ชื่อคนสั่งงานที่แสดงต่อ user — display_name → username (ผ่าน userTitle)
 // null = ไม่มีคนสั่ง (job ระบบ) หรือ user ถูกลบไปแล้ว
 function requesterTitle(job: Job): string | null {
-  if (
-    !job.requested_by_name &&
-    !job.requested_by_username &&
-    !job.requested_by_email
-  ) {
+  if (!job.requested_by_name && !job.requested_by_username) {
     return null;
   }
   return userTitle({
     display_name: job.requested_by_name,
     username: job.requested_by_username,
-    email: job.requested_by_email,
   });
 }
 
@@ -71,7 +66,7 @@ function JobCard({ job }: { job: Job }) {
           </dt>
           <dd
             className="truncate text-right"
-            title={requester ?? job.requested_by_email ?? undefined}
+            title={requester ?? undefined}
           >
             {requester ?? (
               <span className="text-muted-foreground">{t("jobs.system")}</span>
@@ -160,7 +155,7 @@ export default function ServerJobs({ serverId }: { serverId: string }) {
                     </TableCell>
                     <TableCell
                       className="max-w-48 truncate text-xs"
-                      title={requester ?? job.requested_by_email ?? undefined}
+                      title={requester ?? undefined}
                     >
                       {requester ?? (
                         <span className="text-muted-foreground">

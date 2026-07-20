@@ -25,7 +25,6 @@ import {
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,64}$/;
 
 export interface CreateUserBody {
-  email: string;
   username: string;
   is_admin: boolean;
   capabilities: string[];
@@ -45,7 +44,6 @@ export function CreateUserDialog({
   onSubmit: (body: CreateUserBody) => void;
 }) {
   const t = useT();
-  const [email, setEmail] = React.useState("");
   const [username, setUsername] = React.useState("");
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [caps, setCaps] = React.useState<string[]>([]);
@@ -53,17 +51,14 @@ export function CreateUserDialog({
   // ล้างฟอร์มตอนเปิดใหม่ — dialog ถูก mount ค้างไว้ ค่าเดิมจะติดมาถ้าไม่รีเซ็ต
   React.useEffect(() => {
     if (!open) return;
-    setEmail("");
     setUsername("");
     setIsAdmin(false);
     setCaps([]);
   }, [open]);
 
-  // ต้องมี email (มี "@") หรือ username (ตรง pattern) อย่างน้อยหนึ่ง ถึงจะ submit ได้
-  const canSubmit =
-    email.trim().includes("@") || USERNAME_RE.test(username.trim());
+  const canSubmit = USERNAME_RE.test(username.trim());
 
-  const preview = username.trim() || email.trim();
+  const preview = username.trim();
 
   const toggleCap = (key: string, on: boolean) =>
     setCaps((prev) =>
@@ -78,8 +73,6 @@ export function CreateUserDialog({
             e.preventDefault();
             if (pending || !canSubmit) return;
             onSubmit({
-              // ส่งทั้งคู่เสมอ — backend ต้องมีอย่างน้อยหนึ่ง, string ว่าง = "ไม่ระบุ"
-              email: email.trim(),
               username: username.trim(),
               is_admin: isAdmin,
               capabilities: caps,
@@ -97,7 +90,7 @@ export function CreateUserDialog({
                 {preview || t("users.createTitle")}
               </DialogTitle>
               <DialogDescription className="text-xs">
-                {t("users.identifierHint")}
+                {t("users.usernameHint")}
               </DialogDescription>
             </div>
             {/* role ที่จะได้จริงจากสิทธิ์ที่ติ๊กอยู่ — อัปเดตสดตอนแก้ preset/capability */}
@@ -107,19 +100,10 @@ export function CreateUserDialog({
           <div className="grid gap-3 border-t px-6 py-4">
             <FieldGroupLabel>{t("users.account")}</FieldGroupLabel>
             <div className="grid gap-2">
-              <Label htmlFor="u-email">{t("users.emailOptional")}</Label>
-              <Input
-                id="u-email"
-                type="email"
-                autoComplete="off"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="u-username">{t("users.usernameOptional")}</Label>
+              <Label htmlFor="u-username">{t("users.username")}</Label>
               <Input
                 id="u-username"
+                required
                 minLength={3}
                 maxLength={64}
                 pattern="[a-zA-Z0-9_.\-]+"

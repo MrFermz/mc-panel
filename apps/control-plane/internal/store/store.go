@@ -26,10 +26,10 @@ func IsUniqueViolation(err error) bool {
 }
 
 type User struct {
-	ID       uuid.UUID
-	Email    string
-	Username *string
-	// DisplayName เจ้าของบัญชีตั้งเอง — ว่างได้ (ตกไปใช้ username/email ตอนแสดงผล)
+	ID uuid.UUID
+	// Username = login identifier เดียวของระบบ — บังคับมีเสมอ (NOT NULL)
+	Username string
+	// DisplayName เจ้าของบัญชีตั้งเอง — ว่างได้ (ตกไปใช้ username ตอนแสดงผล)
 	DisplayName string
 	// AvatarUpdatedAt = nil แปลว่ายังไม่มีรูป (bytes ไม่เคยถูกโหลดมากับ User —
 	// อ่านแยกผ่าน GetUserAvatar เพราะหนักเกินจะติดมาทุก query)
@@ -92,8 +92,7 @@ type Permission struct {
 
 type PermissionWithUser struct {
 	Permission
-	Email           string
-	Username        *string
+	Username        string
 	DisplayName     string
 	AvatarUpdatedAt *time.Time
 }
@@ -107,9 +106,8 @@ type Job struct {
 	Payload     []byte
 	Error       string
 	RequestedBy *uuid.UUID
-	// RequestedByEmail/Name/Username มาจาก LEFT JOIN users — null เมื่อ requested_by ถูก SET NULL
+	// RequestedByName/Username มาจาก LEFT JOIN users — null เมื่อ requested_by ถูก SET NULL
 	// (user ถูกลบ) หรือ job เพิ่งสร้างจาก path ที่ไม่ได้ join
-	RequestedByEmail    *string
 	RequestedByName     *string
 	RequestedByUsername *string
 	CreatedAt           time.Time

@@ -16,9 +16,8 @@ type Config struct {
 	RedisURL    string
 	NATSURL     string
 	JWTSecret   string
-	// AdminIdentifier = login ของ admin คนแรกที่ seed ตอน boot — เป็น username (default "admin",
-	// สร้างเป็น username-only account) หรือ email ถ้ามี "@" (สร้างเป็น email account)
-	AdminIdentifier string
+	// AdminUsername = username ของ admin คนแรกที่ seed ตอน boot (default "admin")
+	AdminUsername string
 	// NodeToken (optional) ใช้ seed node "local" ตัวแรกใน compose แบบ all-in-one
 	NodeToken    string
 	CookieSecure bool
@@ -39,7 +38,7 @@ func Load() (*Config, error) {
 		RedisURL:        os.Getenv("REDIS_URL"),
 		NATSURL:         os.Getenv("NATS_URL"),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
-		AdminIdentifier: getenv("ADMIN_USERNAME", "admin"),
+		AdminUsername: getenv("ADMIN_USERNAME", "admin"),
 		NodeToken:       os.Getenv("NODE_TOKEN"),
 		// default 1 = production หลัง Caddy 1 hop; dev set 0 ผ่าน env
 		TrustedProxyCount: 1,

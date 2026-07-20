@@ -45,7 +45,7 @@ func sanitizeDisplayName(s string) string {
 }
 
 // handleUpdateProfile: user แก้ข้อมูลของตัวเองเท่านั้น (ไม่มี capability — เหมือน
-// change-password ที่เจ้าของบัญชีทำได้เสมอ) ไม่แตะ email/username/สิทธิ์ ซึ่งเป็นงานของ admin
+// change-password ที่เจ้าของบัญชีทำได้เสมอ) ไม่แตะ username/สิทธิ์ ซึ่งเป็นงานของ admin
 func (a *API) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
 

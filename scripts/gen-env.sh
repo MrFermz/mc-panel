@@ -42,7 +42,7 @@ JWT_SECRET=$(rand 32)
 # เป็น opaque token (เก็บเป็น SHA-256 ใน DB) — production หลาย node ให้สร้าง node ผ่าน API แทน
 NODE_TOKEN=$(rand 32)
 
-# admin คนแรก — login คือค่านี้ (username-only account; ใส่ email ที่มี "@" ก็ได้ถ้าต้องการ)
+# admin คนแรก — username ที่ใช้ login (ระบบไม่มี email เลย username เป็น identifier เดียว)
 # password จะถูก generate ตอน control-plane boot ครั้งแรก แล้วพิมพ์ลง log ครั้งเดียว
 # (docker compose logs control-plane | grep -A3 "INITIAL ADMIN")
 ADMIN_USERNAME=admin

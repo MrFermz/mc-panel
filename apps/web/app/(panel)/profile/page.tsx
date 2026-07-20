@@ -183,7 +183,7 @@ function IdentityCard() {
               id="profile-display-name"
               value={displayName}
               maxLength={MAX_DISPLAY_NAME}
-              placeholder={user.username ?? userIdent(user)}
+              placeholder={userIdent(user)}
               onChange={(e) => setDisplayName(e.target.value)}
             />
             <p className="text-muted-foreground text-xs">
@@ -191,16 +191,10 @@ function IdentityCard() {
             </p>
           </div>
 
-          {/* อ่านอย่างเดียว — เปลี่ยน username/email เป็นงานของ admin (หน้า /admin/users) */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label>{t("profile.username")}</Label>
-              <Input value={user.username ?? "—"} readOnly disabled />
-            </div>
-            <div className="grid gap-2">
-              <Label>{t("profile.email")}</Label>
-              <Input value={user.email || "—"} readOnly disabled />
-            </div>
+          {/* อ่านอย่างเดียว — เปลี่ยน username เป็นงานของ admin (หน้า /admin/users) */}
+          <div className="grid gap-2">
+            <Label>{t("profile.username")}</Label>
+            <Input value={user.username} readOnly disabled />
           </div>
 
           <div className="flex items-center justify-between gap-3">

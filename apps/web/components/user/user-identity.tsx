@@ -27,7 +27,6 @@ export function UserIdentity({
 }: {
   user: {
     id?: string;
-    email?: string | null;
     username?: string | null;
     display_name?: string | null;
     avatar_url?: string | null;
@@ -50,7 +49,7 @@ export function UserIdentity({
         className={s.avatar}
       />
       <div className="grid gap-0.5">
-        {/* email อยู่ใน title attr — subtitle ถูกจองไว้ให้ role แล้ว */}
+        {/* username อยู่ใน title attr — subtitle ถูกจองไว้ให้ role แล้ว */}
         <span
           className={cn("flex items-center gap-2 font-medium", s.title)}
           title={ident !== title ? ident : undefined}

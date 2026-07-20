@@ -34,8 +34,8 @@ func TestLoad(t *testing.T) {
 	if cfg.HTTPAddr != ":8080" || cfg.GRPCAddr != ":9090" {
 		t.Errorf("default addrs = %q %q", cfg.HTTPAddr, cfg.GRPCAddr)
 	}
-	if cfg.AdminIdentifier != "admin" {
-		t.Errorf("default admin identifier = %q", cfg.AdminIdentifier)
+	if cfg.AdminUsername != "admin" {
+		t.Errorf("default admin username = %q", cfg.AdminUsername)
 	}
 	if !cfg.CookieSecure {
 		t.Error("CookieSecure = false, want true")

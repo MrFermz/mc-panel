@@ -4,7 +4,7 @@
 - Linux-first, **full Docker**: ทั้งระบบหลักและทุก MC instance รันบน Docker ทั้งหมด
 - Native process runner อยู่นอก scope ปัจจุบัน (interface `Runner` ยังเผื่อไว้ แต่ implement เฉพาะ Docker)
 - รองรับ Vanilla, Paper (plugin), Fabric/Forge (modded), Velocity (proxy) ผ่าน abstraction เดียวกัน
-- Auth เป็น local อย่างเดียว (email+password) — OIDC เป็น backlog
+- Auth เป็น local อย่างเดียว (username+password — ระบบไม่เก็บ email เลย) — OIDC เป็น backlog
 
 ## 3 ชั้นหลัก
 1. **Control plane** — API server (Go), stateless, ถือ DB/Redis/NATS

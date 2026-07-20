@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/store"
@@ -59,14 +58,13 @@ func (a *API) handleGetUser(w http.ResponseWriter, r *http.Request) {
 // directoryUserView = shape เบาสำหรับ access picker (ดู docs/api.md)
 type directoryUserView struct {
 	ID          uuid.UUID `json:"id"`
-	Email       string    `json:"email"`
-	Username    *string   `json:"username"`
+	Username    string    `json:"username"`
 	DisplayName string    `json:"display_name"`
 	AvatarURL   *string   `json:"avatar_url"`
 }
 
 // handleUserDirectory เปิดให้ทุก user ที่ login แล้ว (ไม่ต้องมี users.view) —
-// owner ใช้เลือก collaborator ตอน grant server_permission ผ่าน email/id
+// owner ใช้เลือก collaborator ตอน grant server_permission ผ่าน username/id
 func (a *API) handleUserDirectory(w http.ResponseWriter, r *http.Request) {
 	users, err := a.st.ListUserDirectory(r.Context())
 	if err != nil {
@@ -78,7 +76,6 @@ func (a *API) handleUserDirectory(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		views = append(views, directoryUserView{
 			ID:          u.ID,
-			Email:       u.Email,
 			Username:    u.Username,
 			DisplayName: u.DisplayName,
 			AvatarURL:   avatarURL(u.ID, u.AvatarUpdatedAt),
@@ -91,7 +88,6 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	actor := auth.UserFrom(r.Context())
 
 	var req struct {
-		Email        string   `json:"email"`
 		Username     string   `json:"username"`
 		IsAdmin      bool     `json:"is_admin"`
 		Capabilities []string `json:"capabilities"`
@@ -100,26 +96,12 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	req.Email = strings.TrimSpace(req.Email)
 	req.Username = strings.TrimSpace(req.Username)
 
-	// ต้องมี email หรือ username อย่างน้อยหนึ่งอย่าง (username-only account ได้)
-	if req.Email == "" && req.Username == "" {
-		writeError(w, http.StatusBadRequest, "identifier_required", "provide an email or a username")
+	if !usernameRe.MatchString(req.Username) {
+		writeError(w, http.StatusBadRequest, "invalid_username",
+			"username must be 3-64 characters of letters, digits, or _.-")
 		return
-	}
-	if req.Email != "" && (len(req.Email) > 255 || !strings.Contains(req.Email, "@")) {
-		writeError(w, http.StatusBadRequest, "invalid_email", "a valid email is required")
-		return
-	}
-	var username *string
-	if req.Username != "" {
-		if !usernameRe.MatchString(req.Username) {
-			writeError(w, http.StatusBadRequest, "invalid_request",
-				"username must be 3-64 characters of letters, digits, or _.-")
-			return
-		}
-		username = &req.Username
 	}
 	if !validateCapabilities(req.Capabilities) {
 		writeError(w, http.StatusBadRequest, "invalid_capability", "capabilities must be keys from the catalog")
@@ -139,14 +121,9 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := a.st.CreateUser(r.Context(), req.Email, username, hash, req.IsAdmin, req.Capabilities)
+	user, err := a.st.CreateUser(r.Context(), req.Username, hash, req.IsAdmin, req.Capabilities)
 	if store.IsUniqueViolation(err) {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.ConstraintName == "idx_users_username_lower" {
-			writeError(w, http.StatusConflict, "username_exists", "a user with this username already exists")
-			return
-		}
-		writeError(w, http.StatusConflict, "email_exists", "a user with this email already exists")
+		writeError(w, http.StatusConflict, "username_exists", "a user with this username already exists")
 		return
 	}
 	if err != nil {
@@ -156,7 +133,7 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.audit(r, &actor.ID, nil, "user_created",
-		map[string]any{"user_id": user.ID.String(), "email": user.Email, "is_admin": user.IsAdmin})
+		map[string]any{"user_id": user.ID.String(), "username": user.Username, "is_admin": user.IsAdmin})
 
 	// initial_password แสดงครั้งเดียว — เก็บแค่ hash ใน DB
 	writeJSON(w, http.StatusCreated, map[string]any{

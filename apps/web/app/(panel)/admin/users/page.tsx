@@ -121,18 +121,14 @@ export default function AdminUsersPage() {
     onSuccess: (data) => {
       setCreateOpen(false);
       setSecret({
-        title: t("users.initialPasswordFor", { email: userIdent(data.user) }),
+        title: t("users.initialPasswordFor", { name: userIdent(data.user) }),
         password: data.initial_password,
       });
       invalidate();
     },
     onError: (err) => {
-      if (err instanceof ApiError && err.code === "identifier_required") {
-        toast.error(t("users.identifierRequired"));
-        return;
-      }
-      if (err instanceof ApiError && err.code === "email_exists") {
-        toast.error(t("users.emailExists"));
+      if (err instanceof ApiError && err.code === "invalid_username") {
+        toast.error(t("users.invalidUsername"));
         return;
       }
       if (err instanceof ApiError && err.code === "username_exists") {
@@ -191,7 +187,7 @@ export default function AdminUsersPage() {
       setResetTarget(null);
       setSecret({
         title: t("users.newPasswordFor", {
-          email: target ? userIdent(target) : "user",
+          name: target ? userIdent(target) : "user",
         }),
         password: data.initial_password,
       });
@@ -406,7 +402,7 @@ export default function AdminUsersPage() {
           if (!open) setResetTarget(null);
         }}
         title={t("users.resetTitle", {
-          email: resetTarget ? userIdent(resetTarget) : "",
+          name: resetTarget ? userIdent(resetTarget) : "",
         })}
         description={t("users.resetDesc")}
         confirmLabel={t("users.resetConfirm")}
@@ -423,7 +419,7 @@ export default function AdminUsersPage() {
           if (!open) setDeleteTarget(null);
         }}
         title={t("users.deleteTitle", {
-          email: deleteTarget ? userIdent(deleteTarget) : "",
+          name: deleteTarget ? userIdent(deleteTarget) : "",
         })}
         description={t("users.deleteConfirm")}
         confirmLabel={t("users.delete")}

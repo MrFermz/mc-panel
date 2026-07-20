@@ -14,14 +14,12 @@ import (
 // deleted_at ไม่อยู่ใน userCols — ทุก query filter `deleted_at IS NULL` อยู่แล้ว
 // จึงไม่มีทาง surface แถวที่ถูกลบ (User.DeletedAt คงเป็น nil เสมอในเส้นทางปกติ)
 // คอลัมน์ avatar (bytes) จงใจไม่อยู่ในนี้ — หนักเกินจะติดมากับทุก query, อ่านผ่าน GetUserAvatar
-const userCols = `id, email, username, display_name, avatar_updated_at, password_hash, is_admin, is_active,
+const userCols = `id, username, display_name, avatar_updated_at, password_hash, is_admin, is_active,
 	must_change_password, token_version, capabilities, last_login_at, created_at, updated_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
-	// email เป็น NULL ได้ (username-only account) — scan ผ่าน *string แล้วแปลง NULL เป็น ""
-	var email *string
-	err := row.Scan(&u.ID, &email, &u.Username, &u.DisplayName, &u.AvatarUpdatedAt,
+	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.AvatarUpdatedAt,
 		&u.PasswordHash, &u.IsAdmin,
 		&u.IsActive, &u.MustChangePassword, &u.TokenVersion, &u.Capabilities, &u.LastLoginAt,
 		&u.CreatedAt, &u.UpdatedAt)
@@ -30,9 +28,6 @@ func scanUser(row pgx.Row) (*User, error) {
 	}
 	if err != nil {
 		return nil, err
-	}
-	if email != nil {
-		u.Email = *email
 	}
 	return &u, nil
 }
@@ -48,16 +43,11 @@ func (s *Store) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 		`SELECT `+userCols+` FROM users WHERE id = $1 AND deleted_at IS NULL`, id))
 }
 
-func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	return scanUser(s.pool.QueryRow(ctx,
-		`SELECT `+userCols+` FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL`, email))
-}
-
-// GetUserByEmailOrUsername ใช้ตอน login — identifier เป็น email หรือ username ก็ได้
-func (s *Store) GetUserByEmailOrUsername(ctx context.Context, identifier string) (*User, error) {
+// GetUserByUsername ใช้ตอน login — username เป็น identifier เดียวของระบบ (case-insensitive)
+func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, error) {
 	return scanUser(s.pool.QueryRow(ctx,
 		`SELECT `+userCols+` FROM users
-		 WHERE (lower(email) = lower($1) OR lower(username) = lower($1)) AND deleted_at IS NULL`, identifier))
+		 WHERE lower(username) = lower($1) AND deleted_at IS NULL`, username))
 }
 
 // UserFilter สำหรับ ListUsers — ค่าว่างของแต่ละ field = ไม่ filter ด้วย field นั้น
@@ -75,8 +65,7 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
 		args = append(args, search)
 		p := "$" + strconv.Itoa(len(args))
 		where = append(where,
-			"(email ILIKE '%'||"+p+"||'%' OR coalesce(username,'') ILIKE '%'||"+p+
-				"||'%' OR display_name ILIKE '%'||"+p+"||'%')")
+			"(username ILIKE '%'||"+p+"||'%' OR display_name ILIKE '%'||"+p+"||'%')")
 	}
 	switch f.Role {
 	case "admin":
@@ -112,8 +101,7 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
 // DirectoryUser = ชุด field เบาสำหรับ access picker (ไม่ leak hash/สิทธิ์/สถานะ)
 type DirectoryUser struct {
 	ID              uuid.UUID
-	Email           string
-	Username        *string
+	Username        string
 	DisplayName     string
 	AvatarUpdatedAt *time.Time
 }
@@ -122,10 +110,10 @@ type DirectoryUser struct {
 // (ไม่ต้องมี users.view — เป็นข้อมูลเบา ๆ ที่ทุกคนใน panel เห็นได้)
 func (s *Store) ListUserDirectory(ctx context.Context) ([]DirectoryUser, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, email, username, display_name, avatar_updated_at
+		SELECT id, username, display_name, avatar_updated_at
 		FROM users
 		WHERE deleted_at IS NULL AND is_active = true
-		ORDER BY coalesce(nullif(display_name, ''), username, email), created_at`)
+		ORDER BY coalesce(nullif(display_name, ''), username), created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -134,35 +122,25 @@ func (s *Store) ListUserDirectory(ctx context.Context) ([]DirectoryUser, error) 
 	out := make([]DirectoryUser, 0)
 	for rows.Next() {
 		var d DirectoryUser
-		var email *string
-		if err := rows.Scan(&d.ID, &email, &d.Username, &d.DisplayName, &d.AvatarUpdatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.Username, &d.DisplayName, &d.AvatarUpdatedAt); err != nil {
 			return nil, err
-		}
-		if email != nil {
-			d.Email = *email
 		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) CreateUser(ctx context.Context, email string, username *string, passwordHash string, isAdmin bool, capabilities []string) (*User, error) {
+func (s *Store) CreateUser(ctx context.Context, username, passwordHash string, isAdmin bool, capabilities []string) (*User, error) {
 	// pgx encode nil slice เป็น SQL NULL ไม่ใช่ '{}' — ชน NOT NULL ของ capabilities
 	// (โผล่ตอน seed admin บน DB เปล่า) จึงต้อง coalesce เป็น empty slice ก่อนเสมอ
 	if capabilities == nil {
 		capabilities = []string{}
 	}
-	// email ว่าง -> NULL (username-only account) — unique index บน lower(email) อนุญาต NULL ซ้ำได้
-	var emailArg any
-	if email != "" {
-		emailArg = email
-	}
-	// username nil -> NULL (partial unique index มองข้ามแถว username IS NULL)
 	return scanUser(s.pool.QueryRow(ctx, `
-		INSERT INTO users (email, username, password_hash, is_admin, capabilities, must_change_password)
-		VALUES ($1, $2, $3, $4, $5, TRUE)
+		INSERT INTO users (username, password_hash, is_admin, capabilities, must_change_password)
+		VALUES ($1, $2, $3, $4, TRUE)
 		RETURNING `+userCols,
-		emailArg, username, passwordHash, isAdmin, capabilities))
+		username, passwordHash, isAdmin, capabilities))
 }
 
 // UpdateUser: capabilities = nil หมายถึงไม่เปลี่ยน (ต่างจาก []string{} = ล้างทิ้ง)
@@ -245,7 +223,7 @@ func (s *Store) TouchLastLogin(ctx context.Context, id uuid.UUID) error {
 }
 
 // SoftDeleteUser: mark ลบ + ปิด active + bump token_version (session เก่าตายหมด)
-// และล้าง server_permissions ทิ้ง (ไม่อยาก grant สิทธิ์ค้างถ้ามี user email ซ้ำในอนาคต)
+// และล้าง server_permissions ทิ้ง (ไม่อยาก grant สิทธิ์ค้างถ้ามี user username ซ้ำในอนาคต)
 // ทำใน transaction เดียว
 func (s *Store) SoftDeleteUser(ctx context.Context, id uuid.UUID) error {
 	tx, err := s.pool.Begin(ctx)
