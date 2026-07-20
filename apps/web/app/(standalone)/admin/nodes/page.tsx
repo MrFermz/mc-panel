@@ -79,10 +79,13 @@ export default function AdminNodesPage() {
     enabled: me?.is_admin === true,
   });
 
-  // admin เห็น server ทุกตัว — ใช้เช็คว่า node ไหนยังมี server (ปุ่มลบต้อง disabled)
+  // ใช้เช็คว่า node ไหนยังมี server (ปุ่มลบต้อง disabled) — ต้องเป็น scope=all เท่านั้น
+  // เพราะ /api/servers ปกติคืนเฉพาะ server ที่ตัวเองมีชื่อใน access (admin ก็ด้วย) จะนับไม่ครบ
+  // แล้วเปิดปุ่มลบ node ที่ยังมี server อยู่. scope=all รวมตัวที่อยู่ในถังขยะด้วย — ถูกแล้ว
+  // เพราะ row พวกนั้นยังอ้าง node อยู่จริง (FK RESTRICT)
   const servers = useQuery({
-    queryKey: ["servers"],
-    queryFn: () => apiGet("/api/servers", serversResponseSchema),
+    queryKey: ["servers", "all"],
+    queryFn: () => apiGet("/api/servers?scope=all", serversResponseSchema),
     enabled: me?.is_admin === true,
   });
 

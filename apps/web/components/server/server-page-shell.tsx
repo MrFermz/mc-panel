@@ -27,7 +27,7 @@ export function ServerPageShell({
 }) {
   const t = useT();
   const ctx = useActiveServer();
-  const { serversQuery, detailQuery, serverList, activeId, server } = ctx;
+  const { serversQuery, detailQuery, activeId, server } = ctx;
 
   useSetBreadcrumbs(
     React.useMemo(() => [{ label: t(titleKey) }], [t, titleKey]),
@@ -49,7 +49,9 @@ export function ServerPageShell({
     );
   }
 
-  if (serverList.length === 0) {
+  // เช็คจาก activeId ไม่ใช่ serverList: admin ที่ไม่มี server ของตัวเองเลยแต่กดเข้ามาจาก
+  // /admin/servers ยังต้องจัดการ server ตัวนั้นได้ (list ของตัวเองว่างเป็นเรื่องปกติแล้ว)
+  if (activeId === "") {
     return (
       <Card className="py-10">
         <CardContent className="text-muted-foreground flex justify-center text-sm">

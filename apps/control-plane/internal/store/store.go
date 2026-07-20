@@ -77,6 +77,8 @@ type Server struct {
 	Status     string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	// DeletedAt != nil = ถูก soft delete (ไฟล์บน node ยังอยู่ รอ restore หรือ purge)
+	DeletedAt *time.Time
 }
 
 type Permission struct {

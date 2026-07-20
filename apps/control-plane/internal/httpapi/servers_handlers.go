@@ -91,6 +91,53 @@ func (a *API) loadServerCap(w http.ResponseWriter, r *http.Request, cap string) 
 	return srv, perm, true
 }
 
+// loadDeletedServerCap = loadServerCap ฝั่งถังขยะ: โหลด server ที่ถูก soft delete ไว้
+// (GetServerByID ปกติมองไม่เห็น) แล้วเช็คสิทธิ์ 2 ชั้นแบบเดียวกัน — server ที่ยัง active
+// ตอบ 409 invalid_state เพื่อบังคับให้ผ่านขั้น delete ก่อน restore/purge เสมอ
+func (a *API) loadDeletedServerCap(w http.ResponseWriter, r *http.Request, cap string) (*store.Server, *store.Permission, bool) {
+	user := auth.UserFrom(r.Context())
+
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusNotFound, "server_not_found", "server not found")
+		return nil, nil, false
+	}
+
+	srv, err := a.st.GetServerByIDAny(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "server_not_found", "server not found")
+		return nil, nil, false
+	}
+	if err != nil {
+		a.log.Error("load server failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return nil, nil, false
+	}
+	if srv.DeletedAt == nil {
+		writeError(w, http.StatusConflict, "invalid_state", "server is not deleted")
+		return nil, nil, false
+	}
+
+	var perm *store.Permission
+	if !user.IsAdmin {
+		perm, err = a.st.GetPermission(r.Context(), user.ID, srv.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusForbidden, "forbidden", "no access to this server")
+			return nil, nil, false
+		}
+		if err != nil {
+			a.log.Error("load permission failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+			return nil, nil, false
+		}
+	}
+	if !effectiveServerCap(user, perm, cap) {
+		writeError(w, http.StatusForbidden, "forbidden", "insufficient permission for this server")
+		return nil, nil, false
+	}
+	return srv, perm, true
+}
+
 // statsViewFor คืน stats จาก cache เฉพาะ server ที่ running และมีข้อมูลแล้ว
 // ไม่งั้น nil (JSON null) ตาม docs/api.md
 func (a *API) statsViewFor(s *store.Server) *serverStatsView {
@@ -174,13 +221,25 @@ func (a *API) checkNodeMemory(w http.ResponseWriter, r *http.Request, node *stor
 func (a *API) handleListServers(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
 
+	// scope=all คือ view ของหน้า admin เท่านั้น (ต้องมี servers.view_all) — รวม server
+	// ที่อยู่ในถังขยะมาด้วยเพื่อให้ restore/purge ได้ ; default scope ("mine") คือรายการที่
+	// user มีชื่อใน access เท่านั้น **แม้เป็น admin** ตามดีไซน์ของหน้า `/`
+	scope := r.URL.Query().Get("scope")
+	if scope != "" && scope != "mine" && scope != "all" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "scope must be 'mine' or 'all'")
+		return
+	}
+
 	var (
 		servers []*store.Server
 		err     error
 	)
-	// servers.view_all (และ is_admin) เห็นทุก server; ที่เหลือเห็นเฉพาะที่มี server_permission
-	if hasCapability(user, capServersViewAll) {
-		servers, err = a.st.ListAllServers(r.Context())
+	if scope == "all" {
+		if !hasCapability(user, capServersViewAll) {
+			writeError(w, http.StatusForbidden, "forbidden", "insufficient capability")
+			return
+		}
+		servers, err = a.st.ListAllServersWithDeleted(r.Context())
 	} else {
 		servers, err = a.st.ListServersForUser(r.Context(), user.ID)
 	}
@@ -413,6 +472,8 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"server": toServerView(updated, a.statsViewFor(updated))})
 }
 
+// handleDeleteServer = soft delete: ย้าย server เข้าถังขยะโดยไม่แตะไฟล์/container บน node
+// (กู้คืนได้ที่ /admin/servers) — การลบจริงอยู่ที่ handlePurgeServer
 func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
 	srv, _, ok := a.loadServerCap(w, r, capServersDelete)
@@ -420,10 +481,74 @@ func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ต้องหยุด instance ก่อนลบ — กันลบทับ container ที่ยังรัน/กำลังเปลี่ยนสถานะ
+	// ต้องหยุด instance ก่อนลบ — server ในถังขยะต้องไม่มี container ที่ยังรันค้างอยู่
+	// (ไม่มีหน้าไหนคุม power ของมันได้อีกจนกว่าจะ restore)
 	if srv.Status != "stopped" && srv.Status != "errored" {
 		writeError(w, http.StatusConflict, "invalid_state",
 			"stop the server before deleting it")
+		return
+	}
+
+	deleted, err := a.st.SoftDeleteServer(r.Context(), srv.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "server_not_found", "server not found")
+		return
+	}
+	if err != nil {
+		a.log.Error("soft delete server failed", "server_id", srv.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+
+	a.audit(r, &user.ID, &srv.ID, "server_soft_deleted", map[string]any{"name": srv.Name})
+	a.log.Info("server soft deleted", "server_id", srv.ID, "user_id", user.ID)
+	// หายจากทุก list ที่ user เห็น (เหมือนถูกลบจริง) — admin ยังเห็นผ่าน scope=all
+	a.events.ServerRemoved(srv.ID)
+	a.rings.Drop(srv.ID)
+
+	writeJSON(w, http.StatusOK, map[string]any{"server": toServerView(deleted, nil)})
+}
+
+// handleRestoreServer กู้ server จากถังขยะกลับมาเป็นปกติ — ไฟล์ยังอยู่ครบ จึงพร้อม start ทันที
+func (a *API) handleRestoreServer(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	srv, _, ok := a.loadDeletedServerCap(w, r, capServersRestore)
+	if !ok {
+		return
+	}
+
+	restored, err := a.st.RestoreServer(r.Context(), srv.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "server_not_found", "server not found")
+		return
+	}
+	if err != nil {
+		a.log.Error("restore server failed", "server_id", srv.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+
+	a.audit(r, &user.ID, &srv.ID, "server_restored", map[string]any{"name": srv.Name})
+	a.log.Info("server restored", "server_id", srv.ID, "user_id", user.ID)
+	// กลับเข้า list ของคนที่มีสิทธิ์ — เส้นเดียวกับตอน create/import
+	a.events.ServerAdded(srv.ID)
+
+	writeJSON(w, http.StatusOK, map[string]any{"server": toServerView(restored, nil)})
+}
+
+// handlePurgeServer ลบถาวร: dispatch job delete_server ให้ agent ลบ container + ไฟล์จริง
+// แล้ว row จะถูกลบตอน JobResult สำเร็จ (ทางเดียวที่ข้อมูลหายจริง) — ทำได้เฉพาะกับ server
+// ที่ถูก soft delete ไว้แล้ว เพื่อบังคับให้ผ่านขั้นตอน stop → delete → purge เสมอ
+func (a *API) handlePurgeServer(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	srv, _, ok := a.loadDeletedServerCap(w, r, capServersPurge)
+	if !ok {
+		return
+	}
+
+	if srv.Status != "stopped" && srv.Status != "errored" {
+		writeError(w, http.StatusConflict, "invalid_state",
+			"server is "+srv.Status+"; try again when it settles")
 		return
 	}
 
@@ -432,8 +557,7 @@ func (a *API) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "dispatch_failed", "failed to dispatch delete job")
 		return
 	}
-	// audit `server_deleted` เกิดตอน job สำเร็จจริง (result consumer)
-	// เพราะจุดนี้ข้อมูลยังไม่ถูกลบ
+	// audit `server_deleted` เกิดตอน job สำเร็จจริง (result consumer) เพราะจุดนี้ไฟล์ยังอยู่
 
 	fillJobRequester(job, user)
 	writeJSON(w, http.StatusOK, map[string]any{"job": toJobView(job)})

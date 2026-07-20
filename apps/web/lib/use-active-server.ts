@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import {
@@ -27,9 +28,9 @@ export interface ActiveServer {
   canManageFiles: boolean;
 }
 
-// "active server" = ตัวที่เลือกจาก switcher ใน sidebar (จำใน dashboardServerId) ไม่ผูก id ใน URL
-// หน้า console/settings/files/logs ใช้ตัวนี้ร่วมกัน — สิทธิ์ต่อ server อ่านจาก /api/servers/{id}
-// (list ไม่มี role ต่อ server) เหมือนที่หน้า detail เดิมทำ
+// "active server" = ตัวที่เลือกไว้จากหน้า `/` หรือ `/admin/servers` (จำใน dashboardServerId)
+// ไม่ผูก id ใน URL — หน้า console/settings/files/logs ใช้ตัวนี้ร่วมกัน สิทธิ์ต่อ server อ่านจาก
+// /api/servers/{id} (list ไม่มี role ต่อ server) เหมือนที่หน้า detail เดิมทำ
 export function useActiveServer(): ActiveServer {
   const { data: meData } = useMe();
   const me = meData?.user;
@@ -41,10 +42,17 @@ export function useActiveServer(): ActiveServer {
   });
   const serverList = serversQuery.data?.servers ?? [];
 
-  const activeId =
-    dashboardServerId && serverList.some((s) => s.id === dashboardServerId)
+  // id ที่โหลด detail ไม่ผ่าน (ถูกลบ/ถูกถอนสิทธิ์ระหว่างทาง) — กันไม่ให้ค้างหน้า error ตลอด
+  const [rejectedId, setRejectedId] = React.useState<string | null>(null);
+
+  // ห้ามตัด dashboardServerId ทิ้งเพราะ "ไม่อยู่ใน serverList": /api/servers คืนเฉพาะ server
+  // ที่ตัวเองมีชื่อใน access ส่วน admin เข้ามาจาก /admin/servers ได้ทุกตัว — ให้ detail query
+  // (ซึ่ง enforce สิทธิ์จริงฝั่ง backend) เป็นคนตัดสิน แล้วค่อย fallback เมื่อมันพัง
+  const preferredId =
+    dashboardServerId && dashboardServerId !== rejectedId
       ? dashboardServerId
-      : serverList[0]?.id ?? "";
+      : "";
+  const activeId = preferredId || serverList[0]?.id || "";
 
   const detailQuery = useQuery({
     queryKey: ["servers", activeId],
@@ -52,6 +60,12 @@ export function useActiveServer(): ActiveServer {
       apiGet(`/api/servers/${activeId}`, serverDetailResponseSchema),
     enabled: activeId !== "",
   });
+
+  React.useEffect(() => {
+    if (detailQuery.isError && activeId !== "" && activeId === preferredId) {
+      setRejectedId(activeId);
+    }
+  }, [detailQuery.isError, activeId, preferredId]);
 
   const server = detailQuery.data?.server;
   const permissions = detailQuery.data?.permissions ?? [];

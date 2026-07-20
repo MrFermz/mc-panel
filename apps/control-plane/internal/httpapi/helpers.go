@@ -213,7 +213,9 @@ type serverView struct {
 	Status     string           `json:"status"`
 	CreatedAt  time.Time        `json:"created_at"`
 	UpdatedAt  time.Time        `json:"updated_at"`
-	Stats      *serverStatsView `json:"stats"`
+	// deleted_at != null = อยู่ในถังขยะ (โผล่เฉพาะ scope=all ของหน้า admin)
+	DeletedAt *time.Time       `json:"deleted_at"`
+	Stats     *serverStatsView `json:"stats"`
 }
 
 func toServerView(s *store.Server, stats *serverStatsView) serverView {
@@ -229,6 +231,7 @@ func toServerView(s *store.Server, stats *serverStatsView) serverView {
 		Status:     s.Status,
 		CreatedAt:  s.CreatedAt,
 		UpdatedAt:  s.UpdatedAt,
+		DeletedAt:  s.DeletedAt,
 		Stats:      stats,
 	}
 }

@@ -126,11 +126,10 @@ function BackToServers() {
   );
 }
 
+// sidebar มีแค่เมนูที่ทำงานกับ active server — ทางเข้า admin ย้ายไปอยู่ใน user menu
+// (หน้า admin ไม่มี sidebar แล้ว การเอาลิงก์ไว้ที่นี่เลยพาผู้ใช้ออกจาก panel แบบไม่มีทางกลับ)
 export function SidebarNav({ user }: { user: NavUser }) {
   const t = useT();
-  const admins = visibleFor(adminItems, user);
-  // ลำดับ section: ปุ่ม server ปัจจุบัน/กลับไปหน้า list → General (เมนูที่ทำงานกับ active server)
-  // → Admin
   return (
     <nav className="flex flex-col gap-1 p-3">
       <BackToServers />
@@ -138,14 +137,6 @@ export function SidebarNav({ user }: { user: NavUser }) {
       {visibleFor(mainItems, user).map((item) => (
         <NavLink key={item.href} item={item} />
       ))}
-      {admins.length > 0 && (
-        <>
-          <SectionLabel className="mt-4">{t("nav.admin")}</SectionLabel>
-          {admins.map((item) => (
-            <NavLink key={item.href} item={item} />
-          ))}
-        </>
-      )}
     </nav>
   );
 }

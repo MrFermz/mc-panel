@@ -107,6 +107,9 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.Get("/servers/{id}", a.handleGetServer)
 			pr.With(a.requireCap(capServersEdit)).Patch("/servers/{id}", a.handleUpdateServer)
 			pr.With(a.requireCap(capServersDelete)).Delete("/servers/{id}", a.handleDeleteServer)
+			// restore/purge ทำกับ server ที่อยู่ในถังขยะเท่านั้น (deleted_at ไม่ null)
+			pr.With(a.requireCap(capServersRestore)).Post("/servers/{id}/restore", a.handleRestoreServer)
+			pr.With(a.requireCap(capServersPurge)).Post("/servers/{id}/purge", a.handlePurgeServer)
 			pr.With(a.requireCap(capServersPower)).Post("/servers/{id}/actions", a.handleServerAction)
 			pr.Get("/servers/{id}/jobs", a.handleListServerJobs)
 			pr.With(a.requireCap(capConsoleView)).

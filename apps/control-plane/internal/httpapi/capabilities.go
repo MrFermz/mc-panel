@@ -37,6 +37,8 @@ const (
 	capServersCreate  = "servers.create"
 	capServersEdit    = "servers.edit"
 	capServersDelete  = "servers.delete"
+	capServersRestore = "servers.restore"
+	capServersPurge   = "servers.purge"
 	capServersPower   = "servers.power"
 
 	capConsoleView  = "console.view"
@@ -72,7 +74,9 @@ var capabilityCatalog = []capabilityMeta{
 	{capServersViewAll, "servers", "view_all", "View all servers", "See every server, not only the shared ones"},
 	{capServersCreate, "servers", "create", "Create servers", "Create and import server instances"},
 	{capServersEdit, "servers", "edit", "Edit servers", "Rename a server and change memory or host port"},
-	{capServersDelete, "servers", "delete", "Delete servers", "Delete a server with its world and files"},
+	{capServersDelete, "servers", "delete", "Delete servers", "Move a server to the trash, keeping its world and files"},
+	{capServersRestore, "servers", "restore", "Restore servers", "Bring a deleted server back from the trash"},
+	{capServersPurge, "servers", "purge", "Purge servers", "Permanently erase a deleted server with its world and files"},
 	{capServersPower, "servers", "power", "Power controls", "Start, stop, restart and kill servers"},
 
 	{capConsoleView, "console", "view", "View console", "Stream live console output and read history"},
@@ -101,6 +105,8 @@ var capabilityCatalog = []capabilityMeta{
 var serverScopedCaps = map[string]bool{
 	capServersEdit:     true,
 	capServersDelete:   true,
+	capServersRestore:  true,
+	capServersPurge:    true,
 	capServersPower:    true,
 	capConsoleView:     true,
 	capConsoleWrite:    true,

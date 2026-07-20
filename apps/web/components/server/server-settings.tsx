@@ -11,7 +11,6 @@ import {
   ApiError,
 } from "@/lib/api";
 import {
-  jobResponseSchema,
   serverResponseSchema,
   type Server,
   type ServerPropertyField,
@@ -104,13 +103,14 @@ export default function ServerSettings({
     },
   });
 
+  // DELETE = soft delete: ย้ายเข้าถังขยะ ไฟล์ยังอยู่ครบ (ลบถาวรทำที่ /admin/servers เท่านั้น)
   const remove = useMutation({
     mutationFn: () =>
       apiSend(
         "DELETE",
         `/api/servers/${server.id}`,
         undefined,
-        jobResponseSchema,
+        serverResponseSchema,
       ),
     onSuccess: () => {
       toast.success(t("sset.deleting", { name: server.name }));

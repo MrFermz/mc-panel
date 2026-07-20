@@ -38,6 +38,8 @@ import {
   type Server,
 } from "@/lib/types";
 import { formatMb } from "@/lib/format";
+import { CAPABILITY, hasCapability } from "@/lib/capabilities";
+import { useMe } from "@/lib/use-me";
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings/store";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
@@ -228,6 +230,7 @@ function useServerMetadata(disabled: boolean): MetadataValues & {
   setMcVersion: (v: string) => void;
 } {
   const t = useT();
+  const me = useMe().data?.user;
   const [name, setName] = React.useState("");
   const [nodeId, setNodeId] = React.useState("");
   const [serverType, setServerType] = React.useState("");
@@ -265,9 +268,17 @@ function useServerMetadata(disabled: boolean): MetadataValues & {
     queryFn: () => apiGet("/api/nodes", nodesResponseSchema),
     retry: false,
   });
+  // งบ RAM ที่ backend คิดคือผลรวมของ **ทุก** server บน node (รวมตัวที่อยู่ในถังขยะ) — ใช้
+  // scope=all ให้ตรงกัน ถ้าไม่มี servers.view_all ก็ตกไปใช้ list ของตัวเอง (hint จะต่ำกว่าจริง
+  // แต่ backend ปฏิเสธด้วย insufficient_memory อยู่ดี — นี่เป็นแค่คำเตือนล่วงหน้า)
+  const canViewAllServers = hasCapability(me, CAPABILITY.serversViewAll);
   const serversQuery = useQuery({
-    queryKey: ["servers"],
-    queryFn: () => apiGet("/api/servers", serversResponseSchema),
+    queryKey: canViewAllServers ? ["servers", "all"] : ["servers"],
+    queryFn: () =>
+      apiGet(
+        canViewAllServers ? "/api/servers?scope=all" : "/api/servers",
+        serversResponseSchema,
+      ),
     retry: false,
   });
 
@@ -1001,6 +1012,7 @@ function StepIndicator({ current }: { current: number }) {
 
 function NewServerWizard() {
   const t = useT();
+  const me = useMe().data?.user;
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -1135,6 +1147,15 @@ function NewServerWizard() {
       <ProvisioningCard />
     );
   };
+
+  // กันเข้าตรง URL — ปุ่ม/เมนูที่พามาที่นี่ซ่อนตาม servers.create อยู่แล้ว แต่หน้านี้เข้าถึงได้
+  // เองด้วย ถ้าไม่กันซ้ำ user จะกรอก wizard ทั้งชุดแล้วไปเจอ 403 ตอนกดสร้าง
+  // (เช็คหลัง hook ทั้งหมดเสมอ — early return ก่อน hook ทำ order พัง)
+  if (me && !hasCapability(me, CAPABILITY.serversCreate)) {
+    return (
+      <p className="text-muted-foreground text-sm">{t("common.noAccess")}</p>
+    );
+  }
 
   return (
     <div className="grid gap-6">

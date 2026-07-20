@@ -8,7 +8,6 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
 } from "lucide-react";
-import { useMe } from "@/lib/use-me";
 import type { User } from "@/lib/types";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -16,17 +15,16 @@ import { useSettingsStore } from "@/lib/settings/store";
 import {
   SidebarNav,
   mainItems,
-  adminItems,
   visibleFor,
 } from "@/components/layout/sidebar-nav";
 import { EventsListener } from "@/components/layout/events-listener";
 import { UserMenu } from "@/components/layout/user-menu";
+import { useAuthGuard } from "@/lib/use-auth-guard";
 import {
   BreadcrumbProvider,
-  useBreadcrumbs,
   usePageServer,
 } from "@/components/layout/breadcrumb-context";
-import { StatusDot } from "@/components/status-badge";
+import { PageTitle } from "@/components/layout/page-title";
 import { ServerHeaderControls } from "@/components/server/server-header-controls";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -39,9 +37,8 @@ import {
 
 function MobileNav({ user }: { user: User }) {
   const t = useT();
-  // มิเรอร์ desktop SidebarNav จาก source เดียวกัน (Dashboard + admin items) — ไม่มี "New Server"
-  // (desktop จงใจไม่มี; สร้าง server ทำผ่านปุ่มในหน้า dashboard)
-  const items = [...visibleFor(mainItems, user), ...visibleFor(adminItems, user)];
+  // มิเรอร์ desktop SidebarNav จาก source เดียวกัน — admin ไม่อยู่ที่นี่ (อยู่ใน user menu)
+  const items = visibleFor(mainItems, user);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -62,32 +59,6 @@ function MobileNav({ user }: { user: User }) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-// ชื่อหน้าปัจจุบัน = label ตัวท้ายของ trail ที่หน้าประกาศ (ไม่มี = Dashboard) — นำหน้าด้วย
-// server ที่หน้าผูกไว้ (ถ้ามี) เป็น trail สั้น ๆ `● ชื่อ server / ชื่อหน้า`; หน้าระดับ panel
-// (admin/*) ไม่ผูก server จึงเหลือแค่ชื่อหน้า
-function PageTitle() {
-  const t = useT();
-  const items = useBreadcrumbs();
-  const pageServer = usePageServer();
-  const title = items.at(-1)?.label ?? t("nav.dashboard");
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      {pageServer && (
-        <>
-          <StatusDot status={pageServer.server.status} />
-          <span className="text-muted-foreground max-w-40 truncate text-base font-medium sm:max-w-64">
-            {pageServer.server.name}
-          </span>
-          <span className="text-muted-foreground/50" aria-hidden>
-            /
-          </span>
-        </>
-      )}
-      <h1 className="truncate text-base font-semibold">{title}</h1>
-    </div>
   );
 }
 
@@ -173,20 +144,11 @@ function useHoverDrawer(enabled: boolean) {
 export default function PanelLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { data, isPending } = useMe();
-  const user = data?.user;
+  const user = useAuthGuard();
   const collapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const drawer = useHoverDrawer(collapsed);
 
-  React.useEffect(() => {
-    // /api/auth/me เป็น endpoint ที่ยกเว้น password_change_required
-    // เลยต้องเช็คแล้วบังคับ redirect เองที่นี่
-    if (user?.must_change_password) {
-      window.location.assign("/change-password");
-    }
-  }, [user?.must_change_password]);
-
-  if (isPending || !user || user.must_change_password) {
+  if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="grid w-full max-w-md gap-3 p-6">

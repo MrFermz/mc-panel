@@ -1,18 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIcon,
   ClockIcon,
   MemoryStickIcon,
   UsersIcon,
 } from "lucide-react";
-import { apiGet, ApiError } from "@/lib/api";
-import { serversResponseSchema, type Server } from "@/lib/types";
+import { ApiError } from "@/lib/api";
+import { type Server } from "@/lib/types";
 import { formatMb, formatUptime } from "@/lib/format";
 import { useT } from "@/lib/i18n";
-import { useSettingsStore } from "@/lib/settings/store";
 import { useActiveServer } from "@/lib/use-active-server";
 import { useSetPageServer } from "@/components/layout/breadcrumb-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -152,27 +150,14 @@ function ServerOverview({ server }: { server: Server }) {
 
 export default function DashboardPage() {
   const t = useT();
-  const dashboardServerId = useSettingsStore((s) => s.dashboardServerId);
+  // ใช้ useActiveServer ตัวเดียวกับหน้าอื่นในกลุ่ม general — อย่า resolve active server เองที่นี่
+  // (เคย duplicate logic แล้ว drift: server ที่ admin เข้ามาจาก /admin/servers ไม่อยู่ใน
+  // /api/servers ของตัวเอง จึงหา selected ไม่เจอแล้วหน้าโล่ง)
+  // ไม่ poll — stats/status อัปเดตผ่าน WS /ws/events (useEvents ที่ layout patch cache ทั้ง
+  // list และ detail ให้แล้ว)
+  const { serversQuery: servers, activeId, server: selected, canOperate } =
+    useActiveServer();
 
-  // ไม่ poll — stats/status อัปเดตผ่าน WS /ws/events (useEvents ที่ layout patch cache นี้)
-  const servers = useQuery({
-    queryKey: ["servers"],
-    queryFn: () => apiGet("/api/servers", serversResponseSchema),
-  });
-
-  const serverList = servers.data?.servers ?? [];
-
-  // server ที่เลือกดูภาพรวม: ค่าที่จำไว้ (ตั้งจาก sidebar switcher) ถ้ายังมีอยู่ ไม่งั้น fallback ตัวแรก
-  const selectedId =
-    dashboardServerId && serverList.some((s) => s.id === dashboardServerId)
-      ? dashboardServerId
-      : serverList[0]?.id ?? "";
-  const selected = serverList.find((s) => s.id === selectedId);
-
-  // ปุ่มสั่งงานย้ายไป top bar — ผูก server + สิทธิ์ operate เข้ากับ header ของหน้านี้
-  // operate = cap servers.power ต่อ server ตัวนั้น (2 ชั้น) โหลด perm ผ่าน useActiveServer
-  // ซึ่งเลือก active server ด้วย logic เดียวกับ selectedId ที่นี่
-  const canOperate = useActiveServer().canOperate;
   useSetPageServer(selected, canOperate);
 
   return (
@@ -193,7 +178,7 @@ export default function DashboardPage() {
             ? `: ${servers.error.message}`
             : "."}
         </p>
-      ) : serverList.length === 0 ? (
+      ) : activeId === "" ? (
         <Card className="py-10">
           <CardContent className="text-muted-foreground flex justify-center text-sm">
             {t("dashboard.noServers")}

@@ -9,12 +9,13 @@ import (
 )
 
 const serverCols = `id, node_id, owner_id, name, server_type, mc_version,
-	memory_mb, host_port, status, created_at, updated_at`
+	memory_mb, host_port, status, created_at, updated_at, deleted_at`
 
 func scanServer(row pgx.Row) (*Server, error) {
 	var v Server
 	err := row.Scan(&v.ID, &v.NodeID, &v.OwnerID, &v.Name, &v.ServerType,
-		&v.MCVersion, &v.MemoryMB, &v.HostPort, &v.Status, &v.CreatedAt, &v.UpdatedAt)
+		&v.MCVersion, &v.MemoryMB, &v.HostPort, &v.Status, &v.CreatedAt, &v.UpdatedAt,
+		&v.DeletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -70,12 +71,23 @@ func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.
 	return srv, nil
 }
 
+// GetServerByID คืนเฉพาะ server ที่ยังไม่ถูก soft delete — endpoint ปกติทุกเส้นใช้ตัวนี้
+// จึงตอบ 404 ให้ server ที่อยู่ในถังขยะโดยอัตโนมัติ (restore/purge ใช้ GetServerByIDAny)
 func (s *Store) GetServerByID(ctx context.Context, id uuid.UUID) (*Server, error) {
+	return scanServer(s.pool.QueryRow(ctx,
+		`SELECT `+serverCols+` FROM servers WHERE id = $1 AND deleted_at IS NULL`, id))
+}
+
+// GetServerByIDAny คืน server รวมตัวที่ถูก soft delete ไปแล้ว — ใช้เฉพาะ flow restore/purge
+// และตอน audit ผลของ job ที่ทำกับ row ซึ่งกำลังจะหาย
+func (s *Store) GetServerByIDAny(ctx context.Context, id uuid.UUID) (*Server, error) {
 	return scanServer(s.pool.QueryRow(ctx,
 		`SELECT `+serverCols+` FROM servers WHERE id = $1`, id))
 }
 
-func (s *Store) ListAllServers(ctx context.Context) ([]*Server, error) {
+// ListAllServersWithDeleted รวม server ที่ถูก soft delete ด้วย — ใช้เฉพาะหน้า admin
+// (scope=all) ที่ต้องเห็นถังขยะเพื่อ restore/purge ; web filter เอาเองจาก deleted_at
+func (s *Store) ListAllServersWithDeleted(ctx context.Context) ([]*Server, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+serverCols+` FROM servers ORDER BY created_at`)
 	if err != nil {
@@ -87,7 +99,7 @@ func (s *Store) ListAllServers(ctx context.Context) ([]*Server, error) {
 func (s *Store) ListServersForUser(ctx context.Context, userID uuid.UUID) ([]*Server, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+serverCols+` FROM servers s
-		WHERE EXISTS (
+		WHERE s.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM server_permissions p
 			WHERE p.server_id = s.id AND p.user_id = $1
 		)
@@ -103,7 +115,7 @@ func (s *Store) ListServersForUser(ctx context.Context, userID uuid.UUID) ([]*Se
 func (s *Store) ListAccessibleServerIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT s.id FROM servers s
-		WHERE EXISTS (
+		WHERE s.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM server_permissions p
 			WHERE p.server_id = s.id AND p.user_id = $1
 		)`, userID)
@@ -123,9 +135,12 @@ func (s *Store) ListAccessibleServerIDs(ctx context.Context, userID uuid.UUID) (
 	return ids, rows.Err()
 }
 
+// ListServersByNode ใช้โดย heartbeat reconcile — ข้าม server ที่ถูก soft delete
+// (container ถูกหยุดไปแล้วก่อนลบ ไม่มีสถานะจริงให้ reconcile จนกว่าจะ restore)
 func (s *Store) ListServersByNode(ctx context.Context, nodeID uuid.UUID) ([]*Server, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+serverCols+` FROM servers WHERE node_id = $1 ORDER BY created_at`, nodeID)
+		`SELECT `+serverCols+` FROM servers
+		 WHERE node_id = $1 AND deleted_at IS NULL ORDER BY created_at`, nodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -175,8 +190,26 @@ func (s *Store) DeleteServerRow(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-// SumServerMemoryMBOnNode คืนผลรวม memory_mb ของทุก server บน node (rows ถูก hard-delete
-// เมื่อลบจริง จึงไม่ต้อง filter สถานะ) — ใช้กัน RAM overcommit ตอน create/import/grow
+// SoftDeleteServer ย้าย server เข้าถังขยะ — ไม่แตะไฟล์/container บน node เลย
+// คืน ErrNotFound เมื่อ row ถูกลบไปแล้ว (กัน double submit ทำ audit ซ้ำ)
+func (s *Store) SoftDeleteServer(ctx context.Context, id uuid.UUID) (*Server, error) {
+	return scanServer(s.pool.QueryRow(ctx, `
+		UPDATE servers SET deleted_at = now(), updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING `+serverCols, id))
+}
+
+// RestoreServer กู้ server จากถังขยะ — สถานะเดิม (stopped/errored) ยังอยู่เหมือนตอนถูกลบ
+func (s *Store) RestoreServer(ctx context.Context, id uuid.UUID) (*Server, error) {
+	return scanServer(s.pool.QueryRow(ctx, `
+		UPDATE servers SET deleted_at = NULL, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NOT NULL
+		RETURNING `+serverCols, id))
+}
+
+// SumServerMemoryMBOnNode คืนผลรวม memory_mb ของทุก server บน node — **นับ server ที่ถูก
+// soft delete ด้วย** เพราะไฟล์ยังกินที่จริงและ restore ต้องกลับมาสตาร์ทได้เสมอ (RAM หลุดจอง
+// ตอน purge เท่านั้น) — ใช้กัน RAM overcommit ตอน create/import/grow
 func (s *Store) SumServerMemoryMBOnNode(ctx context.Context, nodeID uuid.UUID) (int, error) {
 	var sum int
 	err := s.pool.QueryRow(ctx,

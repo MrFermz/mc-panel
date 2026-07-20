@@ -5,11 +5,13 @@ import {
   ChevronDownIcon,
   LogOutIcon,
   SettingsIcon,
+  ShieldIcon,
   UserIcon,
 } from "lucide-react";
 import { apiSendVoid } from "@/lib/api";
 import type { User } from "@/lib/types";
 import { useT } from "@/lib/i18n";
+import { adminItems, visibleFor } from "@/components/layout/sidebar-nav";
 import { userTitle } from "@/lib/user-display";
 import { detectRole } from "@/lib/user-roles";
 import { UserIdentity } from "@/components/user/user-identity";
@@ -35,6 +37,10 @@ export function UserMenu({
   align?: "start" | "end";
 }) {
   const t = useT();
+  // ทางเข้า admin อยู่ที่เมนูนี้ที่เดียว (ไม่มีใน sidebar แล้ว) — user menu โผล่ทุก layout
+  // ทั้ง panel, standalone และหน้า `/` จึงเข้าถึงได้จากทุกหน้า. ปุ่มเดียวพาไปหน้าแรกที่ user
+  // มีสิทธิ์เห็น (สลับหน้า admin ต่อได้จาก nav แนวนอนในนั้น) — ไม่มีสิทธิ์สักหน้า = ไม่ขึ้นปุ่ม
+  const adminHome = visibleFor(adminItems, user)[0];
   const logout = async () => {
     try {
       await apiSendVoid("POST", "/api/auth/logout");
@@ -62,6 +68,17 @@ export function UserMenu({
           <UserIdentity user={user} panelRole={detectRole(user)} size="sm" />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {adminHome && (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href={adminHome.href}>
+                <ShieldIcon />
+                {t("nav.admin")}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/profile">
             <UserIcon />

@@ -18,6 +18,8 @@ export const CAPABILITY = {
   serversCreate: "servers.create",
   serversEdit: "servers.edit",
   serversDelete: "servers.delete",
+  serversRestore: "servers.restore",
+  serversPurge: "servers.purge",
   serversPower: "servers.power",
 
   consoleView: "console.view",
@@ -54,6 +56,8 @@ export function hasCapability(
 export const SERVER_SCOPED_CAPABILITIES = [
   CAPABILITY.serversEdit,
   CAPABILITY.serversDelete,
+  CAPABILITY.serversRestore,
+  CAPABILITY.serversPurge,
   CAPABILITY.serversPower,
   CAPABILITY.consoleView,
   CAPABILITY.consoleWrite,

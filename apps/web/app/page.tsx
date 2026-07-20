@@ -1,18 +1,21 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRightIcon, BoxIcon } from "lucide-react";
+import { ArrowRightIcon, BoxIcon, PlusIcon } from "lucide-react";
 import { apiGet, ApiError } from "@/lib/api";
 import { serversResponseSchema, type Server } from "@/lib/types";
 import { formatUptime } from "@/lib/format";
+import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useT } from "@/lib/i18n";
-import { useMe } from "@/lib/use-me";
+import { useAuthGuard } from "@/lib/use-auth-guard";
 import { useSettingsStore } from "@/lib/settings/store";
 import { EventsListener } from "@/components/layout/events-listener";
 import { UserMenu } from "@/components/layout/user-menu";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -130,27 +133,18 @@ function ServerCard({ server }: { server: Server }) {
 
 export default function ServerListPage() {
   const t = useT();
-  const { data: meData, isPending: mePending } = useMe();
-  const user = meData?.user;
+  const user = useAuthGuard();
 
   const servers = useQuery({
     queryKey: ["servers"],
     queryFn: () => apiGet("/api/servers", serversResponseSchema),
-    enabled: Boolean(user) && !user?.must_change_password,
+    enabled: Boolean(user),
   });
   const serverList = servers.data?.servers ?? [];
 
-  React.useEffect(() => {
-    // /api/auth/me ยกเว้น password_change_required — หน้านี้ต้องบังคับ redirect เอง
-    // (เหมือน panel layout เพราะอยู่นอก (panel))
-    if (user?.must_change_password) {
-      window.location.assign("/change-password");
-    }
-  }, [user?.must_change_password]);
-
-  if (mePending || !user || user.must_change_password) {
+  if (!user) {
     return (
-      <main className="mx-auto grid w-full max-w-6xl gap-4 p-6">
+      <main className="mx-auto grid w-full max-w-6xl gap-4 p-4 md:p-6">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-40 w-full" />
       </main>
@@ -160,7 +154,7 @@ export default function ServerListPage() {
   return (
     <>
       <EventsListener />
-      <main className="mx-auto grid w-full max-w-6xl gap-8 p-6 md:p-10">
+      <main className="mx-auto grid w-full max-w-6xl gap-8 p-4 md:p-6">
         <header className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <BoxIcon className="size-6 shrink-0" />
@@ -169,13 +163,25 @@ export default function ServerListPage() {
           <UserMenu user={user} />
         </header>
 
-        <div className="grid gap-1">
-          <h1 className="text-3xl font-bold tracking-tight">
-            {t("serverList.title")}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {t("serverList.subtitle")}
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid gap-1">
+            <h1 className="text-3xl font-bold tracking-tight">
+              {t("serverList.title")}
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              {t("serverList.subtitle")}
+            </p>
+          </div>
+          {/* ทางเข้าสร้าง server จากหน้านี้ — คนที่มี servers.create แต่ไม่มี servers.view_all
+              ไม่เห็นเมนู admin > servers จึงต้องมีปุ่มตรงนี้ */}
+          {hasCapability(user, CAPABILITY.serversCreate) && (
+            <Button asChild>
+              <Link href="/servers/new">
+                <PlusIcon />
+                {t("nav.newServer")}
+              </Link>
+            </Button>
+          )}
         </div>
 
         {servers.isPending ? (

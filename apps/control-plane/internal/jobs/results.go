@@ -91,9 +91,10 @@ func (rc *ResultConsumer) handle(msg jetstream.Msg) {
 	plan, restartStart := planTransition(job, res.Success)
 
 	// delete สำเร็จลบ row ใน tx เดียว — โหลด name ไว้ก่อนเพื่อ audit หลัง commit
+	// (ใช้ ...Any เพราะ purge ทำกับ server ที่ถูก soft delete ไปแล้ว)
 	var deleted *store.Server
 	if job.Type == "delete_server" && res.Success && job.ServerID != nil {
-		if srv, gerr := rc.st.GetServerByID(ctx, *job.ServerID); gerr == nil {
+		if srv, gerr := rc.st.GetServerByIDAny(ctx, *job.ServerID); gerr == nil {
 			deleted = srv
 		}
 	}

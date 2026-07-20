@@ -217,7 +217,7 @@ export default function ProfilePage() {
 
   if (isPending || !data) {
     return (
-      <div className="grid max-w-3xl gap-6">
+      <div className="grid gap-6">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -226,7 +226,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="grid max-w-3xl gap-6">
+    <div className="grid gap-6">
       <div className="grid gap-1">
         <h1 className="text-xl font-semibold">{t("profile.title")}</h1>
         <p className="text-muted-foreground text-sm">{t("profile.subtitle")}</p>

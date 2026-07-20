@@ -110,6 +110,8 @@ export const serverSchema = z.object({
   status: serverStatusSchema,
   created_at: z.string(),
   updated_at: z.string(),
+  // ไม่ null = อยู่ในถังขยะ (โผล่เฉพาะ /api/servers?scope=all ของหน้า admin)
+  deleted_at: z.string().nullable().default(null),
   // null เมื่อ server ไม่ได้รันหรือยังไม่มีข้อมูล stats
   stats: serverStatsSchema.nullable().default(null),
 });
