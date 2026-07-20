@@ -8,7 +8,6 @@ import { apiGet, apiSendVoid, listUserDirectory, ApiError } from "@/lib/api";
 import {
   capabilitiesResponseSchema,
   permissionsResponseSchema,
-  type DirectoryUser,
   type Permission,
 } from "@/lib/types";
 import { SERVER_SCOPED_CAPABILITIES } from "@/lib/capabilities";
@@ -21,21 +20,14 @@ import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
 import { userIdent, userTitle } from "@/lib/user-display";
 import { UserIdentity } from "@/components/user/user-identity";
+import { UserPicker } from "@/components/user/user-picker";
 import {
   FieldGroupLabel,
   PermissionGroups,
 } from "@/components/user/permission-fields";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogBody,
@@ -58,27 +50,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface FormState {
-  // userId !== "" → ส่ง user_id (เลือกจาก dropdown); "" → ใช้ free-text username แทน
+  // เลือกจาก directory เท่านั้น ("" = ยังไม่ได้เลือก) — ไม่มีช่องพิมพ์ username แล้ว
+  // เพราะพิมพ์ผิดจะรู้ตอน submit ทีเดียว ส่วน picker กรองจากคนที่มีจริงอยู่แล้ว
   userId: string;
-  username: string;
   role: "owner" | "member";
   capabilities: string[];
 }
 
 const emptyForm: FormState = {
   userId: "",
-  username: "",
   role: "member",
   capabilities: SERVER_ROLE_PRESETS.find((p) => p.key === "viewer")!
     .capabilities,
 };
-
-// label ของ user ใน dropdown — display name + username ถ้าต่างกัน
-function directoryLabel(u: DirectoryUser): string {
-  const primary = userTitle(u);
-  const secondary = userIdent(u);
-  return secondary !== primary ? `${primary} (${secondary})` : primary;
-}
 
 // preset picker ต่อ server — เทียบชุด cap ปัจจุบันกับ preset แล้วไฮไลต์ตัวที่ตรง
 function ServerPresetPicker({
@@ -121,11 +105,27 @@ function ServerPresetPicker({
   );
 }
 
-export default function ServerAccess({ serverId }: { serverId: string }) {
+// สองโหมด: live (มี serverId — ยิง REST ทันที) กับ draft (wizard สร้าง server ที่ instance
+// ยังไม่มี — เก็บใน state แล้ว apply หลังสร้างเสร็จ). ทั้งสองโหมดเลือก user จาก directory
+// เท่านั้น (backend ยังรับ `username` อยู่ แต่ UI ไม่ใช้แล้ว)
+export default function ServerAccess({
+  serverId,
+  draft,
+  onDraftChange,
+  lockedUserId,
+}: {
+  serverId?: string;
+  draft?: Permission[];
+  onDraftChange?: (next: Permission[]) => void;
+  // แถวที่แก้/ลบไม่ได้ — ใช้กับคนสร้าง server ใน wizard ซึ่ง backend ตั้งเป็น owner
+  // ให้เองตอน CreateServerWithOwner อยู่แล้ว (ปุ่มที่กดแล้วไม่มีผลจริง = หลอก user)
+  lockedUserId?: string;
+}) {
   const t = useT();
   const queryClient = useQueryClient();
+  const live = serverId !== undefined;
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editingIdent, setEditingIdent] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<Permission | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm);
   const [removeTarget, setRemoveTarget] = React.useState<Permission | null>(
     null,
@@ -137,7 +137,13 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
     queryKey: ["servers", serverId, "permissions"],
     queryFn: () =>
       apiGet(`/api/servers/${serverId}/permissions`, permissionsResponseSchema),
+    enabled: live,
   });
+
+  const rows = React.useMemo(
+    () => (live ? (permissions.data?.permissions ?? []) : (draft ?? [])),
+    [live, permissions.data, draft],
+  );
 
   const directory = useQuery({
     queryKey: ["users", "directory"],
@@ -162,17 +168,40 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
 
   // user ที่เลือกได้: active ทั้งหมด ตัดตัวเอง + คนที่มีสิทธิ์อยู่แล้วออก
   const pickableUsers = React.useMemo(() => {
-    const already = new Set(
-      (permissions.data?.permissions ?? []).map((p) => p.user_id),
-    );
+    const already = new Set(rows.map((p) => p.user_id));
     const meId = me.data?.user.id;
     return (directory.data?.users ?? []).filter(
       (u) => u.id !== meId && !already.has(u.id),
     );
-  }, [directory.data, permissions.data, me.data]);
+  }, [directory.data, rows, me.data]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["servers", serverId] });
+  };
+
+  // โหมด draft: upsert/remove ลงใน array ที่ parent ถืออยู่ (key ด้วย user_id)
+  const applyDraft = (payload: FormState) => {
+    const picked = (directory.data?.users ?? []).find(
+      (u) => u.id === payload.userId,
+    );
+    if (!picked) return;
+    const entry: Permission = {
+      user_id: picked.id,
+      username: picked.username,
+      display_name: picked.display_name ?? "",
+      avatar_url: picked.avatar_url ?? null,
+      role: payload.role,
+      capabilities: payload.role === "owner" ? [] : payload.capabilities,
+    };
+    const current = draft ?? [];
+    const idx = current.findIndex((p) => p.user_id === entry.user_id);
+    onDraftChange?.(
+      idx >= 0
+        ? current.map((p, i) => (i === idx ? entry : p))
+        : [...current, entry],
+    );
+    toast.success(editing ? t("access.updated") : t("access.added"));
+    setDialogOpen(false);
   };
 
   const upsert = useMutation({
@@ -182,13 +211,13 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
         role: payload.role,
         capabilities: payload.role === "owner" ? [] : payload.capabilities,
       };
-      const body = payload.userId
-        ? { ...base, user_id: payload.userId }
-        : { ...base, username: payload.username.trim() };
-      return apiSendVoid("POST", `/api/servers/${serverId}/permissions`, body);
+      return apiSendVoid("POST", `/api/servers/${serverId}/permissions`, {
+        ...base,
+        user_id: payload.userId,
+      });
     },
     onSuccess: () => {
-      toast.success(editingIdent ? t("access.updated") : t("access.added"));
+      toast.success(editing ? t("access.updated") : t("access.added"));
       setDialogOpen(false);
       invalidate();
     },
@@ -219,25 +248,45 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
   });
 
   const openAdd = () => {
-    setEditingIdent(null);
+    setEditing(null);
     setForm(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (perm: Permission) => {
-    setEditingIdent(userIdent(perm));
+    setEditing(perm);
     setForm({
       userId: perm.user_id,
-      username: userIdent(perm),
       role: perm.role,
       capabilities: perm.capabilities,
     });
     setDialogOpen(true);
   };
 
-  // ปุ่ม add ปิดไว้จนกว่าจะเลือก user หรือกรอก username (ตอนแก้ไขไม่ต้องเช็ค)
-  const canSubmit =
-    editingIdent !== null || form.userId !== "" || form.username.trim() !== "";
+  // ต้องเลือก user ก่อนเสมอ (ตอนแก้ไขมี user ติดมาแล้ว)
+  const canSubmit = form.userId !== "";
+
+  const submit = () => {
+    if (!canSubmit) return;
+    if (!live) {
+      applyDraft(form);
+      return;
+    }
+    if (!upsert.isPending) upsert.mutate(form);
+  };
+
+  const confirmRemove = () => {
+    if (!removeTarget) return;
+    if (!live) {
+      onDraftChange?.(
+        (draft ?? []).filter((p) => p.user_id !== removeTarget.user_id),
+      );
+      setRemoveTarget(null);
+      toast.success(t("access.removed"));
+      return;
+    }
+    remove.mutate(removeTarget.user_id);
+  };
 
   return (
     <div className="grid gap-4">
@@ -249,9 +298,9 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
         </Button>
       </div>
 
-      {permissions.isPending ? (
+      {live && permissions.isPending ? (
         <Skeleton className="h-32 w-full" />
-      ) : permissions.isError ? (
+      ) : live && permissions.isError ? (
         <p className="text-destructive text-sm">{t("access.failedLoad")}</p>
       ) : (
         <Card className="py-0">
@@ -265,7 +314,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {permissions.data.permissions.map((perm) => {
+                {rows.map((perm) => {
                   const preset = matchServerPreset(
                     perm.role,
                     perm.capabilities,
@@ -293,25 +342,31 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEdit(perm)}
-                            aria-label={`${t("common.edit")} ${userTitle(perm)}`}
-                          >
-                            <PencilIcon />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={() => setRemoveTarget(perm)}
-                            aria-label={`${t("common.remove")} ${userTitle(perm)}`}
-                          >
-                            <Trash2Icon />
-                          </Button>
-                        </div>
+                        {perm.user_id === lockedUserId ? (
+                          <span className="text-muted-foreground flex justify-end text-xs">
+                            {t("access.you")}
+                          </span>
+                        ) : (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEdit(perm)}
+                              aria-label={`${t("common.edit")} ${userTitle(perm)}`}
+                            >
+                              <PencilIcon />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              onClick={() => setRemoveTarget(perm)}
+                              aria-label={`${t("common.remove")} ${userTitle(perm)}`}
+                            >
+                              <Trash2Icon />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -326,68 +381,45 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingIdent
-                ? t("access.editTitle", { name: editingIdent })
+              {editing
+                ? t("access.editTitle", { name: userTitle(editing) })
                 : t("access.addUser")}
             </DialogTitle>
-            <DialogDescription>{t("access.accountRequired")}</DialogDescription>
+            {!editing && (
+              <DialogDescription>
+                {t("access.accountRequired")}
+              </DialogDescription>
+            )}
           </DialogHeader>
           <form
             className="contents"
             onSubmit={(e) => {
               e.preventDefault();
-              if (canSubmit && !upsert.isPending) upsert.mutate(form);
+              submit();
             }}
           >
             <DialogBody>
-              {editingIdent === null && (
+              {editing ? (
+                // ตอนแก้ไข user เปลี่ยนไม่ได้ — โชว์ว่ากำลังแก้ของใครอยู่แทนช่องเลือก
+                <div className="bg-muted/40 flex items-center justify-between gap-3 rounded-md border p-3">
+                  <UserIdentity user={{ ...editing, id: editing.user_id }} />
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {userIdent(editing)}
+                  </span>
+                </div>
+              ) : (
                 <div className="grid gap-2">
                   <Label htmlFor="perm-user">{t("access.pickUser")}</Label>
-                  <Select
+                  <UserPicker
+                    id="perm-user"
+                    users={pickableUsers}
                     value={form.userId}
-                    onValueChange={(v) =>
-                      // เลือก user → เคลียร์ช่อง username (ใช้ user_id แทน)
-                      setForm({ ...form, userId: v, username: "" })
-                    }
-                    disabled={pickableUsers.length === 0}
-                  >
-                    <SelectTrigger id="perm-user">
-                      <SelectValue
-                        placeholder={
-                          directory.isPending
-                            ? t("common.loading")
-                            : pickableUsers.length === 0
-                              ? t("access.noPickable")
-                              : t("access.pickUserPlaceholder")
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pickableUsers.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {directoryLabel(u)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {editingIdent === null && (
-                <div className="grid gap-2">
-                  <Label htmlFor="perm-username">
-                    {t("access.orUsername")}
-                  </Label>
-                  <Input
-                    id="perm-username"
-                    disabled={form.userId !== ""}
-                    placeholder={t("access.usernamePlaceholder")}
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={form.username}
-                    onChange={(e) =>
-                      // พิมพ์ username → ล้าง user ที่เลือกไว้
-                      // (พิมพ์ case ไหนก็ได้ — backend lower ก่อนหา user เสมอ)
-                      setForm({ ...form, username: e.target.value, userId: "" })
+                    onSelect={(userId) => setForm({ ...form, userId })}
+                    disabled={directory.isPending}
+                    placeholder={
+                      directory.isPending
+                        ? t("common.loading")
+                        : t("access.pickUserPlaceholder")
                     }
                   />
                 </div>
@@ -430,7 +462,11 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
               >
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" disabled={!canSubmit || upsert.isPending}>
+              <Button
+                type="submit"
+                loading={upsert.isPending}
+                disabled={!canSubmit}
+              >
                 {upsert.isPending ? t("common.saving") : t("common.save")}
               </Button>
             </DialogFooter>
@@ -452,9 +488,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
         confirmLabel={t("common.remove")}
         destructive
         pending={remove.isPending}
-        onConfirm={() => {
-          if (removeTarget) remove.mutate(removeTarget.user_id);
-        }}
+        onConfirm={confirmRemove}
       />
     </div>
   );

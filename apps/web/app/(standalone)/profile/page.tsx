@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ImageUpIcon, Trash2Icon } from "lucide-react";
 import { ApiError, deleteAvatar, updateProfile, uploadAvatar } from "@/lib/api";
@@ -36,13 +36,38 @@ function AvatarCard() {
   const { data } = useMe();
   const user = data?.user;
   const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const [pending, setPending] = React.useState(false);
+  const refreshMe = () => queryClient.invalidateQueries({ queryKey: ["me"] });
+  const failed = (err: unknown) =>
+    toast.error(err instanceof ApiError ? err.message : t("common.unreachable"));
+
+  const upload = useMutation({
+    mutationFn: (file: File) => uploadAvatar(file),
+    onSuccess: async () => {
+      await refreshMe();
+      toast.success(t("profile.avatarUpdated"));
+    },
+    onError: failed,
+    onSettled: () => {
+      // ล้าง input ไม่งั้นเลือกไฟล์เดิมซ้ำจะไม่ยิง onChange
+      if (inputRef.current) inputRef.current.value = "";
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: () => deleteAvatar(),
+    onSuccess: async () => {
+      await refreshMe();
+      toast.success(t("profile.avatarRemoved"));
+    },
+    onError: failed,
+  });
+
+  // แยกทีละปุ่ม ไม่ใช่ boolean เดียว — ไม่งั้นกดอัปโหลดแล้ว spinner ขึ้นที่ปุ่มลบด้วย
+  const pending = upload.isPending || remove.isPending;
 
   if (!user) return null;
 
-  const refreshMe = () => queryClient.invalidateQueries({ queryKey: ["me"] });
-
-  const onPick = async (file: File | undefined) => {
+  const onPick = (file: File | undefined) => {
     if (!file) return;
     // เช็คฝั่ง client ก่อนเพื่อบอกผู้ใช้ทันที — ของจริงบังคับซ้ำที่ control-plane เสมอ
     if (!AVATAR_TYPES.includes(file.type)) {
@@ -53,34 +78,7 @@ function AvatarCard() {
       toast.error(t("profile.avatarTooLarge", { kb: MAX_AVATAR_BYTES / 1024 }));
       return;
     }
-    setPending(true);
-    try {
-      await uploadAvatar(file);
-      await refreshMe();
-      toast.success(t("profile.avatarUpdated"));
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("common.unreachable"),
-      );
-    } finally {
-      setPending(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
-
-  const onRemove = async () => {
-    setPending(true);
-    try {
-      await deleteAvatar();
-      await refreshMe();
-      toast.success(t("profile.avatarRemoved"));
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("common.unreachable"),
-      );
-    } finally {
-      setPending(false);
-    }
+    upload.mutate(file);
   };
 
   return (
@@ -103,25 +101,28 @@ function AvatarCard() {
               type="file"
               accept={AVATAR_TYPES.join(",")}
               className="hidden"
-              onChange={(e) => void onPick(e.target.files?.[0])}
+              onChange={(e) => onPick(e.target.files?.[0])}
             />
             <Button
               type="button"
               variant="outline"
+              loading={upload.isPending}
               disabled={pending}
               onClick={() => inputRef.current?.click()}
             >
-              <ImageUpIcon />
+              {/* ซ่อนไอคอนตอน loading — Button เติม spinner นำหน้า ไม่งั้นได้ 2 ไอคอน */}
+              {!upload.isPending && <ImageUpIcon />}
               {t("profile.avatarUpload")}
             </Button>
             {user.avatar_url && (
               <Button
                 type="button"
                 variant="ghost"
+                loading={remove.isPending}
                 disabled={pending}
-                onClick={() => void onRemove()}
+                onClick={() => remove.mutate()}
               >
-                <Trash2Icon />
+                {!remove.isPending && <Trash2Icon />}
                 {t("profile.avatarRemove")}
               </Button>
             )}
@@ -141,30 +142,31 @@ function IdentityCard() {
   const { data } = useMe();
   const user = data?.user;
   const [displayName, setDisplayName] = React.useState("");
-  const [pending, setPending] = React.useState(false);
 
   // sync ค่าเริ่มต้นจาก server ครั้งเดียวต่อค่าที่ server ถือ — ไม่ทับสิ่งที่ผู้ใช้กำลังพิมพ์
   const serverValue = user?.display_name ?? "";
   React.useEffect(() => setDisplayName(serverValue), [serverValue]);
 
-  if (!user) return null;
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPending(true);
-    try {
-      await updateProfile(displayName.trim());
+  const save = useMutation({
+    mutationFn: () => updateProfile(displayName.trim()),
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me"] });
       // ชื่อโผล่ในลิสต์ access/permission ด้วย — refetch ให้ตรงกันทั้งหน้า
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast.success(t("profile.saved"));
-    } catch (err) {
+    },
+    onError: (err) =>
       toast.error(
         err instanceof ApiError ? err.message : t("common.unreachable"),
-      );
-    } finally {
-      setPending(false);
-    }
+      ),
+  });
+  const pending = save.isPending;
+
+  if (!user) return null;
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    save.mutate();
   };
 
   return (
@@ -199,7 +201,7 @@ function IdentityCard() {
 
           <div className="flex items-center justify-between gap-3">
             <RoleBadge role={detectRole(user)} size="sm" />
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" loading={pending}>
               {pending ? t("common.saving") : t("common.save")}
             </Button>
           </div>

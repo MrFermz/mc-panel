@@ -152,7 +152,7 @@ export function EditServerDialog({
             >
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={!valid || pending}>
+            <Button type="submit" loading={pending} disabled={!valid}>
               {t("sset.saveChanges")}
             </Button>
           </DialogFooter>

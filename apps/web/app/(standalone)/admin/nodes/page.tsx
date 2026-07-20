@@ -320,7 +320,8 @@ export default function AdminNodesPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={nodeName.trim() === "" || register.isPending}
+                loading={register.isPending}
+                disabled={nodeName.trim() === ""}
               >
                 {register.isPending
                   ? t("nodes.registering")

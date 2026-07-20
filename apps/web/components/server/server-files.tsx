@@ -396,7 +396,8 @@ export default function ServerFiles({
               </Button>
               <Button
                 type="submit"
-                disabled={nameMutation.isPending || !nameValue.trim()}
+                loading={nameMutation.isPending}
+                disabled={!nameValue.trim()}
               >
                 {nameMutation.isPending
                   ? t("common.saving")
@@ -512,9 +513,8 @@ function FileEditorDialog({
           {canWrite && (
             <Button
               type="button"
-              disabled={
-                content.isError || truncated || save.isPending || !dirty
-              }
+              loading={save.isPending}
+              disabled={content.isError || truncated || !dirty}
               onClick={() => save.mutate()}
             >
               {save.isPending ? t("common.saving") : t("common.save")}

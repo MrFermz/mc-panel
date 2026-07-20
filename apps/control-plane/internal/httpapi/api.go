@@ -160,6 +160,7 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.Get("/meta/nodes", a.handleMetaNodes)
 			pr.Get("/meta/next-port", a.handleMetaNextPort)
 			pr.Get("/meta/capabilities", a.handleCapabilities)
+			pr.Get("/meta/properties", a.handleMetaProperties)
 		})
 	})
 

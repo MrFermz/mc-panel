@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2Icon, SearchIcon } from "lucide-react";
+import { SearchIcon } from "lucide-react";
 import {
   addPlayer,
   listPlayers,
@@ -181,8 +181,11 @@ export default function ServerPlayers({
     onError: (err) => toast.error(playerErrorMessage(err, t)),
   });
 
+  // acting = ปิดปุ่มทั้งแถวระหว่างสั่ง, running = spinner เฉพาะปุ่มที่ถูกกดจริง
   const acting = (uuid: string) =>
     act.isPending && act.variables?.player.uuid === uuid;
+  const running = (uuid: string, action: string) =>
+    acting(uuid) && act.variables?.action === action;
 
   const enableWhitelist = useMutation({
     mutationFn: () => saveServerProperties(serverId, { "white-list": "true" }),
@@ -262,6 +265,7 @@ export default function ServerPlayers({
       <Button
         size="sm"
         variant="secondary"
+        loading={running(player.uuid, player.op ? "deop" : "op")}
         disabled={actionsDisabled || acting(player.uuid)}
         onClick={() =>
           act.mutate({ player, action: player.op ? "deop" : "op" })
@@ -273,6 +277,7 @@ export default function ServerPlayers({
         size="sm"
         variant="outline"
         className="border-transparent bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-400"
+        loading={running(player.uuid, "kick")}
         disabled={actionsDisabled || acting(player.uuid) || !player.online}
         onClick={() => act.mutate({ player, action: "kick" })}
       >
@@ -282,6 +287,7 @@ export default function ServerPlayers({
         size="sm"
         variant="outline"
         className="border-transparent bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-400"
+        loading={running(player.uuid, player.banned ? "pardon" : "ban")}
         disabled={actionsDisabled || acting(player.uuid)}
         onClick={() =>
           act.mutate({ player, action: player.banned ? "pardon" : "ban" })
@@ -305,7 +311,7 @@ export default function ServerPlayers({
           {canManage && (
             <Button
               size="sm"
-              disabled={enableWhitelist.isPending}
+              loading={enableWhitelist.isPending}
               onClick={() => enableWhitelist.mutate()}
             >
               {enableWhitelist.isPending
@@ -336,8 +342,7 @@ export default function ServerPlayers({
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
-          <Button type="submit" disabled={!canSubmit}>
-            {add.isPending && <Loader2Icon className="size-4 animate-spin" />}
+          <Button type="submit" loading={add.isPending} disabled={!canSubmit}>
             {t("players.add")}
           </Button>
         </form>

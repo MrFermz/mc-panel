@@ -80,6 +80,23 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   ห้ามเพิ่ม dependency ใหญ่โดยไม่มีเหตุผลใน commit/PR message
 - Web: Next.js App Router, shadcn/ui (component อยู่ `components/ui` — generate/vendor ตามสไตล์ shadcn),
   react-query สำหรับ server state, zod schema ใน `lib/types.ts` ต้อง sync กับ docs/api.md
+- **loading มี 2 ชั้น ทำงานคู่กันอัตโนมัติ** — ชั้นปุ่ม + ชั้นคลุมทั้งจอ:
+  1. **ปุ่ม**: `Button` (`components/ui/button.tsx`) มี prop `loading` ที่เติม spinner นำหน้า +
+     `disabled` + `aria-busy` ให้เอง — เขียน `loading={m.isPending}` แล้วเหลือ `disabled` ไว้เฉพาะ
+     เงื่อนไข validate (**อย่าใส่ `isPending` ซ้ำใน `disabled`**). `ConfirmDialog` ส่ง `pending`
+     ลงไปให้แล้ว. ปุ่มที่มีไอคอนนำอยู่แล้วต้องซ่อนไอคอนตอน loading เอง (`{!busy && <Icon />}`)
+  2. **ทั้งจอ**: `GlobalLoading` (`components/global-loading.tsx`) mount ที่ `app/providers.tsx`
+     เกาะกับ `useIsMutating()` ของ react-query — **ทุก `useMutation` ได้ overlay อัตโนมัติ
+     ไม่ต้องต่อสายที่ call site**. โผล่เมื่อเกิน `SHOW_AFTER_MS` (350ms) เท่านั้น งานที่จบเร็วกว่านั้น
+     เห็นแค่ spinner ที่ปุ่ม — **อย่าเอา delay ออก** ไม่งั้นจอกะพริบเทาทุกครั้งที่กดปุ่ม
+  - **ทุก action ที่ยิง API ต้องเป็น `useMutation`** (ไม่ใช่ `useState` + async เอง) ไม่งั้นหลุด
+    จาก `useIsMutating` แล้วไม่มี overlay — `useState(false)` ที่เหลือในโค้ดเป็นแฟล็ก dialog ล้วน
+  - mutation ที่มี overlay เฉพาะทางของตัวเอง (เช่น create ของ wizard ที่บอก phase) ต้องตั้ง
+    `mutationKey: [LOCAL_OVERLAY_KEY, ...]` เพื่อกันตัวเองออกจาก GlobalLoading ไม่ให้ซ้อน 2 ชั้น
+  - ปุ่ม start/stop/restart/kill **จงใจไม่มี spinner** — HTTP เป็นแค่ dispatch job
+    ตัวบอกความคืบหน้าจริงคือ status badge ที่อัปเดตผ่าน WS
+- `PageLoader` (`components/page-loader.tsx`) = สถานะ "หน้ายังไม่พร้อม" (ไม่ใช่ระหว่าง action)
+  ใช้ที่ auth guard ของทั้งสอง layout + Suspense fallback
 - **modal ทุกตัวต้อง sticky header/footer** — `DialogContent` (`components/ui/dialog.tsx`) เป็น
   flex column สูงไม่เกิน 85svh, `DialogHeader`/`DialogFooter` เป็น `shrink-0` มีเส้นคั่น+พื้นหลัง
   ส่วน **`DialogBody` คือ scroll container เดียว** ที่เหลือ. กติกาเวลาเขียน dialog ใหม่:
@@ -230,6 +247,24 @@ NATS เป็นแค่ job transport ไม่เกี่ยวกับ au
 โหลด jar + เขียน eula/launch script → JobResult → status=stopped → user สั่ง start ต่อ
 (import server: job `import_server` — agent อาจ detect เวอร์ชันจริงแล้วรายงานใน `JobResult.Detail` JSON
 `{"mc_version":"..."}` → control-plane update `mc_version` ของ server ให้ ถ้าเวอร์ชันผ่าน validate)
+
+**Wizard `/servers/new` สร้าง instance ที่ step สุดท้ายเท่านั้น** — **1 step = 1 component**
+ใน `components/server/new-server/` (`step-general` / `step-properties` / `step-access` / `step-players`,
+`step-indicator`, `steps.ts` = ลำดับ step, `detect.ts` = เดา type/version จาก archive) โดย state
+อยู่ในฮุก: `use-server-metadata` (ฟอร์มพื้นฐาน — คืนค่า+setter ไม่คืน JSX), `use-import-source`
+(ไฟล์ต้นทาง + detection), `use-create-server` (ลำดับการสร้างทั้งหมด) — `page.tsx` เหลือแค่ประกอบร่าง
++ ถือ draft state. เพิ่ม step ใหม่ = เพิ่มไฟล์ `step-*.tsx` + แถวใน `WIZARD_STEPS`:
+4 step — general / properties / access / players — สาม step แรกเป็น **draft ในหน้าเว็บล้วน ยังไม่ยิง API
+สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step 2–3 ข้ามได้ (step 1 บังคับกรอกให้ครบ + โหมด import
+ต้องเลือกไฟล์), มี node เดียวเลือกให้อัตโนมัติ. ปุ่ม create อยู่ที่ step สุดท้ายที่เดียว แล้วรันตามลำดับ:
+POST `/api/servers` (หรือ `/import`) → POST permission ตาม access draft → รอ job provisioning จบ →
+PUT `/properties` **เฉพาะ key ที่ต่างจาก default** (ไฟล์ยังไม่มีตอนนั้น merge จะ append ให้ ที่เหลือ MC
+เขียนเองตอน start แรก) → `POST /players` ทีละชื่อ → `setDashboardServerId` + ไป `/dashboard`.
+ขั้นหลัง create ล้ม = toast บอกเป็นรายการแล้วไปต่อ (server ถูกสร้างแล้ว ห้าม rollback เงียบ ๆ) —
+**ห้ามย้ายการสร้างกลับไปไว้ step แรก**. draft ของ properties ใช้ `GET /api/meta/properties`
+(catalog + default ที่ไม่ผูก server) ส่วน access/players ใช้โหมด draft ของ `ServerAccess`
+(`draft`/`onDraftChange` — เลือก user จาก directory เท่านั้น) กับ `PlayersDraft` (คนละตัวกับ
+`ServerPlayers` ที่อ่านไฟล์ ops/banned/usercache จริง)
 
 **ลบ server = soft delete เสมอ** (`servers.deleted_at`, migration `00015_server_soft_delete.sql`):
 `DELETE /api/servers/{id}` (cap `servers.delete`, ต้อง stopped/errored) **ไม่ dispatch job และไม่แตะ

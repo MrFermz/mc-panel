@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiSend, apiSendVoid, ApiError } from "@/lib/api";
 import { userResponseSchema } from "@/lib/types";
@@ -31,28 +31,20 @@ export function ChangePasswordForm({
   const [next, setNext] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
-  const [pending, setPending] = React.useState(false);
+  // forced flow reload ทั้งหน้า — ค้าง pending ไว้ไม่ให้ปุ่มกลับมากดได้ระหว่างนั้น
+  const [navigating, setNavigating] = React.useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (next.length < MIN_PASSWORD_LENGTH) {
-      setError(t("changePassword.tooShort", { n: MIN_PASSWORD_LENGTH }));
-      return;
-    }
-    if (next !== confirm) {
-      setError(t("changePassword.mismatch"));
-      return;
-    }
-    setPending(true);
-    try {
-      await apiSend(
+  const change = useMutation({
+    mutationFn: () =>
+      apiSend(
         "POST",
         "/api/auth/change-password",
         { current_password: current, new_password: next },
         userResponseSchema,
-      );
+      ),
+    onSuccess: () => {
       if (forced) {
+        setNavigating(true);
         // reload เต็มเพื่อล้าง gate must_change_password + รับ cookie ใหม่
         window.location.assign("/");
         return;
@@ -63,12 +55,27 @@ export function ChangePasswordForm({
       setCurrent("");
       setNext("");
       setConfirm("");
-      setPending(false);
       onCancel?.();
-    } catch (err) {
+    },
+    onError: (err) => {
       setError(err instanceof ApiError ? err.message : t("common.unreachable"));
-      setPending(false);
+    },
+  });
+
+  const pending = change.isPending || navigating;
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (next.length < MIN_PASSWORD_LENGTH) {
+      setError(t("changePassword.tooShort", { n: MIN_PASSWORD_LENGTH }));
+      return;
     }
+    if (next !== confirm) {
+      setError(t("changePassword.mismatch"));
+      return;
+    }
+    change.mutate();
   };
 
   const logout = async () => {
@@ -80,7 +87,7 @@ export function ChangePasswordForm({
   };
 
   const submit = (
-    <Button type="submit" disabled={pending}>
+    <Button type="submit" loading={pending}>
       {pending ? t("common.saving") : t("changePassword.submit")}
     </Button>
   );

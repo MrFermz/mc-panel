@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2Icon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -38,18 +39,38 @@ function Button({
   variant,
   size,
   asChild = false,
+  loading = false,
+  disabled,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    // ปุ่มที่กำลังรอ API — โชว์ spinner + กดซ้ำไม่ได้ (กันยิงซ้ำโดยไม่ต้องจำ disabled เอง)
+    // ใช้กับปุ่มที่ผูกกับ mutation ทุกตัว; asChild ไม่รองรับเพราะ Slot รับลูกได้คนเดียว
+    // ⚠️ spinner ถูก "เติมนำหน้า" children — ปุ่มที่มีไอคอนนำอยู่แล้วต้องซ่อนไอคอนนั้นเองตอน
+    // loading (`{!busy && <Icon />}`) ไม่งั้นจะได้ 2 ไอคอนเรียงกัน
+    loading?: boolean;
   }) {
   const Comp = asChild ? Slot : "button";
+  const busy = loading && !asChild;
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={busy || disabled}
+      aria-busy={busy || undefined}
       {...props}
-    />
+    >
+      {busy ? (
+        <>
+          <Loader2Icon className="animate-spin" />
+          {children}
+        </>
+      ) : (
+        children
+      )}
+    </Comp>
   );
 }
 

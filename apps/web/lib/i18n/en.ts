@@ -173,9 +173,6 @@ export const en = {
   "sset.propsSaved": "Saved (applies on next restart)",
   "sset.propsInvalid": "Invalid value for one of the properties.",
   "sset.propsOffline": "Server node is offline — start the server to edit properties.",
-  "sset.propsExtra": "Panel-managed properties",
-  "sset.propsExtraHint":
-    "These properties are managed by the panel and cannot be edited here.",
   "sset.stopToEditMemory": "Stop the server to change memory/port.",
   "sset.stopToEditProps":
     "Stop the server before editing server.properties (Minecraft overwrites it on shutdown).",
@@ -186,6 +183,7 @@ export const en = {
   "access.subtitle": "Who can see and operate this server.",
   "access.addUser": "Add user",
   "access.user": "User",
+  "access.you": "You (owner)",
   "access.role": "Role",
   "access.consoleWrite": "Console write",
   "access.manageFiles": "Manage files",
@@ -195,8 +193,8 @@ export const en = {
   "access.pickUser": "Existing user",
   "access.pickUserPlaceholder": "Select a user",
   "access.noPickable": "No other users to add",
-  "access.orUsername": "Or type a username",
-  "access.usernamePlaceholder": "username",
+  "access.searchUser": "Search users...",
+  "access.noUserMatch": "No user matches your search.",
   "access.username": "Username",
   "access.roleOwner": "Owner",
   "access.roleOperator": "Operator",
@@ -305,7 +303,6 @@ export const en = {
   "new.eulaAccept": "I accept the",
   "new.eulaLink": "Minecraft EULA",
   "new.create": "Create server",
-  "new.creating": "Creating...",
   "new.provisioning": "Provisioning {name}",
   "new.provisioningDesc":
     "Downloading the server jar and preparing files on the node.",
@@ -337,8 +334,6 @@ export const en = {
   "import.notZip": "That file is not a .zip archive.",
   "import.emptyFolder": "The selected folder has no files.",
   "import.zipping": "Compressing folder...",
-  "import.uploading": "Uploading...",
-  "import.progress": "Uploading {pct}%",
   "import.import": "Import server",
   "import.imported": "Server \"{name}\" imported",
   "import.errEulaRequired": "You must accept the Minecraft EULA to import.",
@@ -356,30 +351,32 @@ export const en = {
   "wizard.tabProperties": "Server settings",
   "wizard.tabAccess": "Access",
   "wizard.tabPlayers": "Players",
-  "wizard.lockedHint":
-    "Create or import the server first to unlock this tab.",
-  "wizard.done": "Go to server",
-  "wizard.summary": "Server ready",
-  "wizard.created":
-    "Server created. The other tabs are now editable — or head straight to the server.",
-  "wizard.imported":
-    "Server imported. Its files, whitelist and settings are ready to edit below.",
-  "wizard.detectedVersion": "Detected version",
-  "wizard.createContinue": "Create & continue",
-  "wizard.importContinue": "Import & continue",
   "wizard.next": "Next",
+  "wizard.createNow": "Create server",
+  "wizard.importNow": "Import server",
+  "wizard.optionalStep": "Optional — you can skip this and set it up later.",
+  "wizard.propsDraftHint":
+    "These values are written to server.properties once the server is created.",
+  "wizard.playersDraftHint":
+    "These players are added to the whitelist once the server is created.",
   "wizard.detecting": "Reading the archive…",
-  "wizard.detectedHint": "Detected {type} · Minecraft {version} from the archive.",
-  "wizard.summaryName": "Name",
-  "wizard.provisioning": "Preparing the server on the node…",
-  "wizard.provisionFailed":
-    "Provisioning failed on the node. You can still open the server to inspect it.",
-  "wizard.editGeneral": "Edit basics",
-  "wizard.summaryType": "Type",
-  "wizard.summaryNode": "Node",
-  "wizard.summaryPort": "Host port",
-  "wizard.overlayTitle": "Importing your server",
-  "wizard.overlayHint": "Keep this page open until the upload finishes.",
+  "wizard.detectedHint":
+    "Detected {type} · Minecraft {version} from the archive.",
+  "wizard.createdToast": "Created {name}",
+  "wizard.phaseCreating": "Creating the server…",
+  "wizard.phaseUploading": "Uploading the archive…",
+  "wizard.phaseProvisioning": "Preparing the server on the node…",
+  "wizard.phaseProperties": "Applying server settings…",
+  "wizard.phaseAccess": "Applying access…",
+  "wizard.phasePlayers": "Adding players to the whitelist…",
+  "wizard.errProvisionSkipped":
+    "The server was created but the node is not ready yet — settings and whitelist were not applied. Set them up from the server pages.",
+  "wizard.errProperties":
+    "The server was created but the settings could not be saved. Edit them on the settings page.",
+  "wizard.errAccessEntry": "Could not grant access to {name}",
+  "wizard.errPlayerEntry": "Could not whitelist {name}",
+  "wizard.overlayTitle": "Working…",
+  "wizard.overlayHint": "Keep this page open until it finishes.",
 
   // ---------- players / whitelist tab ----------
   "players.add": "Add",

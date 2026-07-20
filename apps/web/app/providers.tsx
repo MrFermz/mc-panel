@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { ApiError } from "@/lib/api";
 import { ThemeProvider, useTheme, type Theme } from "@/lib/settings/theme";
 import { I18nProvider, type Locale } from "@/lib/i18n";
+import { GlobalLoading } from "@/components/global-loading";
 
 function AppToaster() {
   // sonner ไม่รู้จัก CSS variable — ป้อน theme ที่ resolve แล้วให้ตรงกับ light/dark ปัจจุบัน
@@ -43,6 +44,7 @@ export function Providers({
       <I18nProvider initialLocale={locale}>
         <QueryClientProvider client={queryClient}>
           {children}
+          <GlobalLoading />
           <AppToaster />
         </QueryClientProvider>
       </I18nProvider>

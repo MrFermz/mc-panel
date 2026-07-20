@@ -191,6 +191,11 @@ export function getServerProperties(
   );
 }
 
+// catalog + ค่า default ที่ยังไม่ผูก server — wizard ใช้ก่อนสร้าง instance
+export function getPropertiesCatalog(): Promise<ServerPropertiesResponse> {
+  return apiGet("/api/meta/properties", serverPropertiesResponseSchema);
+}
+
 export function saveServerProperties(
   serverId: string,
   values: Record<string, string>,

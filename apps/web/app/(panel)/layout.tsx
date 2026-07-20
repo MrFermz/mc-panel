@@ -26,7 +26,7 @@ import {
 } from "@/components/layout/breadcrumb-context";
 import { PageTitle } from "@/components/layout/page-title";
 import { ServerHeaderControls } from "@/components/server/server-header-controls";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoader } from "@/components/page-loader";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -148,17 +148,9 @@ export default function PanelLayout({
   const collapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const drawer = useHoverDrawer(collapsed);
 
-  if (!user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="grid w-full max-w-md gap-3 p-6">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      </div>
-    );
-  }
+  // useAuthGuard คืน null ทั้งตอนยังโหลดไม่เสร็จและตอนเข้าไม่ได้ — เคสหลัง middleware
+  // เป็นคน redirect ที่นี่จึงเป็นสถานะ "รอ" ล้วน
+  if (!user) return <PageLoader />;
 
   return (
     <BreadcrumbProvider>

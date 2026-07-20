@@ -211,7 +211,8 @@ export default function UserPermissionsPage() {
             {t("common.cancel")}
           </Button>
           <Button
-            disabled={locked || !dirty || save.isPending}
+            loading={save.isPending}
+            disabled={locked || !dirty}
             onClick={() =>
               save.mutate({ is_admin: isAdmin, capabilities: selected })
             }

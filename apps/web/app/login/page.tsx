@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useMutation } from "@tanstack/react-query";
 import { apiSend, ApiError } from "@/lib/api";
 import { userResponseSchema } from "@/lib/types";
 import { useT } from "@/lib/i18n";
@@ -20,24 +21,25 @@ export default function LoginPage() {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
-  const [pending, setPending] = React.useState(false);
+  // ค้าง pending ไว้ระหว่างเปลี่ยนหน้า — ปุ่มต้องไม่กลับมากดได้อีกหลัง login สำเร็จ
+  const [navigating, setNavigating] = React.useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setPending(true);
-    try {
-      const { user } = await apiSend(
+  const login = useMutation({
+    mutationFn: () =>
+      apiSend(
         "POST",
         "/api/auth/login",
         { username, password },
         userResponseSchema,
-      );
+      ),
+    onSuccess: ({ user }) => {
+      setNavigating(true);
       // full navigation เพื่อให้ middleware เห็น cookie ใหม่แน่นอน
       window.location.assign(
         user.must_change_password ? "/change-password" : "/",
       );
-    } catch (err) {
+    },
+    onError: (err) => {
       if (err instanceof ApiError) {
         if (err.code === "invalid_credentials") {
           setError(t("login.invalidCredentials"));
@@ -49,8 +51,15 @@ export default function LoginPage() {
       } else {
         setError(t("common.unreachable"));
       }
-      setPending(false);
-    }
+    },
+  });
+
+  const pending = login.isPending || navigating;
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    login.mutate();
   };
 
   return (
@@ -89,7 +98,7 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-destructive text-sm">{error}</p>}
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" loading={pending}>
               {pending ? t("login.signingIn") : t("login.signIn")}
             </Button>
           </form>

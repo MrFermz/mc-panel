@@ -36,12 +36,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MemoryPresets } from "@/components/server/memory-presets";
 
@@ -205,7 +199,8 @@ export default function ServerSettings({
               )}
               <Button
                 type="submit"
-                disabled={!valid || !canEditRuntime || save.isPending}
+                loading={save.isPending}
+                disabled={!valid || !canEditRuntime}
               >
                 {save.isPending ? t("common.saving") : t("sset.saveChanges")}
               </Button>
@@ -328,6 +323,38 @@ function PropertyControl({
   );
 }
 
+// grid ของ field ทั้ง catalog แบบ controlled ล้วน — ใช้ทั้งหน้า settings (แก้ไฟล์จริง)
+// และ wizard สร้าง server (draft ที่ยัง apply ไม่ได้เพราะ instance ยังไม่มี)
+export function PropertiesFields({
+  fields,
+  values,
+  onChange,
+  disabled = false,
+}: {
+  fields: ServerPropertyField[];
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {fields.map((field) => (
+        <div key={field.key} className="grid gap-2">
+          <Label htmlFor={`prop-${field.key}`} className="font-normal">
+            {field.label}
+          </Label>
+          <PropertyControl
+            field={field}
+            value={values[field.key] ?? ""}
+            onChange={(v) => onChange(field.key, v)}
+            disabled={disabled}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ServerPropertiesCard({
   serverId,
   status,
@@ -358,8 +385,6 @@ export function ServerPropertiesCard({
   }, [values]);
 
   const fields = query.data?.fields ?? [];
-  const extra = query.data?.extra ?? {};
-  const extraKeys = Object.keys(extra);
 
   const dirty = React.useMemo(() => {
     if (!values) return false;
@@ -421,51 +446,18 @@ export function ServerPropertiesCard({
                 {t("sset.stopToEditProps")}
               </p>
             )}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {fields.map((field) => (
-                <div key={field.key} className="grid gap-2">
-                  <Label htmlFor={`prop-${field.key}`} className="font-normal">
-                    {field.label}
-                  </Label>
-                  <PropertyControl
-                    field={field}
-                    value={draft[field.key] ?? values?.[field.key] ?? ""}
-                    onChange={(v) => setField(field.key, v)}
-                    disabled={!canEdit}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {extraKeys.length > 0 && (
-              <Accordion type="single" collapsible>
-                <AccordionItem value="extra">
-                  <AccordionTrigger className="text-muted-foreground text-xs">
-                    {t("sset.propsExtra")}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-muted-foreground mb-2 text-xs">
-                      {t("sset.propsExtraHint")}
-                    </p>
-                    <div className="grid gap-1">
-                      {extraKeys.map((key) => (
-                        <div
-                          key={key}
-                          className="text-muted-foreground font-mono text-xs break-all"
-                        >
-                          {key}={extra[key]}
-                        </div>
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            )}
+            <PropertiesFields
+              fields={fields}
+              values={values ? { ...values, ...draft } : draft}
+              onChange={setField}
+              disabled={!canEdit}
+            />
 
             <div>
               <Button
                 type="button"
-                disabled={!dirty || !canEdit || save.isPending}
+                loading={save.isPending}
+                disabled={!dirty || !canEdit}
                 onClick={() => save.mutate()}
               >
                 {save.isPending ? t("common.saving") : t("common.save")}

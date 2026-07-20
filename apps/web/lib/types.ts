@@ -220,10 +220,10 @@ export const serverPropertyFieldSchema = z.object({
 });
 export type ServerPropertyField = z.infer<typeof serverPropertyFieldSchema>;
 
+// รูปเดียวกับ GET /api/meta/properties (catalog + default) — ต่างกันแค่ที่มาของ values
 export const serverPropertiesResponseSchema = z.object({
   fields: z.array(serverPropertyFieldSchema),
   values: z.record(z.string(), z.string()),
-  extra: z.record(z.string(), z.string()).default({}),
 });
 export type ServerPropertiesResponse = z.infer<
   typeof serverPropertiesResponseSchema

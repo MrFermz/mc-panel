@@ -12,7 +12,7 @@ import { EventsListener } from "@/components/layout/events-listener";
 import { UserMenu } from "@/components/layout/user-menu";
 import { PageTitle } from "@/components/layout/page-title";
 import { BreadcrumbProvider } from "@/components/layout/breadcrumb-context";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoader } from "@/components/page-loader";
 
 // หน้าระดับ panel ที่ไม่ผูกกับ "active server" (admin/*, /servers/new, /profile, /preferences)
 // อยู่นอก route group (panel) จึงไม่มี sidebar — nav ของ admin เป็นแถบแนวนอนใต้ top bar แทน
@@ -23,17 +23,9 @@ export default function StandaloneLayout({
   const pathname = usePathname();
   const t = useT();
 
-  if (!user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="grid w-full max-w-md gap-3 p-6">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      </div>
-    );
-  }
+  // useAuthGuard คืน null ทั้งตอนยังโหลดไม่เสร็จและตอนเข้าไม่ได้ — เคสหลัง middleware
+  // เป็นคน redirect ที่นี่จึงเป็นสถานะ "รอ" ล้วน
+  if (!user) return <PageLoader />;
 
   const admins = visibleFor(adminItems, user);
   const showAdminNav = pathname.startsWith("/admin") && admins.length > 0;

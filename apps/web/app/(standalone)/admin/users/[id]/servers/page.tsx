@@ -449,7 +449,8 @@ export default function UserServersPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={!form.serverId || assign.isPending}
+                loading={assign.isPending}
+                disabled={!form.serverId}
               >
                 {assign.isPending ? t("common.saving") : t("users.assign")}
               </Button>

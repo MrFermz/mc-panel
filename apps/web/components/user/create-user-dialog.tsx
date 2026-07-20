@@ -230,7 +230,7 @@ export function CreateUserDialog({
             >
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={pending || !canSubmit}>
+            <Button type="submit" loading={pending} disabled={!canSubmit}>
               {pending ? t("users.creating") : t("users.create.submit")}
             </Button>
           </DialogFooter>

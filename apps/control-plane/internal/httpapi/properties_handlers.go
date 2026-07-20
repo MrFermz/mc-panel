@@ -59,6 +59,18 @@ var propCatalog = []propField{
 	{Key: "max-world-size", Label: "Max World Size", Type: "int", Min: intPtr(1), Max: intPtr(29999984), Default: "29999984"},
 }
 
+// catalogFields คืน catalog ในรูปที่พร้อม marshal (options เป็น [] เมื่อว่าง ไม่ใช่ null)
+func catalogFields() []propField {
+	fields := make([]propField, len(propCatalog))
+	for i, f := range propCatalog {
+		if f.Options == nil {
+			f.Options = []string{}
+		}
+		fields[i] = f
+	}
+	return fields
+}
+
 func propByKey(key string) (propField, bool) {
 	for _, f := range propCatalog {
 		if f.Key == key {
@@ -165,6 +177,19 @@ func mergeProperties(text string, values map[string]string) string {
 	return strings.Join(lines, "\n")
 }
 
+// handleMetaProperties คืน catalog + ค่า default โดยไม่ผูกกับ server ตัวไหน — wizard สร้าง server
+// ใช้ render ฟอร์ม properties ตั้งแต่ก่อนมี instance จริง (ค่าที่กรอกถูก apply หลังสร้างเสร็จ)
+func (a *API) handleMetaProperties(w http.ResponseWriter, r *http.Request) {
+	values := make(map[string]string, len(propCatalog))
+	for _, f := range propCatalog {
+		values[f.Key] = f.Default
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"fields": catalogFields(),
+		"values": values,
+	})
+}
+
 func (a *API) handleGetProperties(w http.ResponseWriter, r *http.Request) {
 	srv, _, ok := a.loadServerCap(w, r, capSettingsView)
 	if !ok {
@@ -177,10 +202,10 @@ func (a *API) handleGetProperties(w http.ResponseWriter, r *http.Request) {
 	}
 	parsed := parseProperties(text)
 
+	// key นอก catalog ไม่ถูกคืนออกไป (UI ไม่มีที่แสดง) แต่ยังอยู่ในไฟล์ครบ — mergeProperties
+	// เขียนทับเฉพาะ key ที่ส่งมา ที่เหลือ byte-identical
 	values := make(map[string]string, len(propCatalog))
-	inCatalog := make(map[string]bool, len(propCatalog))
 	for _, f := range propCatalog {
-		inCatalog[f.Key] = true
 		if v, ok := parsed[f.Key]; ok {
 			values[f.Key] = v
 		} else {
@@ -188,26 +213,9 @@ func (a *API) handleGetProperties(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	extra := make(map[string]string)
-	for k, v := range parsed {
-		if !inCatalog[k] {
-			extra[k] = v
-		}
-	}
-
-	// marshal fields ด้วย json tag ของ propField (options เป็น [] เมื่อว่าง, min/max เป็น null เมื่อ nil)
-	fields := make([]propField, len(propCatalog))
-	for i, f := range propCatalog {
-		if f.Options == nil {
-			f.Options = []string{}
-		}
-		fields[i] = f
-	}
-
 	writeJSON(w, http.StatusOK, map[string]any{
-		"fields": fields,
+		"fields": catalogFields(),
 		"values": values,
-		"extra":  extra,
 	})
 }
 
