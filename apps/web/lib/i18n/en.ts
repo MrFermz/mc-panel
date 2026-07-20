@@ -28,9 +28,7 @@ export const en = {
   "nav.general": "General",
   "nav.dashboard": "Dashboard",
   "nav.newServer": "New Server",
-  "nav.servers": "My Servers",
-  "nav.selectServer": "Jump to a server…",
-  "nav.noServers": "No servers to manage yet",
+  "nav.backToServers": "All servers",
   "nav.users": "Users",
   "nav.nodes": "Nodes",
   "nav.admin": "Admin",
@@ -66,6 +64,10 @@ export const en = {
   "changePassword.voluntarySubtitle": "Update your account password.",
   "changePassword.success": "Password changed",
 
+  // ---------- server list (landing page ที่ "/" ก่อนเข้า panel) ----------
+  "serverList.title": "Your Servers",
+  "serverList.subtitle": "Select a server to open its management panel.",
+
   // ---------- dashboard ----------
   "dashboard.nodes": "Nodes",
   "dashboard.servers": "Servers",
@@ -79,15 +81,12 @@ export const en = {
   "dashboard.actionFailed": "Action failed",
 
   // ---------- dashboard overview (single-server cards) ----------
-  "overview.selectServer": "Select a server",
-  "overview.noSelection": "Select a server to see its overview.",
   "overview.playersOnline": "Players Online",
   "overview.tps": "TPS",
   "overview.memory": "Memory",
   "overview.uptime": "Uptime",
   "overview.manage": "Manage",
   "overview.tpsUnsupported": "Only Paper/Spigot report TPS",
-  "overview.ramOf": "of {total}",
 
   // ---------- server list view / paging ----------
   "view.grid": "Grid view",

@@ -80,11 +80,18 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   ห้ามเพิ่ม dependency ใหญ่โดยไม่มีเหตุผลใน commit/PR message
 - Web: Next.js App Router, shadcn/ui (component อยู่ `components/ui` — generate/vendor ตามสไตล์ shadcn),
   react-query สำหรับ server state, zod schema ใน `lib/types.ts` ต้อง sync กับ docs/api.md
-- **หน้าใน nav > general ผูกกับ "active server"** (เลือกจาก switcher ใน sidebar เก็บใน `dashboardServerId`)
+- **หน้าใน nav > general ผูกกับ "active server"** (เลือกจากหน้า list ที่ `/` เก็บใน `dashboardServerId`)
   ไม่ผูก id ใน URL — `/console`, `/players`, `/files`, `/access`, `/logs`, `/settings` ใช้ `ServerPageShell`
   + `useActiveServer()` ร่วมกัน (จัดการ loading/error/ไม่มี server/ไม่มีสิทธิ์ ที่เดียว)
+- **`/` = หน้า server list (landing ก่อนเข้า panel)** อยู่นอก route group `(panel)` จึงไม่มี sidebar/top bar
+  (`app/page.tsx`) — การ์ดต่อ server (สถานะ/ผู้เล่น/TPS/uptime/port) กดแล้ว `setDashboardServerId(id)`
+  + ไป `/dashboard`. หน้านี้ mount `EventsListener` เอง (อยู่นอก panel layout) การ์ดจึงอัปเดต realtime
+  ตามกฎ "ห้าม poll REST". **ไม่มี server switcher ใน sidebar แล้ว** — สลับ server ทำที่ `/` ที่เดียว
+  (sidebar เหลือลิงก์ `All servers` กลับไปหน้านั้น) และชื่อ/สถานะของ server ที่กำลังจัดการอยู่บน
+  top bar หน้าชื่อหน้าเป็น trail `● {ชื่อ server} / {ชื่อหน้า}` — มาจาก `usePageServer()` ซึ่งหน้า
+  ต้อง `useSetPageServer()` เอง (`ServerPageShell` ทำให้แล้ว) หน้าไหนไม่ผูก server ก็เหลือแค่ชื่อหน้า
 - **ไม่มีหน้า detail ต่อ server แล้ว** — `/servers/[id]` ถูกลบทิ้ง (ทุกแท็บย้ายไปเป็นหน้าใน general หมด)
-  ที่ไหนอยากพา user ไปดู server ตัวหนึ่ง ให้ `setDashboardServerId(id)` แล้วไป `/` แทนการ push path
+  ที่ไหนอยากพา user ไปดู server ตัวหนึ่ง ให้ `setDashboardServerId(id)` แล้วไป `/dashboard` แทนการ push path
   (ตัวอย่าง: ชื่อ server ในตาราง `/admin/servers`, ปุ่มจบ wizard). สร้าง/นำเข้า server อยู่ที่
   `/admin/servers/new` (`?mode=import` = โหมดนำเข้า)
 - **Realtime push**: server/node/stats/jobs update วิ่งผ่าน events WS `/ws/events` (browser เปิดเส้นเดียว,

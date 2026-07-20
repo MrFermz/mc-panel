@@ -1084,7 +1084,7 @@ function NewServerWizard() {
   const goToServer = React.useCallback(() => {
     if (!createdId) return;
     setDashboardServerId(createdId);
-    router.push("/");
+    router.push("/dashboard");
   }, [createdId, router, setDashboardServerId]);
 
   // step ที่อ่านไฟล์จริงบนโหนด (properties/players) เปิดได้เมื่อไฟล์พร้อม (ready)

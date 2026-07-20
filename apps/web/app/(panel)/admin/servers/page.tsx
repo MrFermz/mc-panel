@@ -126,7 +126,7 @@ export default function AdminServersPage() {
                       {/* ไม่มีหน้า detail ต่อ server แล้ว — ตั้งเป็น active server
                           แล้วไป dashboard (หน้า console/files/… ตามไปเอง) */}
                       <Link
-                        href="/"
+                        href="/dashboard"
                         onClick={() => setDashboardServerId(s.id)}
                         className="hover:underline"
                       >

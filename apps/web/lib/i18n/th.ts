@@ -30,9 +30,7 @@ export const th: Dictionary = {
   "nav.general": "ทั่วไป",
   "nav.dashboard": "แดชบอร์ด",
   "nav.newServer": "สร้างเซิร์ฟเวอร์",
-  "nav.servers": "เซิร์ฟเวอร์ของฉัน",
-  "nav.selectServer": "ไปที่เซิร์ฟเวอร์…",
-  "nav.noServers": "ยังไม่มีเซิร์ฟเวอร์ที่ต้องดูแล",
+  "nav.backToServers": "เซิร์ฟเวอร์ทั้งหมด",
   "nav.users": "ผู้ใช้",
   "nav.nodes": "โหนด",
   "nav.admin": "ผู้ดูแลระบบ",
@@ -68,6 +66,10 @@ export const th: Dictionary = {
   "changePassword.voluntarySubtitle": "อัปเดตรหัสผ่านบัญชีของคุณ",
   "changePassword.success": "เปลี่ยนรหัสผ่านแล้ว",
 
+  // ---------- server list (landing page ที่ "/" ก่อนเข้า panel) ----------
+  "serverList.title": "เซิร์ฟเวอร์ของคุณ",
+  "serverList.subtitle": "เลือกเซิร์ฟเวอร์เพื่อเปิดหน้าจัดการ",
+
   // ---------- dashboard ----------
   "dashboard.nodes": "โหนด",
   "dashboard.servers": "เซิร์ฟเวอร์",
@@ -81,15 +83,12 @@ export const th: Dictionary = {
   "dashboard.actionFailed": "ดำเนินการไม่สำเร็จ",
 
   // ---------- dashboard overview (single-server cards) ----------
-  "overview.selectServer": "เลือกเซิร์ฟเวอร์",
-  "overview.noSelection": "เลือกเซิร์ฟเวอร์เพื่อดูภาพรวม",
   "overview.playersOnline": "ผู้เล่นออนไลน์",
   "overview.tps": "TPS",
   "overview.memory": "หน่วยความจำ",
   "overview.uptime": "เวลาทำงาน",
   "overview.manage": "จัดการ",
   "overview.tpsUnsupported": "TPS มีเฉพาะ Paper/Spigot",
-  "overview.ramOf": "จาก {total}",
 
   // ---------- server list view / paging ----------
   "view.grid": "มุมมองตาราง",
