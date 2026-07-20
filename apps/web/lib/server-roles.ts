@@ -1,8 +1,10 @@
 import { CAPABILITY } from "@/lib/capabilities";
 import type { TranslationKey } from "@/lib/i18n";
 
-// per-server role preset = ทางลัดฝั่ง UI สำหรับ grant capability ต่อ server ชุดที่ใช้บ่อย
-// backend เก็บแค่ role (owner|member) + capabilities[] — ไม่รู้จัก "preset"
+// per-server role = preset ตัวใดตัวหนึ่งเท่านั้น (เลือกอย่างเดียว ติ๊กราย capability ไม่ได้ —
+// แนวเดียวกับ role ระดับ panel ใน lib/user-roles.ts) backend เก็บแค่ role (owner|member)
+// + capabilities[] — ไม่รู้จัก "preset"
+// "custom" เหลือไว้เป็น fallback ของ grant เก่าที่ถูกติ๊กรายข้อไว้ตอน UI ยังให้แก้ได้
 // owner   = superuser ต่อ server (ได้ทุก server-scoped cap โดยปริยาย + จัดการ access list)
 // operator = ดูแล server ได้เต็ม ยกเว้นแก้โครงสร้าง (rename/RAM/port) กับลบ server
 // moderator = คุมเกม (คอนโซล + ผู้เล่น) แต่แก้ไฟล์ไม่ได้

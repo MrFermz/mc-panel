@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import type { PermissionRole } from "@/lib/types";
 import type { RoleKey } from "@/lib/user-roles";
 import { userIdent, userTitle } from "@/lib/user-display";
@@ -23,6 +24,7 @@ export function UserIdentity({
   serverRole,
   size = "md",
   trailing,
+  href,
   className,
 }: {
   user: {
@@ -35,6 +37,9 @@ export function UserIdentity({
   serverRole?: PermissionRole;
   size?: keyof typeof SIZE;
   trailing?: React.ReactNode;
+  // href = ทำให้ชื่อกดเข้าหน้า detail ได้ (แนวเดียวกับชื่อ server ใน /admin/servers) —
+  // ปุ่ม action ที่เหลือย้ายไปอยู่ใน more menu หมดแล้ว ชื่อจึงต้องเป็นทางเข้าหลัก
+  href?: string;
   className?: string;
 }) {
   const title = userTitle(user);
@@ -54,7 +59,13 @@ export function UserIdentity({
           className={cn("flex items-center gap-2 font-medium", s.title)}
           title={ident !== title ? ident : undefined}
         >
-          {title}
+          {href ? (
+            <Link href={href} className="hover:underline">
+              {title}
+            </Link>
+          ) : (
+            title
+          )}
           {trailing}
         </span>
         {panelRole && <RoleBadge role={panelRole} size="sm" />}

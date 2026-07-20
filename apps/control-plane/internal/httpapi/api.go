@@ -92,10 +92,21 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.With(a.requireCap(capUsersView)).Get("/users", a.handleListUsers)
 			pr.With(a.requireCap(capUsersView)).Get("/users/{id}", a.handleGetUser)
 			pr.With(a.requireCap(capUsersCreate)).Post("/users", a.handleCreateUser)
+			// เช็คชื่อซ้ำสด ๆ ตอนกรอกฟอร์ม — cap เดียวกับการสร้าง (กัน user enumeration)
+			pr.With(a.requireCap(capUsersCreate)).
+				Get("/users/check-username", a.handleCheckUsername)
 			pr.With(a.requireCap(capUsersEdit)).Patch("/users/{id}", a.handleUpdateUser)
 			pr.With(a.requireCap(capUsersDelete)).Delete("/users/{id}", a.handleDeleteUser)
+			pr.With(a.requireCap(capUsersRestore)).Post("/users/{id}/restore", a.handleRestoreUser)
 			pr.With(a.requireCap(capUsersResetPassword)).
 				Post("/users/{id}/reset-password", a.handleResetPassword)
+
+			// access list มองจากฝั่ง user — เช็ค owner ของ server ตัวนั้นซ้ำในตัว handler
+			pr.With(a.requireCap(capAccessView)).Get("/users/{id}/servers", a.handleListUserServers)
+			pr.With(a.requireCap(capAccessManage)).
+				Post("/users/{id}/servers", a.handleUpsertUserServer)
+			pr.With(a.requireCap(capAccessManage)).
+				Delete("/users/{id}/servers/{server_id}", a.handleDeleteUserServer)
 
 			pr.With(a.requireCap(capNodesView)).Get("/nodes", a.handleListNodes)
 			pr.With(a.requireCap(capNodesCreate)).Post("/nodes", a.handleCreateNode)

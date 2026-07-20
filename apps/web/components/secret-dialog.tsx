@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -36,23 +37,27 @@ export function SecretDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2">
-          <Input
-            readOnly
-            value={secret}
-            className="font-mono text-xs"
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <CopyButton value={secret} />
-        </div>
-        <p className="text-destructive text-sm font-medium">
-          {t("secret.onceOnly")}
-        </p>
-        {extra}
+        <DialogBody>
+          <DialogDescription>{description}</DialogDescription>
+          <div className="flex items-center gap-2">
+            <Input
+              readOnly
+              value={secret}
+              className="font-mono text-xs"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <CopyButton value={secret} />
+          </div>
+          <p className="text-destructive text-sm font-medium">
+            {t("secret.onceOnly")}
+          </p>
+          {extra}
+        </DialogBody>
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>{t("common.done")}</Button>
+          <Button onClick={() => onOpenChange(false)}>
+            {t("common.done")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

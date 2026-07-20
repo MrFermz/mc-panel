@@ -89,7 +89,7 @@ func (a *API) handleUpsertPermission(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		target, err = a.st.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
+		target, err = a.st.GetUserByUsername(r.Context(), canonicalUsername(req.Username))
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user_not_found", "no user with this username")
 			return

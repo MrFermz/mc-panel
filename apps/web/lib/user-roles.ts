@@ -2,9 +2,20 @@ import { CAPABILITY } from "@/lib/capabilities";
 import type { TranslationKey } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
-// role preset = ทางลัดฝั่ง UI สำหรับติ๊ก capability ชุดที่ใช้บ่อย
+// role = preset ตัวใดตัวหนึ่งเท่านั้น — UI ไม่ให้ติ๊ก capability ทีละข้อแล้ว
+// (รายการสิทธิ์ใน PermissionGroups เป็น read-only) จึงไม่มีทางสร้าง role custom ใหม่ได้
 // backend ไม่รู้จัก "role" — เก็บแค่ is_admin + capabilities ตามเดิม
-export type RoleKey = "admin" | "operator" | "moderator" | "viewer" | "custom" | "none";
+//
+// "custom" เหลือไว้เป็น fallback ของ **ข้อมูลเก่า** ที่ถูกติ๊กรายข้อไว้ตอน UI ยังให้แก้ได้
+// (ไม่ล้างทิ้งใน migration — การเขียนทับสิทธิ์ของ user เงียบ ๆ อันตรายกว่าปล่อยให้เห็นป้าย)
+// เลือก preset ทับเมื่อไหร่ก็หายไปเอง
+export type RoleKey =
+  | "admin"
+  | "operator"
+  | "moderator"
+  | "viewer"
+  | "custom"
+  | "none";
 
 export interface RolePreset {
   key: Exclude<RoleKey, "custom" | "none">;

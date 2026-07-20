@@ -34,7 +34,9 @@ export default function LoginPage() {
         userResponseSchema,
       );
       // full navigation เพื่อให้ middleware เห็น cookie ใหม่แน่นอน
-      window.location.assign(user.must_change_password ? "/change-password" : "/");
+      window.location.assign(
+        user.must_change_password ? "/change-password" : "/",
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === "invalid_credentials") {
@@ -62,10 +64,14 @@ export default function LoginPage() {
           <form onSubmit={onSubmit} className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="username">{t("login.username")}</Label>
+              {/* พิมพ์ case ไหนก็ login ได้ — backend lower ให้ก่อนเทียบเสมอ
+                  autoCapitalize="none" แค่กันคีย์บอร์ดมือถือขึ้นตัวใหญ่ให้เอง ไม่ได้แก้สิ่งที่พิมพ์ */}
               <Input
                 id="username"
                 type="text"
                 autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}

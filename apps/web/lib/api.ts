@@ -7,16 +7,21 @@ import {
   fileListResponseSchema,
   nextPortResponseSchema,
   playersResponseSchema,
+  serverPermissionsResponseSchema,
   serverPropertiesResponseSchema,
   userDirectoryResponseSchema,
+  usernameCheckResponseSchema,
   userResponseSchema,
   type AddPlayerResponse,
   type CreateServerResponse,
   type FileContentResponse,
   type FileListResponse,
+  type PermissionRole,
   type PlayersResponse,
+  type ServerPermissionsResponse,
   type ServerPropertiesResponse,
   type UserDirectoryResponse,
+  type UsernameCheckResponse,
   type UserResponse,
 } from "@/lib/types";
 
@@ -320,8 +325,53 @@ export function deleteAvatar(): Promise<UserResponse> {
 
 // ---------- users ----------
 
+// ลบ user = soft delete (ไปอยู่ถังขยะ) — กู้กลับด้วย restoreUser ได้พร้อมสิทธิ์ต่อ server เดิม
 export function deleteUser(userId: string): Promise<void> {
   return apiSendVoid("DELETE", `/api/users/${userId}`);
+}
+
+export function restoreUser(userId: string): Promise<UserResponse> {
+  return apiSend(
+    "POST",
+    `/api/users/${userId}/restore`,
+    undefined,
+    userResponseSchema,
+  );
+}
+
+// ---------- server access ของ user คนหนึ่ง (/admin/users/{id}/servers) ----------
+
+export function listUserServers(
+  userId: string,
+): Promise<ServerPermissionsResponse> {
+  return apiGet(
+    `/api/users/${userId}/servers`,
+    serverPermissionsResponseSchema,
+  );
+}
+
+export function assignUserServer(
+  userId: string,
+  body: { server_id: string; role: PermissionRole; capabilities: string[] },
+): Promise<void> {
+  return apiSendVoid("POST", `/api/users/${userId}/servers`, body);
+}
+
+export function unassignUserServer(
+  userId: string,
+  serverId: string,
+): Promise<void> {
+  return apiSendVoid("DELETE", `/api/users/${userId}/servers/${serverId}`);
+}
+
+// เช็คว่าชื่อนี้ใช้สร้างบัญชีได้ไหม (ซ้ำ/ถูกจองไว้/ผิดรูปแบบ) — ต้องมี cap users.create
+export function checkUsername(
+  username: string,
+): Promise<UsernameCheckResponse> {
+  return apiGet(
+    `/api/users/check-username?username=${encodeURIComponent(username)}`,
+    usernameCheckResponseSchema,
+  );
 }
 
 // รายชื่อ user ที่ active สำหรับให้เลือกใน access tab (ไม่ใช่ admin-only)

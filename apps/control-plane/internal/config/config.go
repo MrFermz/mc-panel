@@ -38,7 +38,8 @@ func Load() (*Config, error) {
 		RedisURL:        os.Getenv("REDIS_URL"),
 		NATSURL:         os.Getenv("NATS_URL"),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
-		AdminUsername: getenv("ADMIN_USERNAME", "admin"),
+		// lowercase เสมอ — DB มี CHECK บังคับ (00018) ตั้ง ADMIN_USERNAME=Admin มาก็ต้อง seed ผ่าน
+		AdminUsername: strings.ToLower(strings.TrimSpace(getenv("ADMIN_USERNAME", "admin"))),
 		NodeToken:       os.Getenv("NODE_TOKEN"),
 		// default 1 = production หลัง Caddy 1 hop; dev set 0 ผ่าน env
 		TrustedProxyCount: 1,

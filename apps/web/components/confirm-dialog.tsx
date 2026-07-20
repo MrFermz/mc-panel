@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -50,25 +51,29 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
+        {/* description อยู่ใน body ไม่ใช่ header — ข้อความอธิบายบางอันยาวหลายบรรทัด
+            ถ้าอยู่ใน header ที่ตรึงไว้จะกินพื้นที่จนเนื้อหาที่เลื่อนได้เหลือนิดเดียว */}
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        {requireText !== undefined && (
-          <div className="grid gap-2">
-            <Label htmlFor="confirm-text">
-              {t("common.typeToConfirmBefore")}{" "}
-              <span className="font-mono font-semibold">{requireText}</span>{" "}
-              {t("common.typeToConfirmAfter")}
-            </Label>
-            <Input
-              id="confirm-text"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-        )}
+        <DialogBody>
+          <DialogDescription>{description}</DialogDescription>
+          {requireText !== undefined && (
+            <div className="grid gap-2">
+              <Label htmlFor="confirm-text">
+                {t("common.typeToConfirmBefore")}{" "}
+                <span className="font-mono font-semibold">{requireText}</span>{" "}
+                {t("common.typeToConfirmAfter")}
+              </Label>
+              <Input
+                id="confirm-text"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          )}
+        </DialogBody>
         <DialogFooter>
           <Button
             variant="outline"

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/store"
@@ -28,7 +27,10 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	username := strings.TrimSpace(req.Username)
+	// login เทียบ case-insensitive อยู่แล้ว แต่ normalize ให้เหมือนทางเข้าอื่นทุกเส้น —
+	// ค่านี้ถูกบันทึกลง audit log ตอน login ล้มด้วย ถ้าไม่ normalize จะได้ `Alice`/`alice`
+	// เป็นคนละแถวทั้งที่เป็นบัญชีเดียวกัน
+	username := canonicalUsername(req.Username)
 
 	user, err := a.st.GetUserByUsername(r.Context(), username)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {

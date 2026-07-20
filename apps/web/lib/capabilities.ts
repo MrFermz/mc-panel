@@ -8,6 +8,7 @@ export const CAPABILITY = {
   usersCreate: "users.create",
   usersEdit: "users.edit",
   usersDelete: "users.delete",
+  usersRestore: "users.restore",
   usersResetPassword: "users.reset_password",
 
   nodesView: "nodes.view",

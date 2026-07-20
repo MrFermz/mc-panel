@@ -9,7 +9,7 @@ import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DialogFooter } from "@/components/ui/dialog";
+import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 
 // ต้องตรงกับ policy ฝั่ง control-plane (docs/api.md)
 export const MIN_PASSWORD_LENGTH = 10;
@@ -85,8 +85,8 @@ export function ChangePasswordForm({
     </Button>
   );
 
-  return (
-    <form onSubmit={onSubmit} className="grid gap-4">
+  const fields = (
+    <>
       <div className="grid gap-2">
         <Label htmlFor="cp-current">{t("changePassword.current")}</Label>
         <Input
@@ -125,7 +125,15 @@ export function ChangePasswordForm({
         />
       </div>
       {error && <p className="text-destructive text-sm">{error}</p>}
-      {layout === "dialog" ? (
+    </>
+  );
+
+  // ใน dialog: form เป็น `contents` เพื่อให้ DialogBody/DialogFooter เป็นลูกของ
+  // DialogContent โดยตรง — header/footer จึงตรึงอยู่ได้ และ body เลื่อนแยก
+  if (layout === "dialog") {
+    return (
+      <form onSubmit={onSubmit} className="contents">
+        <DialogBody>{fields}</DialogBody>
         <DialogFooter>
           {forced ? (
             <Button type="button" variant="ghost" onClick={logout}>
@@ -143,9 +151,14 @@ export function ChangePasswordForm({
           )}
           {submit}
         </DialogFooter>
-      ) : (
-        <div className="flex justify-end">{submit}</div>
-      )}
+      </form>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="grid gap-4">
+      {fields}
+      <div className="flex justify-end">{submit}</div>
     </form>
   );
 }

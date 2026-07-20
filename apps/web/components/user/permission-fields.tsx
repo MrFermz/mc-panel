@@ -5,7 +5,7 @@ import { en } from "@/lib/i18n/en";
 import { useT, type TranslateFn, type TranslationKey } from "@/lib/i18n";
 import { ROLE_LABEL_KEYS, ROLE_PRESETS, matchPreset } from "@/lib/user-roles";
 import type { Capability } from "@/lib/types";
-import { Switch } from "@/components/ui/switch";
+import { CheckIcon, MinusIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // capability key มาจาก catalog ของ backend (dynamic) — หา i18n key แบบ runtime
@@ -99,20 +99,16 @@ export function RolePresetPicker({
 }
 
 // รายการสิทธิ์แบบจัดกลุ่มตาม feature — 1 แถว = 1 action (CRUD ของฟีเจอร์นั้น)
+// **read-only ล้วน**: สิทธิ์มาจาก role preset ที่เลือกเท่านั้น (ไม่มี role custom แล้ว)
+// ที่นี่คือหน้าต่างส่องว่า preset นั้นให้อะไรบ้าง ไม่ใช่ที่แก้ทีละข้อ
 export function PermissionGroups({
   catalog,
   isAdmin,
   capabilities,
-  disabled,
-  onToggle,
-  onToggleGroup,
 }: {
   catalog: Capability[];
   isAdmin: boolean;
   capabilities: string[];
-  disabled?: boolean;
-  onToggle: (key: string, on: boolean) => void;
-  onToggleGroup?: (keys: string[], on: boolean) => void;
 }) {
   const t = useT();
   const groups = React.useMemo(() => groupCapabilities(catalog), [catalog]);
@@ -129,58 +125,52 @@ export function PermissionGroups({
     <div className="grid gap-4">
       {groups.map(({ group, items }) => {
         const keys = items.map((c) => c.key);
-        const on = keys.filter((k) => isAdmin || capabilities.includes(k)).length;
+        const on = keys.filter(
+          (k) => isAdmin || capabilities.includes(k),
+        ).length;
         return (
           <div key={group} className="rounded-lg border">
             <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
               <span className="text-sm font-semibold">
                 {groupLabel(t, group)}
               </span>
-              <span className="flex items-center gap-3">
-                <span className="text-muted-foreground text-xs">
-                  {t("users.accessCount", { count: on, total: keys.length })}
-                </span>
-                {onToggleGroup && (
-                  <button
-                    type="button"
-                    disabled={isAdmin || disabled}
-                    onClick={() => onToggleGroup(keys, on < keys.length)}
-                    className={cn(
-                      "text-primary text-xs font-medium hover:underline",
-                      (isAdmin || disabled) &&
-                        "text-muted-foreground cursor-not-allowed no-underline hover:no-underline",
-                    )}
-                  >
-                    {on < keys.length
-                      ? t("users.selectAll")
-                      : t("users.clearAll")}
-                  </button>
-                )}
+              <span className="text-muted-foreground text-xs">
+                {t("users.accessCount", { count: on, total: keys.length })}
               </span>
             </div>
             <div className="divide-y px-4">
-              {items.map((cap) => (
-                <div
-                  key={cap.key}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <div className="grid gap-0.5">
-                    <span className="text-sm font-medium">
-                      {permLabel(t, cap)}
-                    </span>
-                    <span className="text-muted-foreground text-xs">
-                      {permDescription(t, cap)}
-                    </span>
+              {items.map((cap) => {
+                // admin ได้ทุก capability โดยปริยาย ไม่ต้องมีใน capabilities[]
+                const granted = isAdmin || capabilities.includes(cap.key);
+                return (
+                  <div
+                    key={cap.key}
+                    className="flex items-center justify-between gap-4 py-3"
+                  >
+                    <div
+                      className={cn("grid gap-0.5", !granted && "opacity-50")}
+                    >
+                      <span className="text-sm font-medium">
+                        {permLabel(t, cap)}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {permDescription(t, cap)}
+                      </span>
+                    </div>
+                    {granted ? (
+                      <CheckIcon
+                        className="size-4 shrink-0 text-emerald-500"
+                        aria-label={t("users.permGranted")}
+                      />
+                    ) : (
+                      <MinusIcon
+                        className="text-muted-foreground/50 size-4 shrink-0"
+                        aria-label={t("users.permDenied")}
+                      />
+                    )}
                   </div>
-                  <Switch
-                    // admin ได้ทุก capability โดยปริยาย — โชว์เปิดค้างและกดไม่ได้
-                    checked={isAdmin || capabilities.includes(cap.key)}
-                    disabled={isAdmin || disabled}
-                    onCheckedChange={(v) => onToggle(cap.key, v)}
-                    aria-label={`${groupLabel(t, group)} — ${permLabel(t, cap)}`}
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );

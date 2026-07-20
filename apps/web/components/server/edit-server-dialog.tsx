@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -85,61 +86,63 @@ export function EditServerDialog({
           <DialogTitle>
             {t("adminServers.editTitle", { name: server.name })}
           </DialogTitle>
-          <DialogDescription>
-            {canEditRuntime
-              ? t("adminServers.editDesc")
-              : t("adminServers.editStopHint", {
-                  // แปลสถานะด้วย ไม่งั้นประโยคไทยจะมีคำอังกฤษโผล่กลางประโยค
-                  status: t(`status.${server.status}` as TranslationKey),
-                })}
-          </DialogDescription>
         </DialogHeader>
 
         <form
-          className="grid gap-4"
+          className="contents"
           onSubmit={(e) => {
             e.preventDefault();
             if (valid && !pending) submit();
           }}
         >
-          <div className="grid gap-2">
-            <Label htmlFor="edit-s-name">{t("sset.name")}</Label>
-            <Input
-              id="edit-s-name"
-              maxLength={100}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="edit-s-memory">{t("sset.memory")}</Label>
-            <Input
-              id="edit-s-memory"
-              type="number"
-              min={512}
-              disabled={!canEditRuntime}
-              value={memoryMb}
-              onChange={(e) => setMemoryMb(e.target.value)}
-            />
-            <MemoryPresets
-              value={memoryMb}
-              onChange={setMemoryMb}
-              disabled={!canEditRuntime}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="edit-s-port">{t("sset.hostPort")}</Label>
-            <Input
-              id="edit-s-port"
-              type="number"
-              min={1024}
-              max={65535}
-              placeholder={t("sset.hostPortPlaceholder")}
-              disabled={!canEditRuntime}
-              value={hostPort}
-              onChange={(e) => setHostPort(e.target.value)}
-            />
-          </div>
+          <DialogBody>
+            <DialogDescription>
+              {canEditRuntime
+                ? t("adminServers.editDesc")
+                : t("adminServers.editStopHint", {
+                    // แปลสถานะด้วย ไม่งั้นประโยคไทยจะมีคำอังกฤษโผล่กลางประโยค
+                    status: t(`status.${server.status}` as TranslationKey),
+                  })}
+            </DialogDescription>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-s-name">{t("sset.name")}</Label>
+              <Input
+                id="edit-s-name"
+                maxLength={100}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-s-memory">{t("sset.memory")}</Label>
+              <Input
+                id="edit-s-memory"
+                type="number"
+                min={512}
+                disabled={!canEditRuntime}
+                value={memoryMb}
+                onChange={(e) => setMemoryMb(e.target.value)}
+              />
+              <MemoryPresets
+                value={memoryMb}
+                onChange={setMemoryMb}
+                disabled={!canEditRuntime}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-s-port">{t("sset.hostPort")}</Label>
+              <Input
+                id="edit-s-port"
+                type="number"
+                min={1024}
+                max={65535}
+                placeholder={t("sset.hostPortPlaceholder")}
+                disabled={!canEditRuntime}
+                value={hostPort}
+                onChange={(e) => setHostPort(e.target.value)}
+              />
+            </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button

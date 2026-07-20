@@ -462,8 +462,6 @@ export const en = {
   "users.accessAll": "All permissions",
   "users.accessCount": "{count} of {total} permissions",
   "users.statusSuspended": "Suspended",
-  "users.suspend": "Suspend",
-  "users.activate": "Activate",
   "users.permissions": "Permissions",
   "users.account": "Account",
   "users.rolePreset": "Role preset",
@@ -473,10 +471,12 @@ export const en = {
   "users.role.moderator": "Moderator",
   "users.backToUsers": "Back to users",
   "users.needUsersEdit": "You need the \"Edit users\" permission to change this.",
-  "users.presetHint": "Pick a preset, then fine-tune individual permissions below.",
+  "users.presetHint":
+    "The role decides the permissions — the list below shows what it grants.",
   "users.unsavedChanges": "Unsaved changes",
-  "users.selectAll": "Select all",
-  "users.clearAll": "Clear all",
+  "users.permGranted": "Granted",
+  "users.permDenied": "Not granted",
+  // เหลือไว้สำหรับสิทธิ์ชุดเก่าที่เคยติ๊กรายข้อไว้ตอน UI ยังให้แก้ได้ — เลือก role ทับแล้วหายไปเอง
   "users.role.custom": "Custom",
   "users.role.none": "No access",
   "users.adminAllPermissions":
@@ -484,7 +484,6 @@ export const en = {
   "users.selfRoleLocked": "You cannot change the role of your own account.",
   "users.you": "you",
   "users.pendingPassword": "pending password",
-  "users.resetPassword": "Reset password",
   "users.createTitle": "Create user",
   "users.usernameHint": "The username is how this person signs in.",
   "users.invalidUsername":
@@ -495,6 +494,10 @@ export const en = {
   "users.resetTitle": "Reset password for {name}?",
   "users.resetDesc":
     "Their current password and all active sessions stop working immediately.",
+  "users.resetSelfDesc":
+    "This is your own account — you will be signed out as soon as you close the password dialog, and must sign in again with the new password.",
+  "users.selfResetDesc":
+    "Copy this password now. Closing this dialog signs you out — sign in again with it, then set a new password.",
   "users.resetConfirm": "Reset password",
   "users.initialPasswordFor": "Initial password for {name}",
   "users.newPasswordFor": "New password for {name}",
@@ -507,14 +510,44 @@ export const en = {
   "users.failedReset": "Failed to reset password",
   "users.failedLoad": "Failed to load users.",
   "users.username": "Username",
-  "users.usernameExists": "That username is already taken.",
-  "users.delete": "Delete",
+  // ชื่ออาจถูกถือโดยบัญชีในถังขยะที่มองไม่เห็นในลิสต์ปกติ — ต้องบอกใบ้ ไม่งั้น user งง
+  "users.usernameExists":
+    "That username is taken. It may belong to a deleted account — deleted accounts keep their username until they are restored.",
+  "users.usernameReserved":
+    "That username is reserved by the system and cannot be used.",
+  // ---------- inline availability check ในฟอร์มสร้าง user ----------
+  "users.usernameFormatHint":
+    "3-64 characters: letters, digits, . _ or - (saved in lowercase)",
+  "users.usernameChecking": "Checking availability...",
+  "users.usernameFree": "Available",
+  "users.usernameFreeAs": "Available — will be saved as {name}",
+  "users.usernameTakenHint": "Already taken — a deleted account may still hold it",
+  "users.usernameReservedHint": "Reserved by the system",
   "users.deleteTitle": "Delete {name}?",
   "users.deleteConfirm":
-    "This user will lose access immediately. This can be undone by an administrator.",
-  "users.deleted": "User deleted",
+    "They lose access and are signed out immediately, but the account moves to the trash — restore it from the Deleted filter and its server access comes back with it. Its username stays reserved and cannot be reused.",
+  "users.deleted": "User moved to trash",
   "users.failedDelete": "Failed to delete user",
   "users.cannotDeleteSelf": "You cannot delete your own account.",
+  // ---------- more menu ต่อแถวใน users list (ทุก action ต้องมี label ชัด ไม่ใช่ไอคอนลอย) ----------
+  "users.actionsFor": "Actions for {name}",
+  "users.menuPermissions": "Edit role & permissions",
+  "users.menuServerAccess": "Manage server access",
+  "users.menuResetPassword": "Reset password",
+  "users.menuSuspend": "Suspend account",
+  "users.menuActivate": "Reactivate account",
+  "users.menuDelete": "Move to trash",
+
+  "users.restore": "Restore",
+  "users.restoreTitle": "Restore {name}?",
+  "users.restoreDesc":
+    "The account becomes active again with the server access it had. They must sign in again.",
+  "users.restored": "User restored",
+  "users.failedRestore": "Failed to restore user",
+  "users.restoreUsernameTaken":
+    "Another account now uses that username. Rename it before restoring this one.",
+  "users.deletedOn": "Deleted {date}",
+  "users.trashEmpty": "The trash is empty.",
   "users.filterSearch": "Search users...",
   "users.filterRole": "Role",
   "users.filterStatus": "Status",
@@ -524,6 +557,27 @@ export const en = {
   "users.statusAll": "All statuses",
   "users.statusActive": "Active",
   "users.statusInactive": "Inactive",
+  "users.statusDeleted": "Deleted",
+
+  // ---------- server access ต่อ user (/admin/users/{id}/servers) ----------
+  "users.serverAccess": "Server access",
+  "users.serverAccessSubtitle":
+    "Servers this account can work with, and what it may do on each.",
+  "users.serverAccessAdminHint":
+    "Administrators can already reach every server — these grants only matter if the admin role is removed later.",
+  "users.needAccessView":
+    "You need the \"View access\" permission to see server access.",
+  "users.noServerAccess": "This account has no server access yet.",
+  "users.colServer": "Server",
+  "users.assign": "Assign",
+  "users.assignServer": "Assign server",
+  "users.assignServerTitle": "Give {name} access to a server",
+  "users.assignServerDesc":
+    "Pick a server and a role — the role decides what they can do on it.",
+  "users.pickServerPlaceholder": "Select a server",
+  "users.noPickableServer": "No server left to assign",
+  "users.unassignDesc":
+    "{name} loses all access to {server}. The server and its files are untouched.",
 
   // ---------- capability catalog (group / action / description ต่อ key) ----------
   // key ของ catalog มาจาก backend — เพิ่ม capability ใหม่ต้องเพิ่ม permAction/permDesc ที่นี่
@@ -552,7 +606,9 @@ export const en = {
   "permDesc.users.view": "Open the Users page and see panel accounts",
   "permDesc.users.create": "Create new panel accounts",
   "permDesc.users.edit": "Change role, permissions and status of accounts",
-  "permDesc.users.delete": "Remove panel accounts",
+  "permDesc.users.delete":
+    "Move a panel account to the trash, keeping its server access",
+  "permDesc.users.restore": "Bring a deleted account back with the access it had",
   "permDesc.users.reset_password": "Issue a new password for an account",
   "permDesc.nodes.view": "Open the Nodes page and see node health",
   "permDesc.nodes.create": "Register a node and issue its agent token",

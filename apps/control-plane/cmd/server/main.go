@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -99,6 +100,8 @@ func runResetAdminPassword(cfg *config.Config, log *slog.Logger, username string
 	if username == "" {
 		username = cfg.AdminUsername
 	}
+	// `-username=Admin` ต้องเจอบัญชี `admin` และถ้าต้องสร้างใหม่ต้องผ่าน CHECK ของ DB (00018)
+	username = strings.ToLower(strings.TrimSpace(username))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 

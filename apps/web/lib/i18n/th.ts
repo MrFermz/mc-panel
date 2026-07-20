@@ -461,8 +461,6 @@ export const th: Dictionary = {
   "users.accessAll": "ทุกสิทธิ์",
   "users.accessCount": "{count} จาก {total} สิทธิ์",
   "users.statusSuspended": "ระงับใช้งาน",
-  "users.suspend": "ระงับ",
-  "users.activate": "เปิดใช้งาน",
   "users.permissions": "สิทธิ์",
   "users.account": "ข้อมูลบัญชี",
   "users.rolePreset": "บทบาทสำเร็จรูป",
@@ -472,17 +470,17 @@ export const th: Dictionary = {
   "users.role.moderator": "ผู้ควบคุม",
   "users.backToUsers": "กลับไปหน้าผู้ใช้",
   "users.needUsersEdit": "ต้องมีสิทธิ์ \"แก้ไขผู้ใช้\" ถึงจะเปลี่ยนค่าตรงนี้ได้",
-  "users.presetHint": "เลือกบทบาทสำเร็จรูปก่อน แล้วปรับสิทธิ์รายข้อด้านล่างได้",
+  "users.presetHint": "บทบาทเป็นตัวกำหนดสิทธิ์ — รายการด้านล่างคือสิ่งที่บทบาทนั้นให้",
   "users.unsavedChanges": "มีการแก้ไขที่ยังไม่บันทึก",
-  "users.selectAll": "เลือกทั้งหมด",
-  "users.clearAll": "ล้างทั้งหมด",
+  "users.permGranted": "ได้สิทธิ์",
+  "users.permDenied": "ไม่ได้สิทธิ์",
+  // เหลือไว้สำหรับสิทธิ์ชุดเก่าที่เคยติ๊กรายข้อไว้ตอน UI ยังให้แก้ได้ — เลือกบทบาททับแล้วหายไปเอง
   "users.role.custom": "กำหนดเอง",
   "users.role.none": "ไม่มีสิทธิ์",
   "users.adminAllPermissions": "ผู้ดูแลระบบมีสิทธิ์ทุกอย่างอยู่แล้ว",
   "users.selfRoleLocked": "เปลี่ยนบทบาทของบัญชีตัวเองไม่ได้",
   "users.you": "คุณ",
   "users.pendingPassword": "รอตั้งรหัสผ่าน",
-  "users.resetPassword": "รีเซ็ตรหัสผ่าน",
   "users.createTitle": "สร้างผู้ใช้",
   "users.usernameHint": "ชื่อผู้ใช้คือสิ่งที่คนนี้ใช้เข้าสู่ระบบ",
   "users.invalidUsername":
@@ -492,6 +490,10 @@ export const th: Dictionary = {
   "users.noCapabilities": "ไม่มีสิทธิ์ให้เลือก",
   "users.resetTitle": "รีเซ็ตรหัสผ่านของ {name}?",
   "users.resetDesc": "รหัสผ่านปัจจุบันและเซสชันที่ใช้งานอยู่ทั้งหมดจะหยุดทำงานทันที",
+  "users.resetSelfDesc":
+    "นี่คือบัญชีของคุณเอง — จะถูกออกจากระบบทันทีที่ปิดหน้าต่างรหัสผ่าน และต้องเข้าสู่ระบบใหม่ด้วยรหัสผ่านที่ได้",
+  "users.selfResetDesc":
+    "คัดลอกรหัสผ่านนี้ไว้ก่อน ปิดหน้าต่างนี้แล้วระบบจะออกจากระบบให้ — เข้าสู่ระบบใหม่ด้วยรหัสนี้แล้วตั้งรหัสผ่านใหม่",
   "users.resetConfirm": "รีเซ็ตรหัสผ่าน",
   "users.initialPasswordFor": "รหัสผ่านเริ่มต้นสำหรับ {name}",
   "users.newPasswordFor": "รหัสผ่านใหม่สำหรับ {name}",
@@ -504,14 +506,43 @@ export const th: Dictionary = {
   "users.failedReset": "รีเซ็ตรหัสผ่านไม่สำเร็จ",
   "users.failedLoad": "โหลดรายชื่อผู้ใช้ไม่สำเร็จ",
   "users.username": "ชื่อผู้ใช้",
-  "users.usernameExists": "ชื่อผู้ใช้นี้ถูกใช้แล้ว",
-  "users.delete": "ลบ",
+  // ชื่ออาจถูกถือโดยบัญชีในถังขยะที่มองไม่เห็นในลิสต์ปกติ — ต้องบอกใบ้ ไม่งั้น user งง
+  "users.usernameExists":
+    "ชื่อผู้ใช้นี้ถูกใช้แล้ว อาจเป็นของบัญชีในถังขยะ — บัญชีที่ถูกลบยังจองชื่อไว้จนกว่าจะกู้คืน",
+  "users.usernameReserved": "ชื่อผู้ใช้นี้ถูกระบบสงวนไว้ ใช้ไม่ได้",
+  // ---------- inline availability check ในฟอร์มสร้าง user ----------
+  "users.usernameFormatHint":
+    "3-64 ตัวอักษร: ตัวอักษร ตัวเลข . _ หรือ - (บันทึกเป็นตัวพิมพ์เล็ก)",
+  "users.usernameChecking": "กำลังตรวจสอบ...",
+  "users.usernameFree": "ใช้ชื่อนี้ได้",
+  "users.usernameFreeAs": "ใช้ชื่อนี้ได้ — จะถูกบันทึกเป็น {name}",
+  "users.usernameTakenHint": "ถูกใช้แล้ว — อาจเป็นของบัญชีในถังขยะ",
+  "users.usernameReservedHint": "ระบบสงวนชื่อนี้ไว้",
   "users.deleteTitle": "ลบ {name}?",
   "users.deleteConfirm":
-    "ผู้ใช้นี้จะไม่สามารถเข้าถึงได้ทันที ผู้ดูแลระบบสามารถกู้คืนได้ภายหลัง",
-  "users.deleted": "ลบผู้ใช้แล้ว",
+    "ผู้ใช้จะเข้าใช้งานไม่ได้และถูกออกจากระบบทันที แต่บัญชีจะไปอยู่ในถังขยะ — กู้คืนได้จากตัวกรอง \"ถูกลบ\" และสิทธิ์ต่อเซิร์ฟเวอร์จะกลับมาครบ ชื่อผู้ใช้จะยังถูกจองไว้ นำไปสร้างบัญชีใหม่ไม่ได้",
+  "users.deleted": "ย้ายผู้ใช้ไปถังขยะแล้ว",
   "users.failedDelete": "ลบผู้ใช้ไม่สำเร็จ",
   "users.cannotDeleteSelf": "คุณไม่สามารถลบบัญชีของตัวเองได้",
+  // ---------- more menu ต่อแถวใน users list (ทุก action ต้องมี label ชัด ไม่ใช่ไอคอนลอย) ----------
+  "users.actionsFor": "การจัดการของ {name}",
+  "users.menuPermissions": "แก้บทบาทและสิทธิ์",
+  "users.menuServerAccess": "จัดการสิทธิ์ต่อเซิร์ฟเวอร์",
+  "users.menuResetPassword": "รีเซ็ตรหัสผ่าน",
+  "users.menuSuspend": "ระงับบัญชี",
+  "users.menuActivate": "เปิดใช้งานบัญชีอีกครั้ง",
+  "users.menuDelete": "ย้ายไปถังขยะ",
+
+  "users.restore": "กู้คืน",
+  "users.restoreTitle": "กู้คืน {name}?",
+  "users.restoreDesc":
+    "บัญชีจะกลับมาใช้งานได้พร้อมสิทธิ์ต่อเซิร์ฟเวอร์เดิมทั้งหมด และต้องเข้าสู่ระบบใหม่",
+  "users.restored": "กู้คืนผู้ใช้แล้ว",
+  "users.failedRestore": "กู้คืนผู้ใช้ไม่สำเร็จ",
+  "users.restoreUsernameTaken":
+    "ชื่อผู้ใช้นี้ถูกบัญชีอื่นใช้ไปแล้ว ต้องเปลี่ยนชื่อบัญชีนั้นก่อนจึงจะกู้คืนได้",
+  "users.deletedOn": "ลบเมื่อ {date}",
+  "users.trashEmpty": "ถังขยะว่าง",
   "users.filterSearch": "ค้นหาผู้ใช้...",
   "users.filterRole": "บทบาท",
   "users.filterStatus": "สถานะ",
@@ -521,6 +552,26 @@ export const th: Dictionary = {
   "users.statusAll": "ทุกสถานะ",
   "users.statusActive": "ใช้งาน",
   "users.statusInactive": "ปิดใช้งาน",
+  "users.statusDeleted": "ถูกลบ",
+
+  // ---------- สิทธิ์ต่อเซิร์ฟเวอร์ของ user (/admin/users/{id}/servers) ----------
+  "users.serverAccess": "สิทธิ์ต่อเซิร์ฟเวอร์",
+  "users.serverAccessSubtitle":
+    "เซิร์ฟเวอร์ที่บัญชีนี้เข้าถึงได้ และทำอะไรได้บ้างในแต่ละตัว",
+  "users.serverAccessAdminHint":
+    "แอดมินเข้าถึงทุกเซิร์ฟเวอร์อยู่แล้ว — สิทธิ์ที่ให้ไว้ตรงนี้จะมีผลก็ต่อเมื่อถอดบทบาทแอดมินออกภายหลัง",
+  "users.needAccessView": "ต้องมีสิทธิ์ \"ดูสิทธิ์การเข้าถึง\" จึงจะเห็นข้อมูลนี้",
+  "users.noServerAccess": "บัญชีนี้ยังไม่มีสิทธิ์ในเซิร์ฟเวอร์ใดเลย",
+  "users.colServer": "เซิร์ฟเวอร์",
+  "users.assign": "เพิ่มสิทธิ์",
+  "users.assignServer": "เพิ่มเซิร์ฟเวอร์",
+  "users.assignServerTitle": "ให้ {name} เข้าถึงเซิร์ฟเวอร์",
+  "users.assignServerDesc":
+    "เลือกเซิร์ฟเวอร์และบทบาท — บทบาทเป็นตัวกำหนดว่าทำอะไรได้บ้างในเซิร์ฟเวอร์นั้น",
+  "users.pickServerPlaceholder": "เลือกเซิร์ฟเวอร์",
+  "users.noPickableServer": "ไม่เหลือเซิร์ฟเวอร์ให้เพิ่ม",
+  "users.unassignDesc":
+    "{name} จะเข้าถึง {server} ไม่ได้อีก ตัวเซิร์ฟเวอร์และไฟล์ไม่ถูกแตะต้อง",
 
   // ---------- capability catalog (group / action / description ต่อ key) ----------
   // key ของ catalog มาจาก backend — เพิ่ม capability ใหม่ต้องเพิ่ม permAction/permDesc ที่นี่
@@ -549,7 +600,8 @@ export const th: Dictionary = {
   "permDesc.users.view": "เข้าหน้าผู้ใช้และเห็นบัญชีในแผงควบคุม",
   "permDesc.users.create": "สร้างบัญชีผู้ใช้ใหม่",
   "permDesc.users.edit": "แก้บทบาท สิทธิ์ และสถานะของบัญชี",
-  "permDesc.users.delete": "ลบบัญชีออกจากแผงควบคุม",
+  "permDesc.users.delete": "ย้ายบัญชีไปถังขยะ โดยยังเก็บสิทธิ์ต่อเซิร์ฟเวอร์ไว้",
+  "permDesc.users.restore": "กู้บัญชีที่ถูกลบกลับมาพร้อมสิทธิ์เดิม",
   "permDesc.users.reset_password": "ออกรหัสผ่านใหม่ให้บัญชี",
   "permDesc.nodes.view": "เข้าหน้าโหนดและดูสถานะของโหนด",
   "permDesc.nodes.create": "ลงทะเบียนโหนดใหม่และออก token ให้เอเจนต์",

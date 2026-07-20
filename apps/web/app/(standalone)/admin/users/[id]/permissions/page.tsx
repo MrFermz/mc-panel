@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
 import { UserIdentity } from "@/components/user/user-identity";
+import { UserDetailTabs } from "@/components/user/user-detail-tabs";
 import {
   FieldGroupLabel,
   PermissionGroups,
@@ -121,18 +122,6 @@ export default function UserPermissionsPage() {
     setSelected(u.capabilities);
   };
 
-  const toggle = (key: string, on: boolean) =>
-    setSelected((prev) =>
-      on ? [...new Set([...prev, key])] : prev.filter((k) => k !== key),
-    );
-
-  const toggleGroup = (keys: string[], on: boolean) =>
-    setSelected((prev) =>
-      on
-        ? [...new Set([...prev, ...keys])]
-        : prev.filter((k) => !keys.includes(k)),
-    );
-
   return (
     <div className="grid gap-4 pb-20">
       <div>
@@ -168,6 +157,8 @@ export default function UserPermissionsPage() {
         </CardContent>
       </Card>
 
+      <UserDetailTabs userId={userId} />
+
       {locked && (
         <p className="text-muted-foreground text-sm">
           {self ? t("users.selfRoleLocked") : t("users.needUsersEdit")}
@@ -198,9 +189,6 @@ export default function UserPermissionsPage() {
               catalog={catalog}
               isAdmin={isAdmin}
               capabilities={selected}
-              disabled={locked}
-              onToggle={toggle}
-              onToggleGroup={toggleGroup}
             />
           </div>
         </CardContent>

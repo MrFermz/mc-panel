@@ -11,18 +11,19 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// deleted_at ไม่อยู่ใน userCols — ทุก query filter `deleted_at IS NULL` อยู่แล้ว
-// จึงไม่มีทาง surface แถวที่ถูกลบ (User.DeletedAt คงเป็น nil เสมอในเส้นทางปกติ)
+// deleted_at อยู่ใน userCols เพราะหน้าถังขยะต้องรู้ว่าลบเมื่อไหร่ — แต่ query ปกติ
+// ยัง filter `deleted_at IS NULL` ทุกเส้น มีแค่ ListUsers(status=deleted) กับ
+// GetUserByIDAny (ใช้เฉพาะ flow restore) ที่มองเห็นแถวในถังขยะ
 // คอลัมน์ avatar (bytes) จงใจไม่อยู่ในนี้ — หนักเกินจะติดมากับทุก query, อ่านผ่าน GetUserAvatar
 const userCols = `id, username, display_name, avatar_updated_at, password_hash, is_admin, is_active,
-	must_change_password, token_version, capabilities, last_login_at, created_at, updated_at`
+	must_change_password, token_version, capabilities, last_login_at, deleted_at, created_at, updated_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
 	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.AvatarUpdatedAt,
 		&u.PasswordHash, &u.IsAdmin,
 		&u.IsActive, &u.MustChangePassword, &u.TokenVersion, &u.Capabilities, &u.LastLoginAt,
-		&u.CreatedAt, &u.UpdatedAt)
+		&u.DeletedAt, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -50,15 +51,37 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 		 WHERE lower(username) = lower($1) AND deleted_at IS NULL`, username))
 }
 
+// GetUserByIDAny มองเห็นแถวที่อยู่ในถังขยะด้วย — ใช้เฉพาะ flow restore
+// (เส้นทางปกติต้องใช้ GetUserByID ที่ filter deleted_at IS NULL เสมอ)
+func (s *Store) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*User, error) {
+	return scanUser(s.pool.QueryRow(ctx,
+		`SELECT `+userCols+` FROM users WHERE id = $1`, id))
+}
+
+// UsernameExists เทียบ **ทุกแถวรวมที่อยู่ในถังขยะ** ให้ตรงกับ unique index
+// `idx_users_username_lower` (unique ทั้งตารางตั้งแต่ 00017) — ถ้าเช็คแค่แถวที่ยังไม่ลบ
+// หน้าเว็บจะบอกว่าชื่อว่างแล้ว insert จริงค่อยเด้ง 409
+func (s *Store) UsernameExists(ctx context.Context, username string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE lower(username) = lower($1))`,
+		username).Scan(&exists)
+	return exists, err
+}
+
 // UserFilter สำหรับ ListUsers — ค่าว่างของแต่ละ field = ไม่ filter ด้วย field นั้น
 type UserFilter struct {
 	Search string
 	Role   string // "admin" | "user"
-	Status string // "active" | "inactive"
+	Status string // "active" | "inactive" | "deleted"
 }
 
 func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*User, error) {
+	// status=deleted = หน้าถังขยะ (ที่เดียวที่เห็นแถวที่ถูกลบ) นอกนั้นซ่อนเสมอ
 	where := []string{"deleted_at IS NULL"}
+	if f.Status == "deleted" {
+		where = []string{"deleted_at IS NOT NULL"}
+	}
 	var args []any
 
 	if search := strings.TrimSpace(f.Search); search != "" {
@@ -223,16 +246,11 @@ func (s *Store) TouchLastLogin(ctx context.Context, id uuid.UUID) error {
 }
 
 // SoftDeleteUser: mark ลบ + ปิด active + bump token_version (session เก่าตายหมด)
-// และล้าง server_permissions ทิ้ง (ไม่อยาก grant สิทธิ์ค้างถ้ามี user username ซ้ำในอนาคต)
-// ทำใน transaction เดียว
+// **ไม่แตะ server_permissions** — restore ต้องได้สิทธิ์ต่อ server กลับมาครบ ไม่ต้องมา
+// assign ใหม่ทีละตัว. grant ค้างไม่เป็นช่องโหว่เพราะผูกด้วย user_id (ไม่ใช่ username)
+// และทุก query ที่อ่าน permission join users แล้ว filter deleted_at IS NULL อยู่แล้ว
 func (s *Store) SoftDeleteUser(ctx context.Context, id uuid.UUID) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	tag, err := tx.Exec(ctx, `
+	tag, err := s.pool.Exec(ctx, `
 		UPDATE users SET
 			deleted_at    = now(),
 			is_active     = false,
@@ -245,10 +263,21 @@ func (s *Store) SoftDeleteUser(ctx context.Context, id uuid.UUID) error {
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+	return nil
+}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM server_permissions WHERE user_id = $1`, id); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+// RestoreUser: เอาออกจากถังขยะ + เปิด active กลับ. server_permissions ไม่เคยถูกลบ
+// จึงกลับมาเองทั้งชุด. is_active=true เสมอเพราะ soft delete ปิดไปด้วย — ไม่มีทางรู้ว่า
+// ก่อนลบเคย suspend อยู่หรือเปล่า (admin ปรับต่อเองได้ที่หน้า users)
+// username ถูกจองไว้ตลอดตั้งแต่ 00017 (unique ทั้งตาราง ไม่ใช่แค่แถวที่ยังไม่ลบ)
+// การกู้คืนจึงชนชื่อไม่ได้อีกแล้ว — caller ยังดัก unique violation ไว้เป็น safety net เผื่อ
+// constraint เปลี่ยนในอนาคต
+func (s *Store) RestoreUser(ctx context.Context, id uuid.UUID) (*User, error) {
+	return scanUser(s.pool.QueryRow(ctx, `
+		UPDATE users SET
+			deleted_at = NULL,
+			is_active  = true,
+			updated_at = now()
+		WHERE id = $1 AND deleted_at IS NOT NULL
+		RETURNING `+userCols, id))
 }

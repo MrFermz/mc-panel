@@ -4,12 +4,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import {
-  apiGet,
-  apiSendVoid,
-  listUserDirectory,
-  ApiError,
-} from "@/lib/api";
+import { apiGet, apiSendVoid, listUserDirectory, ApiError } from "@/lib/api";
 import {
   capabilitiesResponseSchema,
   permissionsResponseSchema,
@@ -43,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -92,7 +88,10 @@ function ServerPresetPicker({
 }: {
   role: "owner" | "member";
   capabilities: string[];
-  onSelect: (next: { role: "owner" | "member"; capabilities: string[] }) => void;
+  onSelect: (next: {
+    role: "owner" | "member";
+    capabilities: string[];
+  }) => void;
 }) {
   const t = useT();
   const selected = matchServerPreset(role, capabilities);
@@ -240,22 +239,6 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
   const canSubmit =
     editingIdent !== null || form.userId !== "" || form.username.trim() !== "";
 
-  const toggle = (key: string, on: boolean) =>
-    setForm((prev) => ({
-      ...prev,
-      capabilities: on
-        ? [...new Set([...prev.capabilities, key])]
-        : prev.capabilities.filter((k) => k !== key),
-    }));
-
-  const toggleGroup = (keys: string[], on: boolean) =>
-    setForm((prev) => ({
-      ...prev,
-      capabilities: on
-        ? [...new Set([...prev.capabilities, ...keys])]
-        : prev.capabilities.filter((k) => !keys.includes(k)),
-    }));
-
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
@@ -340,7 +323,7 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingIdent
@@ -350,91 +333,94 @@ export default function ServerAccess({ serverId }: { serverId: string }) {
             <DialogDescription>{t("access.accountRequired")}</DialogDescription>
           </DialogHeader>
           <form
-            className="grid gap-4"
+            className="contents"
             onSubmit={(e) => {
               e.preventDefault();
               if (canSubmit && !upsert.isPending) upsert.mutate(form);
             }}
           >
-            {editingIdent === null && (
-              <div className="grid gap-2">
-                <Label htmlFor="perm-user">{t("access.pickUser")}</Label>
-                <Select
-                  value={form.userId}
-                  onValueChange={(v) =>
-                    // เลือก user → เคลียร์ช่อง username (ใช้ user_id แทน)
-                    setForm({ ...form, userId: v, username: "" })
-                  }
-                  disabled={pickableUsers.length === 0}
-                >
-                  <SelectTrigger id="perm-user">
-                    <SelectValue
-                      placeholder={
-                        directory.isPending
-                          ? t("common.loading")
-                          : pickableUsers.length === 0
-                            ? t("access.noPickable")
-                            : t("access.pickUserPlaceholder")
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pickableUsers.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {directoryLabel(u)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {editingIdent === null && (
-              <div className="grid gap-2">
-                <Label htmlFor="perm-username">
-                  {t("access.orUsername")}
-                </Label>
-                <Input
-                  id="perm-username"
-                  disabled={form.userId !== ""}
-                  placeholder={t("access.usernamePlaceholder")}
-                  value={form.username}
-                  onChange={(e) =>
-                    // พิมพ์ username → ล้าง user ที่เลือกไว้
-                    setForm({ ...form, username: e.target.value, userId: "" })
-                  }
-                />
-              </div>
-            )}
-
-            <div>
-              <FieldGroupLabel>{t("access.rolePreset")}</FieldGroupLabel>
-              <ServerPresetPicker
-                role={form.role}
-                capabilities={form.capabilities}
-                onSelect={(next) => setForm({ ...form, ...next })}
-              />
-              <p className="text-muted-foreground mt-2 text-xs">
-                {form.role === "owner"
-                  ? t("access.ownerHint")
-                  : t("access.presetHint")}
-              </p>
-            </div>
-
-            <div>
-              <FieldGroupLabel>{t("access.permissions")}</FieldGroupLabel>
-              {caps.isPending ? (
-                <Skeleton className="h-64 w-full" />
-              ) : (
-                <PermissionGroups
-                  catalog={serverCatalog}
-                  // owner ได้ทุก server-scoped cap โดยปริยาย — โชว์เปิดค้าง กดไม่ได้
-                  isAdmin={form.role === "owner"}
-                  capabilities={form.capabilities}
-                  onToggle={toggle}
-                  onToggleGroup={toggleGroup}
-                />
+            <DialogBody>
+              {editingIdent === null && (
+                <div className="grid gap-2">
+                  <Label htmlFor="perm-user">{t("access.pickUser")}</Label>
+                  <Select
+                    value={form.userId}
+                    onValueChange={(v) =>
+                      // เลือก user → เคลียร์ช่อง username (ใช้ user_id แทน)
+                      setForm({ ...form, userId: v, username: "" })
+                    }
+                    disabled={pickableUsers.length === 0}
+                  >
+                    <SelectTrigger id="perm-user">
+                      <SelectValue
+                        placeholder={
+                          directory.isPending
+                            ? t("common.loading")
+                            : pickableUsers.length === 0
+                              ? t("access.noPickable")
+                              : t("access.pickUserPlaceholder")
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pickableUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {directoryLabel(u)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
-            </div>
+              {editingIdent === null && (
+                <div className="grid gap-2">
+                  <Label htmlFor="perm-username">
+                    {t("access.orUsername")}
+                  </Label>
+                  <Input
+                    id="perm-username"
+                    disabled={form.userId !== ""}
+                    placeholder={t("access.usernamePlaceholder")}
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={form.username}
+                    onChange={(e) =>
+                      // พิมพ์ username → ล้าง user ที่เลือกไว้
+                      // (พิมพ์ case ไหนก็ได้ — backend lower ก่อนหา user เสมอ)
+                      setForm({ ...form, username: e.target.value, userId: "" })
+                    }
+                  />
+                </div>
+              )}
+
+              <div>
+                <FieldGroupLabel>{t("access.rolePreset")}</FieldGroupLabel>
+                <ServerPresetPicker
+                  role={form.role}
+                  capabilities={form.capabilities}
+                  onSelect={(next) => setForm({ ...form, ...next })}
+                />
+                <p className="text-muted-foreground mt-2 text-xs">
+                  {form.role === "owner"
+                    ? t("access.ownerHint")
+                    : t("access.presetHint")}
+                </p>
+              </div>
+
+              <div>
+                <FieldGroupLabel>{t("access.permissions")}</FieldGroupLabel>
+                {caps.isPending ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : (
+                  <PermissionGroups
+                    catalog={serverCatalog}
+                    // owner ได้ทุก server-scoped cap โดยปริยาย — โชว์ติ๊กครบทุกข้อ
+                    isAdmin={form.role === "owner"}
+                    capabilities={form.capabilities}
+                  />
+                )}
+              </div>
+            </DialogBody>
 
             <DialogFooter>
               <Button

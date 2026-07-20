@@ -127,6 +127,9 @@ type userView struct {
 	MustChangePassword bool      `json:"must_change_password"`
 	Capabilities       []string  `json:"capabilities"`
 	CreatedAt          time.Time `json:"created_at"`
+	// DeletedAt != nil เฉพาะแถวจากหน้าถังขยะ (ListUsers status=deleted) —
+	// เส้นทางอื่นกรอง deleted_at IS NULL ไปแล้วจึงเป็น null เสมอ
+	DeletedAt *time.Time `json:"deleted_at"`
 }
 
 func toUserView(u *store.User) userView {
@@ -145,6 +148,7 @@ func toUserView(u *store.User) userView {
 		MustChangePassword: u.MustChangePassword,
 		Capabilities:       caps,
 		CreatedAt:          u.CreatedAt,
+		DeletedAt:          u.DeletedAt,
 	}
 }
 

@@ -30,7 +30,7 @@ WS: ตรวจ `Origin` header ตอน handshake เสมอ
 
 | Method | Path | ใคร | Body → Response |
 |---|---|---|---|
-| POST | `/api/auth/login` | public (rate limit 10/นาที/IP ผ่าน redis) | `{username, password}` → `{user}` + Set-Cookie; 401 `invalid_credentials`. `username` เทียบแบบ case-insensitive |
+| POST | `/api/auth/login` | public (rate limit 10/นาที/IP ผ่าน redis) | `{username, password}` → `{user}` + Set-Cookie; 401 `invalid_credentials`. `username` ถูก lower ก่อนเทียบเสมอ (เก็บใน DB เป็นตัวพิมพ์เล็กล้วน — ดู migration 00018) |
 | POST | `/api/auth/logout` | ทุกคน | → 204 + ลบ cookie |
 | GET | `/api/auth/me` | ทุกคน | → `{user}` |
 | POST | `/api/auth/change-password` | ทุกคน | `{current_password, new_password}` → `{user}` + Set-Cookie ใหม่ (bump token_version) |
@@ -63,9 +63,10 @@ route เดียวใน `internal/httpapi/api.go`
 | key | endpoint ที่คุม |
 |---|---|
 | `users.view` | `GET /api/users`, `GET /api/users/{id}` (หน้า/เมนู Users) |
-| `users.create` | `POST /api/users` |
+| `users.create` | `POST /api/users`, `GET /api/users/check-username` |
 | `users.edit` | `PATCH /api/users/{id}` (บทบาท/สิทธิ์/สถานะ) |
-| `users.delete` | `DELETE /api/users/{id}` |
+| `users.delete` | `DELETE /api/users/{id}` (soft delete — ย้ายเข้าถังขยะ) |
+| `users.restore` | `POST /api/users/{id}/restore` |
 | `users.reset_password` | `POST /api/users/{id}/reset-password` |
 | `nodes.view` | `GET /api/nodes` (หน้า/เมนู Nodes) + รับ event `node_stats` |
 | `nodes.create` | `POST /api/nodes` |
@@ -87,8 +88,8 @@ route เดียวใน `internal/httpapi/api.go`
 | `players.moderate` | `POST /api/servers/{id}/players/action` (op/deop/kick/ban/pardon) |
 | `settings.view` | `GET /api/servers/{id}/properties` |
 | `settings.edit` | `PUT /api/servers/{id}/properties` |
-| `access.view` | `GET /api/servers/{id}/permissions` |
-| `access.manage` | `POST /api/servers/{id}/permissions`, `DELETE .../permissions/{user_id}` |
+| `access.view` | `GET /api/servers/{id}/permissions`, `GET /api/users/{id}/servers` |
+| `access.manage` | `POST /api/servers/{id}/permissions`, `DELETE .../permissions/{user_id}`, `POST /api/users/{id}/servers`, `DELETE /api/users/{id}/servers/{server_id}` |
 
 ⚠️ capability ที่คุม endpoint ระดับ server (`console.*`, `files.*`, `players.*`, `settings.*`,
 `servers.edit/delete/power`) เป็นชั้น **เพิ่มเติม** จาก `server_permissions` —
@@ -108,11 +109,26 @@ effective = `is_admin OR (hasGlobalCap(cap) AND (server_owner OR grant มี ca
 | Method | Path | Body → Response |
 |---|---|---|
 | GET | `/api/users/{id}` | → `{user}` — โหลด user คนเดียว (หน้า `/admin/users/{id}/permissions` เปิดตรงจาก URL ได้); 404 `user_not_found` |
-| GET | `/api/users` | `?search=&role=&status=` → `{users: [user]}` — filter: `search` (username/display_name substring), `role` (`admin`\|`user`), `status` (`active`\|`inactive`); user ที่ถูกลบ (soft delete) ไม่แสดง |
-| POST | `/api/users` | `{username, is_admin, capabilities?}` → 201 `{user, initial_password}` — password สุ่ม 20 ตัว แสดงครั้งเดียว; `username` บังคับ ต้อง match `^[a-zA-Z0-9_.-]{3,64}$` ไม่งั้น 400 `invalid_username`; 409 `username_exists` เมื่อซ้ำ |
+| GET | `/api/users` | `?search=&role=&status=` → `{users: [user]}` — filter: `search` (username/display_name substring), `role` (`admin`\|`user`), `status` (`active`\|`inactive`\|`deleted`); `status=deleted` = หน้าถังขยะ (ที่เดียวที่เห็น user ที่ถูก soft delete, `user.deleted_at` ไม่ null) นอกนั้นซ่อนเสมอ |
+| POST | `/api/users` | `{username, is_admin, capabilities?}` → 201 `{user, initial_password}` — password สุ่ม 20 ตัว แสดงครั้งเดียว; `username` บังคับ — server lower ให้เองก่อน validate (ส่ง `Alice` มาได้ เก็บเป็น `alice`) แล้วต้อง match `^[a-z0-9_.-]{3,64}$` ไม่งั้น 400 `invalid_username`; 409 `username_exists` เมื่อซ้ำ (นับแถวในถังขยะด้วย), 409 `username_reserved` เมื่อเป็นชื่อที่ระบบสงวนไว้ |
+| GET | `/api/users/check-username` | `?username=` → `{username, available, reason}` — `reason` = `""` (ใช้ได้) \| `invalid` \| `reserved` \| `taken`. เกณฑ์ตรงกับ `POST /api/users` เป๊ะ ให้ฟอร์มเช็คสดตอนกรอก. ผูก cap `users.create` (ไม่ใช่ endpoint สาธารณะ — คำตอบ `taken` = ยืนยันว่ามีบัญชีนั้นอยู่ = user enumeration) |
 | PATCH | `/api/users/{id}` | `{is_admin?, is_active?, capabilities?}` → `{user}` — ห้ามถอด admin/ปิด active ตัวเอง; `capabilities` ต้องเป็น key ใน catalog เท่านั้น |
-| DELETE | `/api/users/{id}` | → 204 — soft delete (mark `deleted_at` + ปิด active + bump token_version → session เก่าตาย + ล้าง server_permissions); username ที่ถูกลบใช้ซ้ำได้; 400 `cannot_delete_self`, 404 `not_found` |
+| DELETE | `/api/users/{id}` | → 204 — soft delete (mark `deleted_at` + ปิด active + bump token_version → session เก่าตาย). **ไม่ลบ `server_permissions`** — restore ต้องได้สิทธิ์ต่อ server กลับมาครบ (grant ของ user ในถังขยะถูกซ่อนจาก `GET /servers/{id}/permissions` และไม่นับใน guard `last_owner`); **username ยังถูกจองไว้** (unique ทั้งตาราง — สร้างบัญชีชื่อซ้ำไม่ได้จนกว่าจะกู้คืน); 400 `cannot_delete_self`, 404 `not_found` |
+| POST | `/api/users/{id}/restore` | → `{user}` — เอาออกจากถังขยะ + `is_active=true` (สิทธิ์ต่อ server กลับมาเองเพราะไม่เคยถูกลบ; เจ้าตัวต้อง login ใหม่); 404 `user_not_found` เมื่อไม่มี/ไม่ได้อยู่ในถังขยะ. ชนชื่อไม่ได้เพราะ username ถูกจองไว้ตลอด (409 `username_exists` เหลือไว้เป็น safety net) |
 | POST | `/api/users/{id}/reset-password` | → `{initial_password}` — สุ่มใหม่ + must_change_password + bump token_version |
+
+### Server access ของ user คนหนึ่ง
+
+ข้อมูลชุดเดียวกับ `server_permissions` (ตาราง Server permissions ด้านล่าง) แต่มองจากฝั่ง user —
+หน้า `/admin/users/{id}/servers` assign server ให้ user ทีเดียวหลายตัวโดยไม่ต้องไล่เปิดแท็บ Access
+ทีละ server. สิทธิ์ = global cap (`access.view`/`access.manage`) **และ** ต้องเป็น owner ของ server
+ตัวนั้น (is_admin ข้ามได้) เหมือน endpoint ฝั่ง server ทุกประการ
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/users/{id}/servers` | → `{permissions: [{server_id, server_name, server_status, node_id, role, capabilities}]}` — คืนเฉพาะ server ที่ผู้เรียกเป็น owner (admin เห็นครบ), ข้าม server ที่อยู่ในถังขยะ |
+| POST | `/api/users/{id}/servers` | `{server_id, role, capabilities?}` → `{permission}` — upsert; เงื่อนไขเดียวกับ `POST /api/servers/{id}/permissions` (400 `invalid_role`/`invalid_capability`, 409 `last_owner`, 403 `forbidden` เมื่อไม่ได้เป็น owner ของ server นั้น) |
+| DELETE | `/api/users/{id}/servers/{server_id}` | → 204 — ห้ามลบ owner คนสุดท้าย (409 `last_owner`), 404 `permission_not_found` |
 
 ## Nodes (ต้องมี capability `nodes.*` ตามตารางด้านบน หรือ is_admin)
 

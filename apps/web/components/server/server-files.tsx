@@ -35,6 +35,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -362,7 +363,7 @@ export default function ServerFiles({
             <DialogTitle>{t(nameDialogTitleKey)}</DialogTitle>
           </DialogHeader>
           <form
-            className="grid gap-4"
+            className="contents"
             onSubmit={(e) => {
               e.preventDefault();
               if (!nameDialog || nameMutation.isPending) return;
@@ -374,15 +375,17 @@ export default function ServerFiles({
               });
             }}
           >
-            <div className="grid gap-2">
-              <Label htmlFor="file-name">{t("files.nameLabel")}</Label>
-              <Input
-                id="file-name"
-                autoFocus
-                value={nameValue}
-                onChange={(e) => setNameValue(e.target.value)}
-              />
-            </div>
+            <DialogBody>
+              <div className="grid gap-2">
+                <Label htmlFor="file-name">{t("files.nameLabel")}</Label>
+                <Input
+                  id="file-name"
+                  autoFocus
+                  value={nameValue}
+                  onChange={(e) => setNameValue(e.target.value)}
+                />
+              </div>
+            </DialogBody>
             <DialogFooter>
               <Button
                 type="button"
@@ -480,25 +483,27 @@ function FileEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {content.isPending ? (
-          <Skeleton className="h-80 w-full" />
-        ) : content.isError ? (
-          <p className="text-destructive text-sm">
-            {fileErrorMessage(content.error, t)}
-          </p>
-        ) : (
-          <div className="grid gap-2">
-            {truncated && (
-              <p className="text-xs text-amber-500">{t("files.truncated")}</p>
-            )}
-            <CodeEditor
-              value={value}
-              onChange={(next) => setDraft(next)}
-              readOnly={truncated || !canWrite}
-              filename={baseName(path)}
-            />
-          </div>
-        )}
+        <DialogBody>
+          {content.isPending ? (
+            <Skeleton className="h-80 w-full" />
+          ) : content.isError ? (
+            <p className="text-destructive text-sm">
+              {fileErrorMessage(content.error, t)}
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {truncated && (
+                <p className="text-xs text-amber-500">{t("files.truncated")}</p>
+              )}
+              <CodeEditor
+                value={value}
+                onChange={(next) => setDraft(next)}
+                readOnly={truncated || !canWrite}
+                filename={baseName(path)}
+              />
+            </div>
+          )}
+        </DialogBody>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
@@ -507,7 +512,9 @@ function FileEditorDialog({
           {canWrite && (
             <Button
               type="button"
-              disabled={content.isError || truncated || save.isPending || !dirty}
+              disabled={
+                content.isError || truncated || save.isPending || !dirty
+              }
               onClick={() => save.mutate()}
             >
               {save.isPending ? t("common.saving") : t("common.save")}

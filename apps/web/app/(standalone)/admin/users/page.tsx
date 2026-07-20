@@ -4,8 +4,25 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Link from "next/link";
-import { KeyRoundIcon, PlusIcon } from "lucide-react";
-import { apiGet, apiSend, deleteUser, ApiError } from "@/lib/api";
+import {
+  KeyRoundIcon,
+  MoreHorizontalIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
+  PlusIcon,
+  RotateCcwIcon,
+  ServerIcon,
+  ShieldIcon,
+  Trash2Icon,
+} from "lucide-react";
+import {
+  apiGet,
+  apiSend,
+  apiSendVoid,
+  deleteUser,
+  restoreUser,
+  ApiError,
+} from "@/lib/api";
 import {
   capabilitiesResponseSchema,
   createUserResponseSchema,
@@ -17,6 +34,7 @@ import {
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { detectRole } from "@/lib/user-roles";
 import { userIdent } from "@/lib/user-display";
+import { formatDateTime } from "@/lib/format";
 import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -40,6 +58,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SecretDialog } from "@/components/secret-dialog";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
@@ -65,23 +91,30 @@ export default function AdminUsersPage() {
   const canCreateUser = hasCapability(me, CAPABILITY.usersCreate);
   const canEditUser = hasCapability(me, CAPABILITY.usersEdit);
   const canDeleteUser = hasCapability(me, CAPABILITY.usersDelete);
+  const canRestoreUser = hasCapability(me, CAPABILITY.usersRestore);
   const canResetPassword = hasCapability(me, CAPABILITY.usersResetPassword);
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [secret, setSecret] = React.useState<{
     title: string;
     password: string;
+    // รีเซ็ตรหัสผ่านของตัวเอง = token_version ถูก bump เซสชันนี้ตายไปแล้ว —
+    // ปิด dialog เมื่อไหร่ต้องเด้งออกทันที ไม่ปล่อยให้คลิกต่อแล้วเจอ 401 รัว ๆ
+    logoutOnClose?: boolean;
   } | null>(null);
   const [resetTarget, setResetTarget] = React.useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<User | null>(null);
+  const [restoreTarget, setRestoreTarget] = React.useState<User | null>(null);
 
   // filter bar — search debounce 300ms กัน refetch ถี่ทุก keystroke
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [role, setRole] = React.useState<"all" | "admin" | "user">("all");
-  const [status, setStatus] = React.useState<"all" | "active" | "inactive">(
-    "all",
-  );
+  // status=deleted = ถังขยะ (ที่เดียวที่เห็นบัญชีที่ถูกลบ — soft delete เก็บแถวไว้)
+  const [status, setStatus] = React.useState<
+    "all" | "active" | "inactive" | "deleted"
+  >("all");
+  const trash = status === "deleted";
 
   React.useEffect(() => {
     const id = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -115,6 +148,14 @@ export default function AdminUsersPage() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["users"] });
 
+  const logout = async () => {
+    try {
+      await apiSendVoid("POST", "/api/auth/logout");
+    } finally {
+      window.location.assign("/login");
+    }
+  };
+
   const createUser = useMutation({
     mutationFn: (body: CreateUserBody) =>
       apiSend("POST", "/api/users", body, createUserResponseSchema),
@@ -135,7 +176,13 @@ export default function AdminUsersPage() {
         toast.error(t("users.usernameExists"));
         return;
       }
-      toast.error(err instanceof ApiError ? err.message : t("users.failedCreate"));
+      if (err instanceof ApiError && err.code === "username_reserved") {
+        toast.error(t("users.usernameReserved"));
+        return;
+      }
+      toast.error(
+        err instanceof ApiError ? err.message : t("users.failedCreate"),
+      );
     },
   });
 
@@ -151,7 +198,28 @@ export default function AdminUsersPage() {
         toast.error(t("users.cannotDeleteSelf"));
         return;
       }
-      toast.error(err instanceof ApiError ? err.message : t("users.failedDelete"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("users.failedDelete"),
+      );
+    },
+  });
+
+  const bringBackUser = useMutation({
+    mutationFn: (id: string) => restoreUser(id),
+    onSuccess: () => {
+      toast.success(t("users.restored"));
+      setRestoreTarget(null);
+      invalidate();
+    },
+    onError: (err) => {
+      // username ถูกคนอื่นใช้ไประหว่างที่บัญชีนี้อยู่ในถังขยะ
+      if (err instanceof ApiError && err.code === "username_exists") {
+        toast.error(t("users.restoreUsernameTaken"));
+        return;
+      }
+      toast.error(
+        err instanceof ApiError ? err.message : t("users.failedRestore"),
+      );
     },
   });
 
@@ -161,16 +229,16 @@ export default function AdminUsersPage() {
       body,
     }: {
       id: string;
-      body: Partial<
-        Pick<User, "is_admin" | "is_active" | "capabilities">
-      >;
+      body: Partial<Pick<User, "is_admin" | "is_active" | "capabilities">>;
     }) => apiSend("PATCH", `/api/users/${id}`, body, userResponseSchema),
     onSuccess: () => {
       toast.success(t("users.updated"));
       invalidate();
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : t("users.failedUpdate"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("users.failedUpdate"),
+      );
     },
   });
 
@@ -190,10 +258,13 @@ export default function AdminUsersPage() {
           name: target ? userIdent(target) : "user",
         }),
         password: data.initial_password,
+        logoutOnClose: id === me?.id,
       });
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : t("users.failedReset"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("users.failedReset"),
+      );
     },
   });
 
@@ -210,7 +281,7 @@ export default function AdminUsersPage() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">{t("users.subtitle")}</p>
-        {canCreateUser && (
+        {canCreateUser && !trash && (
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <PlusIcon />
             {t("users.create")}
@@ -251,7 +322,10 @@ export default function AdminUsersPage() {
           <SelectContent>
             <SelectItem value="all">{t("users.statusAll")}</SelectItem>
             <SelectItem value="active">{t("users.statusActive")}</SelectItem>
-            <SelectItem value="inactive">{t("users.statusInactive")}</SelectItem>
+            <SelectItem value="inactive">
+              {t("users.statusInactive")}
+            </SelectItem>
+            <SelectItem value="deleted">{t("users.statusDeleted")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -263,7 +337,7 @@ export default function AdminUsersPage() {
       ) : userList.length === 0 ? (
         <Card className="py-10">
           <CardContent className="text-muted-foreground text-center text-sm">
-            {t("users.empty")}
+            {trash ? t("users.trashEmpty") : t("users.empty")}
           </CardContent>
         </Card>
       ) : (
@@ -290,6 +364,12 @@ export default function AdminUsersPage() {
                         <UserIdentity
                           user={user}
                           panelRole={roleKey}
+                          // ในถังขยะไม่มีหน้า detail ให้เข้า (GET /users/{id} ตอบ 404)
+                          href={
+                            trash
+                              ? undefined
+                              : `/admin/users/${user.id}/permissions`
+                          }
                           trailing={
                             <>
                               {self && (
@@ -322,60 +402,121 @@ export default function AdminUsersPage() {
                           <span
                             className={cn(
                               "size-2 rounded-full",
-                              user.is_active ? "bg-emerald-500" : "bg-amber-500",
+                              user.deleted_at
+                                ? "bg-destructive"
+                                : user.is_active
+                                  ? "bg-emerald-500"
+                                  : "bg-amber-500",
                             )}
                           />
-                          {user.is_active
-                            ? t("users.statusActive")
-                            : t("users.statusSuspended")}
+                          {user.deleted_at
+                            ? t("users.deletedOn", {
+                                date: formatDateTime(user.deleted_at),
+                              })
+                            : user.is_active
+                              ? t("users.statusActive")
+                              : t("users.statusSuspended")}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/admin/users/${user.id}/permissions`}>
-                              {t("users.permissions")}
-                            </Link>
-                          </Button>
-                          {canEditUser && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-amber-400 hover:text-amber-300"
-                              disabled={self || patchUser.isPending}
-                              onClick={() =>
-                                patchUser.mutate({
-                                  id: user.id,
-                                  body: { is_active: !user.is_active },
-                                })
-                              }
-                            >
-                              {user.is_active
-                                ? t("users.suspend")
-                                : t("users.activate")}
-                            </Button>
-                          )}
-                          {canResetPassword && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="size-8"
-                              onClick={() => setResetTarget(user)}
-                              aria-label={`${t("users.resetPassword")} — ${userIdent(user)}`}
-                            >
-                              <KeyRoundIcon />
-                            </Button>
-                          )}
-                          {canDeleteUser && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                              disabled={self}
-                              onClick={() => setDeleteTarget(user)}
-                            >
-                              {t("users.delete")}
-                            </Button>
+                        <div className="flex justify-end">
+                          {/* บัญชีในถังขยะแก้อะไรไม่ได้ — กู้กลับมาก่อนถึงจะจัดการต่อได้
+                              จึงเหลือปุ่มเดียวไม่ต้องมี menu */}
+                          {trash ? (
+                            canRestoreUser && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={bringBackUser.isPending}
+                                onClick={() => setRestoreTarget(user)}
+                              >
+                                <RotateCcwIcon />
+                                {t("users.restore")}
+                              </Button>
+                            )
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  aria-label={t("users.actionsFor", {
+                                    name: userIdent(user),
+                                  })}
+                                >
+                                  <MoreHorizontalIcon />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-60">
+                                <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
+                                  {userIdent(user)}
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/admin/users/${user.id}/permissions`}
+                                  >
+                                    <ShieldIcon />
+                                    {t("users.menuPermissions")}
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/admin/users/${user.id}/servers`}
+                                  >
+                                    <ServerIcon />
+                                    {t("users.menuServerAccess")}
+                                  </Link>
+                                </DropdownMenuItem>
+                                {(canResetPassword || canEditUser) && (
+                                  <DropdownMenuSeparator />
+                                )}
+                                {canResetPassword && (
+                                  <DropdownMenuItem
+                                    onSelect={() => setResetTarget(user)}
+                                  >
+                                    <KeyRoundIcon />
+                                    {t("users.menuResetPassword")}
+                                  </DropdownMenuItem>
+                                )}
+                                {canEditUser && (
+                                  // ระงับ/ลบตัวเองไม่ได้ (กันล็อกตัวเองออกจากระบบ) —
+                                  // ขึ้นเป็น disabled ให้เห็นว่ามีเมนูนี้อยู่ ดีกว่าซ่อนเงียบ ๆ
+                                  <DropdownMenuItem
+                                    disabled={self || patchUser.isPending}
+                                    onSelect={() =>
+                                      patchUser.mutate({
+                                        id: user.id,
+                                        body: { is_active: !user.is_active },
+                                      })
+                                    }
+                                  >
+                                    {user.is_active ? (
+                                      <PauseCircleIcon />
+                                    ) : (
+                                      <PlayCircleIcon />
+                                    )}
+                                    {user.is_active
+                                      ? t("users.menuSuspend")
+                                      : t("users.menuActivate")}
+                                  </DropdownMenuItem>
+                                )}
+                                {canDeleteUser && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      disabled={self}
+                                      onSelect={() => setDeleteTarget(user)}
+                                    >
+                                      <Trash2Icon />
+                                      {t("users.menuDelete")}
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
                         </div>
                       </TableCell>
@@ -404,7 +545,11 @@ export default function AdminUsersPage() {
         title={t("users.resetTitle", {
           name: resetTarget ? userIdent(resetTarget) : "",
         })}
-        description={t("users.resetDesc")}
+        description={
+          resetTarget?.id === me?.id
+            ? t("users.resetSelfDesc")
+            : t("users.resetDesc")
+        }
         confirmLabel={t("users.resetConfirm")}
         destructive
         pending={resetPassword.isPending}
@@ -422,7 +567,7 @@ export default function AdminUsersPage() {
           name: deleteTarget ? userIdent(deleteTarget) : "",
         })}
         description={t("users.deleteConfirm")}
-        confirmLabel={t("users.delete")}
+        confirmLabel={t("users.menuDelete")}
         destructive
         pending={removeUser.isPending}
         onConfirm={() => {
@@ -430,13 +575,38 @@ export default function AdminUsersPage() {
         }}
       />
 
+      <ConfirmDialog
+        open={restoreTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRestoreTarget(null);
+        }}
+        title={t("users.restoreTitle", {
+          name: restoreTarget ? userIdent(restoreTarget) : "",
+        })}
+        description={t("users.restoreDesc")}
+        confirmLabel={t("users.restore")}
+        pending={bringBackUser.isPending}
+        onConfirm={() => {
+          if (restoreTarget) bringBackUser.mutate(restoreTarget.id);
+        }}
+      />
+
       <SecretDialog
         open={secret !== null}
         onOpenChange={(open) => {
-          if (!open) setSecret(null);
+          if (open) return;
+          if (secret?.logoutOnClose) {
+            logout();
+            return;
+          }
+          setSecret(null);
         }}
         title={secret?.title ?? ""}
-        description={t("users.sharePassword")}
+        description={
+          secret?.logoutOnClose
+            ? t("users.selfResetDesc")
+            : t("users.sharePassword")
+        }
         secret={secret?.password ?? ""}
       />
     </div>

@@ -27,6 +27,7 @@ const (
 	capUsersCreate        = "users.create"
 	capUsersEdit          = "users.edit"
 	capUsersDelete        = "users.delete"
+	capUsersRestore       = "users.restore"
 	capUsersResetPassword = "users.reset_password"
 
 	capNodesView   = "nodes.view"
@@ -64,7 +65,8 @@ var capabilityCatalog = []capabilityMeta{
 	{capUsersView, "users", "view", "View users", "Open the Users page and see panel accounts"},
 	{capUsersCreate, "users", "create", "Create users", "Create new panel accounts"},
 	{capUsersEdit, "users", "edit", "Edit users", "Change role, permissions and status of accounts"},
-	{capUsersDelete, "users", "delete", "Delete users", "Remove panel accounts"},
+	{capUsersDelete, "users", "delete", "Delete users", "Move a panel account to the trash, keeping its server access"},
+	{capUsersRestore, "users", "restore", "Restore users", "Bring a deleted account back with the access it had"},
 	{capUsersResetPassword, "users", "reset_password", "Reset passwords", "Issue a new password for an account"},
 
 	{capNodesView, "nodes", "view", "View nodes", "Open the Nodes page and see node health"},

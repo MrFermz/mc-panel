@@ -12,8 +12,16 @@ import (
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
-// username: ตัวอักษร/ตัวเลข/`_.-` ยาว 3-64 (ต้องตรงกับ regex ฝั่ง web)
-var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,64}$`)
+// username: ตัวพิมพ์เล็ก/ตัวเลข/`_.-` ยาว 3-64 (ต้องตรงกับ regex ฝั่ง web)
+// ไม่รับตัวพิมพ์ใหญ่ — canonical เป็น lowercase ตั้งแต่ชั้น DB (migration 00018 มี CHECK คุมอยู่)
+var usernameRe = regexp.MustCompile(`^[a-z0-9_.-]{3,64}$`)
+
+// canonicalUsername: ทุกทางเข้าที่รับ username จากภายนอกต้องผ่านตัวนี้ก่อน validate/เทียบ/บันทึก
+// (สร้าง user, เช็คชื่อซ้ำ, login, grant permission ด้วย username) — พิมพ์ `Alice` มาก็ได้ `alice`
+// ไม่ใช่โดน reject ให้ไปแก้เอง
+func canonicalUsername(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
 
 func (a *API) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -84,6 +92,40 @@ func (a *API) handleUserDirectory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"users": views})
 }
 
+// handleCheckUsername: ให้ฟอร์มสร้าง user บอกได้ทันทีว่าชื่อนี้ใช้ได้ไหม ไม่ต้องกดสร้างก่อนถึงรู้
+// ผูก cap `users.create` (ไม่ใช่เปิดให้ทุกคน) เพราะคำตอบ "ชื่อนี้ถูกใช้แล้ว" =
+// บอกว่ามีบัญชีนั้นอยู่จริง — เป็น user enumeration ถ้าปล่อยให้ใครก็เรียกได้
+//
+// เกณฑ์ตรงกับ handleCreateUser เป๊ะ (regex → reserved → มีอยู่แล้ว) ไม่งั้นจะมีเคสที่
+// บอกว่าว่างแต่สร้างไม่ผ่าน
+func (a *API) handleCheckUsername(w http.ResponseWriter, r *http.Request) {
+	username := canonicalUsername(r.URL.Query().Get("username"))
+
+	reason := ""
+	switch {
+	case !usernameRe.MatchString(username):
+		reason = "invalid"
+	case isReservedUsername(username):
+		reason = "reserved"
+	default:
+		exists, err := a.st.UsernameExists(r.Context(), username)
+		if err != nil {
+			a.log.Error("check username failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+			return
+		}
+		if exists {
+			reason = "taken"
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"username":  username,
+		"available": reason == "",
+		"reason":    reason,
+	})
+}
+
 func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	actor := auth.UserFrom(r.Context())
 
@@ -96,11 +138,17 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	req.Username = strings.TrimSpace(req.Username)
+	req.Username = canonicalUsername(req.Username)
 
 	if !usernameRe.MatchString(req.Username) {
 		writeError(w, http.StatusBadRequest, "invalid_username",
 			"username must be 3-64 characters of letters, digits, or _.-")
+		return
+	}
+	// ชื่อที่ระบบจองไว้ = ถือว่าถูกใช้แล้ว (409 เหมือนชื่อซ้ำ) — ดู reserved_usernames.go
+	if isReservedUsername(req.Username) {
+		writeError(w, http.StatusConflict, "username_reserved",
+			"this username is reserved by the system and cannot be used")
 		return
 	}
 	if !validateCapabilities(req.Capabilities) {
@@ -122,8 +170,10 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := a.st.CreateUser(r.Context(), req.Username, hash, req.IsAdmin, req.Capabilities)
+	// username unique ทั้งตาราง — บัญชีที่อยู่ในถังขยะก็ยังจองชื่อไว้ (ดู migration 00017)
 	if store.IsUniqueViolation(err) {
-		writeError(w, http.StatusConflict, "username_exists", "a user with this username already exists")
+		writeError(w, http.StatusConflict, "username_exists",
+			"this username is taken — it may belong to a deleted account, which still reserves its username")
 		return
 	}
 	if err != nil {
@@ -267,4 +317,39 @@ func (a *API) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	a.audit(r, &actor.ID, nil, "user_delete", map[string]any{"user_id": id.String()})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRestoreUser: เอาบัญชีออกจากถังขยะ — server_permissions ไม่เคยถูกลบตอน soft delete
+// จึงกลับมาครบเอง (เจ้าตัวยังต้อง login ใหม่: token_version ถูก bump ตอนลบไปแล้ว)
+func (a *API) handleRestoreUser(w http.ResponseWriter, r *http.Request) {
+	actor := auth.UserFrom(r.Context())
+
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user_not_found", "user not found")
+		return
+	}
+
+	user, err := a.st.RestoreUser(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "user_not_found", "no deleted user with this id")
+		return
+	}
+	// safety net: username unique ทั้งตารางตั้งแต่ 00017 ชื่อจึงถูกจองไว้ตลอดที่อยู่ในถังขยะ
+	// เคสนี้เกิดไม่ได้กับ constraint ปัจจุบัน — ดักไว้เผื่อ index กลับไปเป็น partial อีก
+	if store.IsUniqueViolation(err) {
+		writeError(w, http.StatusConflict, "username_exists",
+			"another account now uses this username — rename it before restoring")
+		return
+	}
+	if err != nil {
+		a.log.Error("restore user failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return
+	}
+
+	a.audit(r, &actor.ID, nil, "user_restored",
+		map[string]any{"user_id": user.ID.String(), "username": user.Username})
+
+	writeJSON(w, http.StatusOK, map[string]any{"user": toUserView(user)})
 }

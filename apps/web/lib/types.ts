@@ -17,6 +17,8 @@ export const userSchema = z.object({
   must_change_password: z.boolean(),
   capabilities: z.array(z.string()).default([]),
   created_at: z.string(),
+  // ไม่ null = อยู่ในถังขยะ (โผล่เฉพาะ /api/users?status=deleted ของหน้า admin)
+  deleted_at: z.string().nullable().default(null),
 });
 export type User = z.infer<typeof userSchema>;
 
@@ -164,6 +166,25 @@ export const permissionSchema = z.object({
 });
 export type Permission = z.infer<typeof permissionSchema>;
 
+// grant เดียวกันมองจากฝั่ง user แทนฝั่ง server — GET /api/users/{id}/servers
+// (หน้า /admin/users/{id}/servers assign server ให้ user ทีเดียวหลายตัว)
+export const serverPermissionSchema = z.object({
+  server_id: z.string(),
+  server_name: z.string(),
+  server_status: serverStatusSchema,
+  node_id: z.string(),
+  role: permissionRoleSchema,
+  capabilities: z.array(z.string()).default([]),
+});
+export type ServerPermission = z.infer<typeof serverPermissionSchema>;
+
+export const serverPermissionsResponseSchema = z.object({
+  permissions: z.array(serverPermissionSchema).default([]),
+});
+export type ServerPermissionsResponse = z.infer<
+  typeof serverPermissionsResponseSchema
+>;
+
 // ---------- file manager (docs/api.md หัวข้อ File manager) ----------
 
 export const fileEntrySchema = z.object({
@@ -302,6 +323,14 @@ export const directoryUserSchema = z.object({
   avatar_url: z.string().nullable().default(null),
 });
 export type DirectoryUser = z.infer<typeof directoryUserSchema>;
+
+// GET /api/users/check-username — reason ว่าง = ใช้ได้
+export const usernameCheckResponseSchema = z.object({
+  username: z.string(),
+  available: z.boolean(),
+  reason: z.enum(["", "invalid", "reserved", "taken"]).default(""),
+});
+export type UsernameCheckResponse = z.infer<typeof usernameCheckResponseSchema>;
 
 export const userDirectoryResponseSchema = z.object({
   users: z.array(directoryUserSchema),

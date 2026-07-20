@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -286,27 +287,29 @@ export default function AdminNodesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("nodes.registerTitle")}</DialogTitle>
-            <DialogDescription>{t("nodes.registerDesc")}</DialogDescription>
           </DialogHeader>
           <form
-            className="grid gap-4"
+            className="contents"
             onSubmit={(e) => {
               e.preventDefault();
               if (nodeName.trim() !== "" && !register.isPending)
                 register.mutate();
             }}
           >
-            <div className="grid gap-2">
-              <Label htmlFor="n-name">{t("nodes.nodeName")}</Label>
-              <Input
-                id="n-name"
-                required
-                maxLength={100}
-                placeholder="node-1"
-                value={nodeName}
-                onChange={(e) => setNodeName(e.target.value)}
-              />
-            </div>
+            <DialogBody>
+              <DialogDescription>{t("nodes.registerDesc")}</DialogDescription>
+              <div className="grid gap-2">
+                <Label htmlFor="n-name">{t("nodes.nodeName")}</Label>
+                <Input
+                  id="n-name"
+                  required
+                  maxLength={100}
+                  placeholder="node-1"
+                  value={nodeName}
+                  onChange={(e) => setNodeName(e.target.value)}
+                />
+              </div>
+            </DialogBody>
             <DialogFooter>
               <Button
                 type="button"
