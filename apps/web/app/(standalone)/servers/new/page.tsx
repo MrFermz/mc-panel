@@ -20,18 +20,19 @@ import {
 } from "@/components/server/new-server/step-properties";
 import { StepAccess } from "@/components/server/new-server/step-access";
 import { StepPlayers } from "@/components/server/new-server/step-players";
+import { ImportServerPage } from "@/components/server/new-server/import-page";
 import { useServerMetadata } from "@/components/server/new-server/use-server-metadata";
-import { useImportSource } from "@/components/server/new-server/use-import-source";
 import { useCreateServer } from "@/components/server/new-server/use-create-server";
 import { Button } from "@/components/ui/button";
 
-function NewServerWizard() {
+// wizard ใช้กับการสร้างใหม่เท่านั้น — โหมด import เป็นฟอร์มหน้าเดียว (import-page.tsx)
+function NewServerWizard({
+  onCreated,
+}: {
+  onCreated: (server: Server) => void;
+}) {
   const t = useT();
   const me = useMe().data?.user;
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const setDashboardServerId = useSettingsStore((st) => st.setDashboardServerId);
-  const mode = searchParams.get("mode") === "import" ? "import" : "new";
 
   const [step, setStep] = React.useState(0);
   // draft ทั้งหมดอยู่ในหน้าเว็บจนกว่าจะกด create ที่ step สุดท้าย
@@ -40,24 +41,9 @@ function NewServerWizard() {
   const [playersDraft, setPlayersDraft] = React.useState<string[]>([]);
 
   const meta = useServerMetadata();
-  const importSource = useImportSource(meta);
   // เรียกที่นี่ด้วยเพื่อคำนวณ changedProps ตอนกด create แม้ user ไม่เคยเปิด step 2
   // (react-query dedupe ด้วย key เดียวกันกับที่ StepProperties ใช้ — ไม่ได้ยิงซ้ำ)
   const { defaults } = useCatalogDefaults();
-
-  useSetBreadcrumbs(
-    React.useMemo(
-      () => [
-        {
-          label:
-            mode === "import"
-              ? t("wizard.importBreadcrumb")
-              : t("wizard.newBreadcrumb"),
-        },
-      ],
-      [mode, t],
-    ),
-  );
 
   // คนสร้างเป็น owner เสมอ — backend ทำให้เองที่ CreateServerWithOwner จึงโชว์ไว้ในลิสต์
   // ตั้งแต่แรกให้เห็นว่ามีอยู่แล้ว (แถวนี้ล็อกไว้ และตอน apply จะถูกข้าม ไม่ POST ซ้ำ)
@@ -81,19 +67,9 @@ function NewServerWizard() {
     );
   }, [me]);
 
-  const onCreated = React.useCallback(
-    (server: Server) => {
-      // ไม่มีหน้า detail ต่อ server — ตั้งตัวที่เพิ่งสร้างเป็น active แล้วไป dashboard
-      setDashboardServerId(server.id);
-      router.push("/dashboard");
-    },
-    [router, setDashboardServerId],
-  );
-
   const create = useCreateServer({
-    mode,
+    mode: "new",
     meta,
-    importSource,
     changedProps: changedFrom(defaults, propsDraft),
     accessDraft,
     playersDraft,
@@ -105,15 +81,9 @@ function NewServerWizard() {
     setPropsDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  // step 1 เป็นด่านเดียวที่บังคับกรอก — ที่เหลือข้ามได้หมด
-  const canLeaveFirstStep =
-    meta.valid && (mode !== "import" || importSource.hasFile);
-
   const stepContent = () => {
     if (step === 0) {
-      return (
-        <StepGeneral mode={mode} meta={meta} importSource={importSource} />
-      );
+      return <StepGeneral mode="new" meta={meta} />;
     }
     if (step === 1) {
       return <StepProperties draft={propsDraft} onChange={setProp} />;
@@ -139,26 +109,13 @@ function NewServerWizard() {
     );
   };
 
-  // กันเข้าตรง URL — ปุ่ม/เมนูที่พามาที่นี่ซ่อนตาม servers.create อยู่แล้ว แต่หน้านี้เข้าถึงได้
-  // เองด้วย ถ้าไม่กันซ้ำ user จะกรอก wizard ทั้งชุดแล้วไปเจอ 403 ตอนกดสร้าง
-  // (เช็คหลัง hook ทั้งหมดเสมอ — early return ก่อน hook ทำ order พัง)
-  if (me && !hasCapability(me, CAPABILITY.serversCreate)) {
-    return (
-      <p className="text-muted-foreground text-sm">{t("common.noAccess")}</p>
-    );
-  }
-
   return (
     <>
       {/* pb เผื่อความสูงของ footer ที่ตรึงอยู่ ไม่ให้ทับเนื้อหาบรรทัดสุดท้าย */}
       <div className="grid gap-6 pb-24">
         <div className="grid gap-1">
-          <h1 className="text-xl font-semibold">
-            {mode === "import" ? t("import.title") : t("new.title")}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {mode === "import" ? t("import.subtitle") : t("new.subtitle")}
-          </p>
+          <h1 className="text-xl font-semibold">{t("new.title")}</h1>
+          <p className="text-muted-foreground text-sm">{t("new.subtitle")}</p>
         </div>
 
         {/* stepper ตรึงใต้ top bar ของ layout (h-14) — ยืดออกนอก padding ของ <main>
@@ -188,7 +145,7 @@ function NewServerWizard() {
           </Button>
           {step < LAST_STEP ? (
             <Button
-              disabled={step === 0 && !canLeaveFirstStep}
+              disabled={step === 0 && !meta.valid}
               onClick={() => setStep((s) => s + 1)}
             >
               {t("wizard.next")}
@@ -196,10 +153,10 @@ function NewServerWizard() {
           ) : (
             <Button
               loading={create.pending}
-              disabled={!canLeaveFirstStep}
+              disabled={!meta.valid}
               onClick={create.run}
             >
-              {mode === "import" ? t("wizard.importNow") : t("wizard.createNow")}
+              {t("wizard.createNow")}
             </Button>
           )}
         </div>
@@ -208,11 +165,7 @@ function NewServerWizard() {
       {create.pending && (
         <LoadingOverlay
           title={
-            importSource.zipping
-              ? t("import.zipping")
-              : create.phaseKey
-                ? t(create.phaseKey)
-                : t("wizard.overlayTitle")
+            create.phaseKey ? t(create.phaseKey) : t("wizard.overlayTitle")
           }
           description={t("wizard.overlayHint")}
           progress={create.uploadPct}
@@ -222,11 +175,58 @@ function NewServerWizard() {
   );
 }
 
+function NewServerRoute() {
+  const t = useT();
+  const me = useMe().data?.user;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const setDashboardServerId = useSettingsStore((st) => st.setDashboardServerId);
+  const mode = searchParams.get("mode") === "import" ? "import" : "new";
+
+  useSetBreadcrumbs(
+    React.useMemo(
+      () => [
+        {
+          label:
+            mode === "import"
+              ? t("wizard.importBreadcrumb")
+              : t("wizard.newBreadcrumb"),
+        },
+      ],
+      [mode, t],
+    ),
+  );
+
+  const onCreated = React.useCallback(
+    (server: Server) => {
+      // ไม่มีหน้า detail ต่อ server — ตั้งตัวที่เพิ่งสร้างเป็น active แล้วไป dashboard
+      setDashboardServerId(server.id);
+      router.push("/dashboard");
+    },
+    [router, setDashboardServerId],
+  );
+
+  // กันเข้าตรง URL — ปุ่ม/เมนูที่พามาที่นี่ซ่อนตาม servers.create อยู่แล้ว แต่หน้านี้เข้าถึงได้
+  // เองด้วย ถ้าไม่กันซ้ำ user จะกรอกฟอร์มทั้งชุดแล้วไปเจอ 403 ตอนกดสร้าง
+  // (เช็คหลัง hook ทั้งหมดเสมอ — early return ก่อน hook ทำ order พัง)
+  if (me && !hasCapability(me, CAPABILITY.serversCreate)) {
+    return (
+      <p className="text-muted-foreground text-sm">{t("common.noAccess")}</p>
+    );
+  }
+
+  return mode === "import" ? (
+    <ImportServerPage onImported={onCreated} />
+  ) : (
+    <NewServerWizard onCreated={onCreated} />
+  );
+}
+
 // useSearchParams ต้องอยู่ใน Suspense boundary ไม่งั้น build บ่น CSR bailout
 export default function NewServerPage() {
   return (
     <React.Suspense fallback={<PageLoader />}>
-      <NewServerWizard />
+      <NewServerRoute />
     </React.Suspense>
   );
 }

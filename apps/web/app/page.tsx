@@ -4,7 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRightIcon, BoxIcon, PlusIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  BoxIcon,
+  DownloadIcon,
+  PlusIcon,
+} from "lucide-react";
 import { apiGet, ApiError } from "@/lib/api";
 import { serversResponseSchema, type Server } from "@/lib/types";
 import { formatUptime } from "@/lib/format";
@@ -172,15 +177,23 @@ export default function ServerListPage() {
               {t("serverList.subtitle")}
             </p>
           </div>
-          {/* ทางเข้าสร้าง server จากหน้านี้ — คนที่มี servers.create แต่ไม่มี servers.view_all
-              ไม่เห็นเมนู admin > servers จึงต้องมีปุ่มตรงนี้ */}
+          {/* ทางเข้าสร้าง/นำเข้า server จากหน้านี้ — คนที่มี servers.create แต่ไม่มี
+              servers.view_all ไม่เห็นเมนู admin > servers จึงต้องมีปุ่มตรงนี้ */}
           {hasCapability(user, CAPABILITY.serversCreate) && (
-            <Button asChild>
-              <Link href="/servers/new">
-                <PlusIcon />
-                {t("nav.newServer")}
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" asChild>
+                <Link href="/servers/new?mode=import">
+                  <DownloadIcon />
+                  {t("import.button")}
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href="/servers/new">
+                  <PlusIcon />
+                  {t("nav.newServer")}
+                </Link>
+              </Button>
+            </div>
           )}
         </div>
 

@@ -255,9 +255,9 @@ NATS เป็นแค่ job transport ไม่เกี่ยวกับ au
 (ไฟล์ต้นทาง + detection), `use-create-server` (ลำดับการสร้างทั้งหมด) — `page.tsx` เหลือแค่ประกอบร่าง
 + ถือ draft state. เพิ่ม step ใหม่ = เพิ่มไฟล์ `step-*.tsx` + แถวใน `WIZARD_STEPS`:
 4 step — general / properties / access / players — สาม step แรกเป็น **draft ในหน้าเว็บล้วน ยังไม่ยิง API
-สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step 2–3 ข้ามได้ (step 1 บังคับกรอกให้ครบ + โหมด import
-ต้องเลือกไฟล์), มี node เดียวเลือกให้อัตโนมัติ. ปุ่ม create อยู่ที่ step สุดท้ายที่เดียว แล้วรันตามลำดับ:
-POST `/api/servers` (หรือ `/import`) → POST permission ตาม access draft → รอ job provisioning จบ →
+สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step 2–3 ข้ามได้ (step 1 บังคับกรอกให้ครบ),
+มี node เดียวเลือกให้อัตโนมัติ. ปุ่ม create อยู่ที่ step สุดท้ายที่เดียว แล้วรันตามลำดับ:
+POST `/api/servers` → POST permission ตาม access draft → รอ job provisioning จบ →
 PUT `/properties` **เฉพาะ key ที่ต่างจาก default** (ไฟล์ยังไม่มีตอนนั้น merge จะ append ให้ ที่เหลือ MC
 เขียนเองตอน start แรก) → `POST /players` ทีละชื่อ → `setDashboardServerId` + ไป `/dashboard`.
 ขั้นหลัง create ล้ม = toast บอกเป็นรายการแล้วไปต่อ (server ถูกสร้างแล้ว ห้าม rollback เงียบ ๆ) —
@@ -265,6 +265,18 @@ PUT `/properties` **เฉพาะ key ที่ต่างจาก default**
 (catalog + default ที่ไม่ผูก server) ส่วน access/players ใช้โหมด draft ของ `ServerAccess`
 (`draft`/`onDraftChange` — เลือก user จาก directory เท่านั้น) กับ `PlayersDraft` (คนละตัวกับ
 `ServerPlayers` ที่อ่านไฟล์ ops/banned/usercache จริง)
+
+**โหมด import (`/servers/new?mode=import`) ไม่ผ่าน stepper — เป็นฟอร์มหน้าเดียว**
+(`components/server/new-server/import-page.tsx`): ไฟล์ต้นทาง (`use-import-source`) + ฟอร์ม metadata
+ชุดเดียวกับ step 1 (`StepGeneral` ที่รับ `importSource` เฉพาะโหมดนี้ — โหมดสร้างใหม่ไม่ส่งมา) แล้วกด
+`Import server` ยิง `POST /api/servers/import` ทันที → `setDashboardServerId` + ไป `/dashboard`
+(properties/access/players ไปตั้งที่หน้าของ server หลังนำเข้าเสร็จ — เส้นทาง import จึงมีชิ้นส่วนน้อยที่สุด
+เวลาไล่หาสาเหตุที่นำเข้าไม่สำเร็จ). ใช้ `use-create-server` ตัวเดิม (`mode: "import"`, draft ว่างทั้งหมด)
+จึงได้ overlay + progress ของการอัปโหลดเหมือนกัน. toast error ของ import โชว์ข้อความจริงจาก backend
+เป็นบรรทัดรองเสมอ — **อย่าตัดทิ้ง** โค้ดอย่าง `import_failed` พาเหตุผลของ agent มาด้วย.
+ทางเข้า: ปุ่ม `Import server` คู่กับ `New server` ทั้งที่หน้า `/` (server list) และ `/admin/servers`
+(gate ด้วย `servers.create` — คนที่ไม่มี `servers.view_all` เข้า `/admin/servers` ไม่ได้เลย
+ปุ่มที่หน้า `/` จึงเป็นทางเข้าเดียวของคนกลุ่มนั้น **ห้ามเอาออก**)
 
 **ลบ server = soft delete เสมอ** (`servers.deleted_at`, migration `00015_server_soft_delete.sql`):
 `DELETE /api/servers/{id}` (cap `servers.delete`, ต้อง stopped/errored) **ไม่ dispatch job และไม่แตะ

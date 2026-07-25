@@ -41,7 +41,8 @@ const IMPORT_ERROR_KEYS: Record<string, TranslationKey> = {
 export interface CreateServerInput {
   mode: WizardMode;
   meta: ServerMetadata;
-  importSource: ImportSource;
+  // บังคับเมื่อ mode = "import" เท่านั้น
+  importSource?: ImportSource;
   // key ที่ต่างจาก default เท่านั้น — ไฟล์ยังไม่มีตอน apply, merge ฝั่ง backend จะ append ให้
   changedProps: Record<string, string>;
   accessDraft: Permission[];
@@ -107,7 +108,7 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
       );
 
       let created: { server: Server; job: { id: string } };
-      if (mode === "import") {
+      if (mode === "import" && importSource) {
         const { blob, filename } = await importSource.buildArchive();
         const form = new FormData();
         form.set("name", meta.name.trim());
@@ -211,7 +212,11 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
       const key =
         err instanceof ApiError ? IMPORT_ERROR_KEYS[err.code] : undefined;
       if (key) {
-        toast.error(t(key));
+        // ข้อความจริงจาก backend ไว้บรรทัดรอง — โค้ดอย่าง import_failed พาเหตุผลของ agent
+        // มาด้วย (เช่น "node agent rejected archive chunk: ...") ถ้าทิ้งไปจะไล่เหตุไม่ได้เลย
+        toast.error(t(key), {
+          description: err instanceof ApiError ? err.message : undefined,
+        });
       } else if (err instanceof ApiError && err.code === "insufficient_memory") {
         // message มีตัวเลข used/total มาแล้ว — โชว์ตรง ๆ
         toast.error(err.message || t("new.errInsufficientMemory"));
@@ -234,7 +239,7 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
   return {
     run: () => mutation.mutate(),
     // zipping เกิดก่อน request แรก — นับเป็นช่วง busy ด้วย ไม่งั้นจอค้างโดยไม่มี overlay
-    pending: mutation.isPending || importSource.zipping,
+    pending: mutation.isPending || (importSource?.zipping ?? false),
     phaseKey,
     uploadPct,
   };

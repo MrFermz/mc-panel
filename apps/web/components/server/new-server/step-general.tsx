@@ -145,7 +145,8 @@ export function StepGeneral({
 }: {
   mode: WizardMode;
   meta: ServerMetadata;
-  importSource: ImportSource;
+  // มีเฉพาะโหมด import — wizard สร้างใหม่ไม่มีไฟล์ต้นทางให้เลือก
+  importSource?: ImportSource;
 }) {
   const t = useT();
   const { budget } = meta;
@@ -161,7 +162,9 @@ export function StepGeneral({
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
-        {mode === "import" && <ImportSourcePicker source={importSource} />}
+        {mode === "import" && importSource && (
+          <ImportSourcePicker source={importSource} />
+        )}
 
         <div className="grid gap-2">
           <Label htmlFor="wz-name">{t("new.name")}</Label>
