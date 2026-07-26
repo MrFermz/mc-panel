@@ -13,8 +13,36 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/mc-panel/control-plane/internal/games"
 	"github.com/mc-panel/control-plane/internal/store"
 )
+
+// gameOf คืน game definition ของ server ตัวหนึ่ง — handler ระดับ server ทุกเส้นที่ต้องรู้
+// อะไรก็ตามเกี่ยวกับเกม (ไฟล์ config, กติกาผู้เล่น, คำสั่ง console) ต้องผ่านตัวนี้
+//
+// row เก่าที่ยังไม่มีค่า game resolve เป็นเกม default; เจอ id ที่ registry ไม่รู้จัก
+// = deploy ผิด (ถอดเกมออกทั้งที่ยังมี server อยู่) จึงเป็น 500 ไม่ใช่ 400
+func (a *API) gameOf(w http.ResponseWriter, srv *store.Server) (*games.Definition, bool) {
+	def, ok := a.games.Resolve(srv.Game)
+	if !ok {
+		a.log.Error("server references unknown game", "server_id", srv.ID, "game", srv.Game)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+		return nil, false
+	}
+	return def, true
+}
+
+// gameFromQuery อ่าน `?game=` ของ endpoint meta ที่ยังไม่ผูกกับ server ตัวไหน
+// (ว่าง = เกม default) — id ที่ไม่รู้จักเป็น 400 เพราะมาจาก client
+func (a *API) gameFromQuery(w http.ResponseWriter, r *http.Request) (*games.Definition, bool) {
+	id := strings.TrimSpace(r.URL.Query().Get("game"))
+	def, ok := a.games.Resolve(id)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_game", "unknown game: "+id)
+		return nil, false
+	}
+	return def, true
+}
 
 // รูปแบบ error ตาม docs/api.md: {"code": "...", "message": "..."}
 type errorBody struct {
@@ -206,10 +234,12 @@ type serverStatsView struct {
 }
 
 type serverView struct {
-	ID         uuid.UUID        `json:"id"`
-	NodeID     uuid.UUID        `json:"node_id"`
-	OwnerID    *uuid.UUID       `json:"owner_id"`
-	Name       string           `json:"name"`
+	ID      uuid.UUID  `json:"id"`
+	NodeID  uuid.UUID  `json:"node_id"`
+	OwnerID *uuid.UUID `json:"owner_id"`
+	Name    string     `json:"name"`
+	// game = id ของ game definition, server_type = variant ภายในเกมนั้น
+	Game       string           `json:"game"`
 	ServerType string           `json:"server_type"`
 	MCVersion  string           `json:"mc_version"`
 	MemoryMB   int              `json:"memory_mb"`
@@ -228,6 +258,7 @@ func toServerView(s *store.Server, stats *serverStatsView) serverView {
 		NodeID:     s.NodeID,
 		OwnerID:    s.OwnerID,
 		Name:       s.Name,
+		Game:       s.Game,
 		ServerType: s.ServerType,
 		MCVersion:  s.MCVersion,
 		MemoryMB:   s.MemoryMB,

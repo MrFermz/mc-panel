@@ -183,13 +183,18 @@ func (*JobEnvelope_DeleteServer) isJobEnvelope_Payload() {}
 
 func (*JobEnvelope_ImportServer) isJobEnvelope_Payload() {}
 
-// CreateServer = provision: สร้าง directory, โหลด jar จาก official source,
+// CreateServer = provision: สร้าง directory, โหลด artifact จาก official source,
 // เขียน eula.txt / config / launch script — ยังไม่ start
+//
+// game เป็นตัวเลือก game definition ฝั่ง agent (registry เดียวกับ control-plane) ส่วน
+// server_type เป็น variant ภายในเกมนั้น — ว่าง = "minecraft" (job เก่าที่ค้างใน stream
+// ก่อนมี field นี้ต้อง provision ได้เหมือนเดิม)
 type CreateServer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerType    string                 `protobuf:"bytes,1,opt,name=server_type,json=serverType,proto3" json:"server_type,omitempty"`  // vanilla | paper | fabric | forge | velocity
+	ServerType    string                 `protobuf:"bytes,1,opt,name=server_type,json=serverType,proto3" json:"server_type,omitempty"`  // variant ของเกม เช่น vanilla | paper | fabric | forge | velocity
 	McVersion     string                 `protobuf:"bytes,2,opt,name=mc_version,json=mcVersion,proto3" json:"mc_version,omitempty"`     // เช่น "1.21.4" (สำหรับ velocity = velocity version)
 	AcceptEula    bool                   `protobuf:"varint,3,opt,name=accept_eula,json=acceptEula,proto3" json:"accept_eula,omitempty"` // user ต้องติ๊กยอมรับเองตอนสร้าง ระบบห้าม default เป็น true
+	Game          string                 `protobuf:"bytes,4,opt,name=game,proto3" json:"game,omitempty"`                                // game definition id — ว่าง = minecraft
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -245,15 +250,23 @@ func (x *CreateServer) GetAcceptEula() bool {
 	return false
 }
 
+func (x *CreateServer) GetGame() string {
+	if x != nil {
+		return x.Game
+	}
+	return ""
+}
+
 // ImportServer = เหมือน CreateServer แต่ไม่โหลด jar — แตก zip ที่ upload มา (staged ไว้ที่
 // archive_path ใน jail ผ่าน chunked file write) เข้า server dir แล้ว provision (eula/meta/launch) ต่อ
 // ทุก entry ใน zip ต้องผ่าน SafeJoin ก่อนเขียน (กัน zip-slip) + chown 1000:1000
 type ImportServer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerType    string                 `protobuf:"bytes,1,opt,name=server_type,json=serverType,proto3" json:"server_type,omitempty"` // vanilla | paper | fabric | forge | velocity
+	ServerType    string                 `protobuf:"bytes,1,opt,name=server_type,json=serverType,proto3" json:"server_type,omitempty"` // variant ของเกม เช่น vanilla | paper | fabric | forge | velocity
 	McVersion     string                 `protobuf:"bytes,2,opt,name=mc_version,json=mcVersion,proto3" json:"mc_version,omitempty"`
 	AcceptEula    bool                   `protobuf:"varint,3,opt,name=accept_eula,json=acceptEula,proto3" json:"accept_eula,omitempty"`
 	ArchivePath   string                 `protobuf:"bytes,4,opt,name=archive_path,json=archivePath,proto3" json:"archive_path,omitempty"` // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".mcpanel/import.zip"
+	Game          string                 `protobuf:"bytes,5,opt,name=game,proto3" json:"game,omitempty"`                                  // game definition id — ว่าง = minecraft
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -312,6 +325,13 @@ func (x *ImportServer) GetAcceptEula() bool {
 func (x *ImportServer) GetArchivePath() string {
 	if x != nil {
 		return x.ArchivePath
+	}
+	return ""
+}
+
+func (x *ImportServer) GetGame() string {
+	if x != nil {
+		return x.Game
 	}
 	return ""
 }
@@ -587,14 +607,15 @@ const file_mcpanel_job_v1_job_proto_rawDesc = "" +
 	"killServer\x12C\n" +
 	"\rdelete_server\x18\x0e \x01(\v2\x1c.mcpanel.job.v1.DeleteServerH\x00R\fdeleteServer\x12C\n" +
 	"\rimport_server\x18\x0f \x01(\v2\x1c.mcpanel.job.v1.ImportServerH\x00R\fimportServerB\t\n" +
-	"\apayload\"o\n" +
+	"\apayload\"\x83\x01\n" +
 	"\fCreateServer\x12\x1f\n" +
 	"\vserver_type\x18\x01 \x01(\tR\n" +
 	"serverType\x12\x1d\n" +
 	"\n" +
 	"mc_version\x18\x02 \x01(\tR\tmcVersion\x12\x1f\n" +
 	"\vaccept_eula\x18\x03 \x01(\bR\n" +
-	"acceptEula\"\x92\x01\n" +
+	"acceptEula\x12\x12\n" +
+	"\x04game\x18\x04 \x01(\tR\x04game\"\xa6\x01\n" +
 	"\fImportServer\x12\x1f\n" +
 	"\vserver_type\x18\x01 \x01(\tR\n" +
 	"serverType\x12\x1d\n" +
@@ -602,7 +623,8 @@ const file_mcpanel_job_v1_job_proto_rawDesc = "" +
 	"mc_version\x18\x02 \x01(\tR\tmcVersion\x12\x1f\n" +
 	"\vaccept_eula\x18\x03 \x01(\bR\n" +
 	"acceptEula\x12!\n" +
-	"\farchive_path\x18\x04 \x01(\tR\varchivePath\"j\n" +
+	"\farchive_path\x18\x04 \x01(\tR\varchivePath\x12\x12\n" +
+	"\x04game\x18\x05 \x01(\tR\x04game\"j\n" +
 	"\vStartServer\x12\x1b\n" +
 	"\tmemory_mb\x18\x01 \x01(\x05R\bmemoryMb\x12\x1b\n" +
 	"\thost_port\x18\x02 \x01(\x05R\bhostPort\x12!\n" +

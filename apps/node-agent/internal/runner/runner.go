@@ -15,32 +15,17 @@ const (
 	LabelProjectValue   = "mc-panel"
 )
 
-// HeapMB แปลง memory_mb ที่ user จัดสรร (= hard limit ของทั้ง container) เป็น -Xmx ของ JVM
-// JVM กินนอก heap อีกมาก (metaspace, code cache, thread stacks, direct buffers, GC overhead)
-// วัดจริง: Paper 1.21 heap 1G โดน OOM kill ที่ limit 1.25x ตอน world-gen เลยกันไว้ ~1/3
-// (limit ≈ 1.5x heap) แต่ไม่เกิน 2GB เพื่อไม่ให้เครื่องใหญ่เสียเปล่า และไม่เกินครึ่งของ limit
-// เพื่อให้ instance เล็ก (256MB ซึ่งเป็นขั้นต่ำที่ API ยอม) ยังเหลือ heap พอ start ได้
-func HeapMB(memoryMB int) int {
-	reserve := memoryMB / 3
-	if reserve < 256 {
-		reserve = 256
-	}
-	if reserve > 2048 {
-		reserve = 2048
-	}
-	if reserve > memoryMB/2 {
-		reserve = memoryMB / 2
-	}
-	return memoryMB - reserve
-}
-
 // ServerConfig คือค่าที่ใช้ start instance หนึ่งตัว
+//
+// ไม่มี field ที่ผูกกับเกม: runner หา game definition ของ instance เอาจาก .mcpanel/meta.json
+// (ดู DockerRunner.instanceGame) แล้วถาม definition เรื่อง port ใน container / env ของ
+// launch script / คำสั่ง stop
 type ServerConfig struct {
 	ID             string
 	StartupCommand string // ใช้เฉพาะ native mode (docker mode ใช้ CMD ใน image)
-	MemoryMB       int
+	MemoryMB       int    // hard limit ของทั้ง container (definition เป็นคนแปลงเป็น heap)
 	WorkDir        string // เช่น /data/servers/{id}/ — ต้องเป็น dir เดียวกันไม่ว่าจะรัน native หรือ docker
-	Port           int    // host port; 0 = ไม่ expose (เข้าถึงผ่าน velocity ใน network เดียวกัน)
+	Port           int    // host port; 0 = ไม่ expose (เข้าถึงผ่าน proxy ใน network เดียวกัน)
 	Image          string // docker image เช่น mcpanel/mc-runtime:21 — control plane เป็นคน map java version
 }
 

@@ -15,6 +15,7 @@ import {
 import {
   createServerResponseSchema,
   jobResponseSchema,
+  DEFAULT_GAME,
   type Permission,
   type Server,
 } from "@/lib/types";
@@ -113,6 +114,7 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
         const form = new FormData();
         form.set("name", meta.name.trim());
         form.set("node_id", meta.nodeId);
+        form.set("game", DEFAULT_GAME);
         form.set("server_type", meta.serverType);
         form.set("mc_version", meta.mcVersion);
         form.set("memory_mb", String(Number(meta.memoryMb)));
@@ -131,6 +133,7 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
           {
             name: meta.name.trim(),
             node_id: meta.nodeId,
+            game: DEFAULT_GAME,
             server_type: meta.serverType,
             mc_version: meta.mcVersion,
             memory_mb: Number(meta.memoryMb),

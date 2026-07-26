@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/mc-panel/control-plane/internal/console"
 	"github.com/mc-panel/control-plane/internal/events"
+	"github.com/mc-panel/control-plane/internal/games"
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
@@ -31,18 +31,20 @@ type ResultConsumer struct {
 	rings  *console.Registry
 	ws     *console.Hub
 	events *events.Hub
-	log    *slog.Logger
+	// games ใช้ตรวจเวอร์ชันที่ agent detect มา ตามกติกาของเกมนั้น
+	games *games.Registry
+	log   *slog.Logger
 	// disp ใช้ dispatch ขา start ของ restart เมื่อ stop สำเร็จ (set ตอน Start)
 	disp *Dispatcher
 }
 
-func NewResultConsumer(st *store.Store, rings *console.Registry, ws *console.Hub, ev *events.Hub, log *slog.Logger) *ResultConsumer {
-	return &ResultConsumer{st: st, rings: rings, ws: ws, events: ev, log: log}
+func NewResultConsumer(st *store.Store, rings *console.Registry, ws *console.Hub, ev *events.Hub, gr *games.Registry, log *slog.Logger) *ResultConsumer {
+	return &ResultConsumer{st: st, rings: rings, ws: ws, events: ev, games: gr, log: log}
 }
 
 func (rc *ResultConsumer) Start(ctx context.Context, js jetstream.JetStream) (jetstream.ConsumeContext, error) {
 	// dispatcher แยกอินสแตนซ์ (stateless) สำหรับ chain start ของ restart
-	rc.disp = NewDispatcher(rc.st, js, rc.events, rc.log)
+	rc.disp = NewDispatcher(rc.st, js, rc.events, rc.games, rc.log)
 
 	cons, err := EnsureResultsConsumer(ctx, js)
 	if err != nil {
@@ -296,13 +298,9 @@ func reapPlan(job *store.Job) store.TransitionPlan {
 	return store.TransitionPlan{}
 }
 
-// mcVersionRe กัน garbage/injection ก่อนเขียน mc_version — เผื่อ release (1.20.1),
-// snapshot (23w13a), pre/rc (1.20-pre1) แต่ปฏิเสธค่าเพี้ยนยาว ๆ / มีอักขระแปลก
-var mcVersionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z._-]{0,31}$`)
-
 // applyDetectedMCVersion อ่านเวอร์ชันที่ agent detect (JobResult.Detail เป็น JSON
 // {"mc_version":"..."}) แล้ว update mc_version ของ server — ทำเฉพาะ import_server
-// สำเร็จ. detail ว่าง/parse ไม่ได้/เวอร์ชันไม่ผ่าน regex → ข้ามเงียบ ๆ
+// สำเร็จ. detail ว่าง/parse ไม่ได้/เวอร์ชันไม่ผ่านกติกาของเกม → ข้ามเงียบ ๆ
 func (rc *ResultConsumer) applyDetectedMCVersion(ctx context.Context, serverID uuid.UUID, detail string) {
 	if detail == "" {
 		return
@@ -313,7 +311,17 @@ func (rc *ResultConsumer) applyDetectedMCVersion(ctx context.Context, serverID u
 	if err := json.Unmarshal([]byte(detail), &d); err != nil {
 		return
 	}
-	if d.MCVersion == "" || !mcVersionRe.MatchString(d.MCVersion) {
+	if d.MCVersion == "" {
+		return
+	}
+	// เวอร์ชันนี้ถูกเขียนทับของเดิมโดยไม่มีคนยืนยัน — ต้องผ่านกติกาของเกมนั้นก่อนเสมอ
+	srv, err := rc.st.GetServerByIDAny(ctx, serverID)
+	if err != nil {
+		rc.log.Warn("load server for detected version failed", "server_id", serverID, "error", err)
+		return
+	}
+	def, ok := rc.games.Resolve(srv.Game)
+	if !ok || def.Version.ValidDetected == nil || !def.Version.ValidDetected(d.MCVersion) {
 		return
 	}
 	if err := rc.st.UpdateServerMCVersion(ctx, serverID, d.MCVersion); err != nil {

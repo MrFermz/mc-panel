@@ -31,12 +31,14 @@ import (
 	"github.com/mc-panel/control-plane/internal/config"
 	"github.com/mc-panel/control-plane/internal/console"
 	"github.com/mc-panel/control-plane/internal/events"
+	"github.com/mc-panel/control-plane/internal/games"
+	"github.com/mc-panel/control-plane/internal/games/minecraft"
 	"github.com/mc-panel/control-plane/internal/httpapi"
 	"github.com/mc-panel/control-plane/internal/jobs"
+	"github.com/mc-panel/control-plane/internal/playerface"
 	"github.com/mc-panel/control-plane/internal/seed"
 	"github.com/mc-panel/control-plane/internal/serverstats"
 	"github.com/mc-panel/control-plane/internal/store"
-	"github.com/mc-panel/control-plane/internal/versions"
 	"github.com/mc-panel/control-plane/migrations"
 )
 
@@ -224,10 +226,14 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	eventsHub := events.NewHub()
 	am := auth.NewManager(st, rdb, cfg.JWTSecret, cfg.CookieSecure, log)
 	hub := agenthub.NewHub(st, rings, wsHub, statsCache, eventsHub, log)
-	disp := jobs.NewDispatcher(st, js, eventsHub, log)
-	vs := versions.New()
+	// registry ของ game definition — เกมที่ instance นี้รองรับ ลงทะเบียนที่นี่ที่เดียว
+	// (เฟสนี้มี minecraft เกมเดียว) ทุก layer ที่ต้องรู้เรื่องเกมรับ registry ตัวนี้ไป
+	gameRegistry := games.NewRegistry(
+		minecraft.New(minecraft.Deps{Faces: playerface.NewCache(st)}),
+	)
+	disp := jobs.NewDispatcher(st, js, eventsHub, gameRegistry, log)
 
-	resultConsumer := jobs.NewResultConsumer(st, rings, wsHub, eventsHub, log)
+	resultConsumer := jobs.NewResultConsumer(st, rings, wsHub, eventsHub, gameRegistry, log)
 	consumeCtx, err := resultConsumer.Start(ctx, js)
 	if err != nil {
 		return fmt.Errorf("start result consumer: %w", err)
@@ -253,7 +259,7 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	}
 	// httpapi.clientIP อ่านค่านี้ — set ครั้งเดียวก่อน server รับ request (ไม่มี race)
 	httpapi.SetTrustedProxyCount(cfg.TrustedProxyCount)
-	api := httpapi.New(st, am, disp, vs, rings, statsCache, hub, eventsHub, js, log)
+	api := httpapi.New(st, am, disp, gameRegistry, rings, statsCache, hub, eventsHub, js, log)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

@@ -107,7 +107,8 @@ func report(ctx context.Context, cli *client.Client, statter Statter, sender Sen
 			StartedAtUnix: c.Created,
 			OnlinePlayers: snap.Online,
 			MaxPlayers:    int32(snap.MaxPlayers),
-			Tps:           snap.TPS,
+			// field `tps` ใน proto = metric ประจำเกมที่อ่านจาก console (minecraft = TPS)
+			Tps: snap.Metric,
 		}); err != nil {
 			// stream หลุด — ข้ามทั้งรอบ รอบถัดไปมาใหม่
 			return

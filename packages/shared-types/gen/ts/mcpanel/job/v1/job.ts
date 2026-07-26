@@ -76,8 +76,12 @@ export interface JobEnvelope {
     };
 }
 /**
- * CreateServer = provision: สร้าง directory, โหลด jar จาก official source,
+ * CreateServer = provision: สร้าง directory, โหลด artifact จาก official source,
  * เขียน eula.txt / config / launch script — ยังไม่ start
+ *
+ * game เป็นตัวเลือก game definition ฝั่ง agent (registry เดียวกับ control-plane) ส่วน
+ * server_type เป็น variant ภายในเกมนั้น — ว่าง = "minecraft" (job เก่าที่ค้างใน stream
+ * ก่อนมี field นี้ต้อง provision ได้เหมือนเดิม)
  *
  * @generated from protobuf message mcpanel.job.v1.CreateServer
  */
@@ -85,7 +89,7 @@ export interface CreateServer {
     /**
      * @generated from protobuf field: string server_type = 1
      */
-    serverType: string; // vanilla | paper | fabric | forge | velocity
+    serverType: string; // variant ของเกม เช่น vanilla | paper | fabric | forge | velocity
     /**
      * @generated from protobuf field: string mc_version = 2
      */
@@ -94,6 +98,10 @@ export interface CreateServer {
      * @generated from protobuf field: bool accept_eula = 3
      */
     acceptEula: boolean; // user ต้องติ๊กยอมรับเองตอนสร้าง ระบบห้าม default เป็น true
+    /**
+     * @generated from protobuf field: string game = 4
+     */
+    game: string; // game definition id — ว่าง = minecraft
 }
 /**
  * ImportServer = เหมือน CreateServer แต่ไม่โหลด jar — แตก zip ที่ upload มา (staged ไว้ที่
@@ -106,7 +114,7 @@ export interface ImportServer {
     /**
      * @generated from protobuf field: string server_type = 1
      */
-    serverType: string; // vanilla | paper | fabric | forge | velocity
+    serverType: string; // variant ของเกม เช่น vanilla | paper | fabric | forge | velocity
     /**
      * @generated from protobuf field: string mc_version = 2
      */
@@ -119,6 +127,10 @@ export interface ImportServer {
      * @generated from protobuf field: string archive_path = 4
      */
     archivePath: string; // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".mcpanel/import.zip"
+    /**
+     * @generated from protobuf field: string game = 5
+     */
+    game: string; // game definition id — ว่าง = minecraft
 }
 /**
  * @generated from protobuf message mcpanel.job.v1.StartServer
@@ -306,7 +318,8 @@ class CreateServer$Type extends MessageType<CreateServer> {
         super("mcpanel.job.v1.CreateServer", [
             { no: 1, name: "server_type", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "mc_version", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "accept_eula", kind: "scalar", T: 8 /*ScalarType.BOOL*/ }
+            { no: 3, name: "accept_eula", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 4, name: "game", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<CreateServer>): CreateServer {
@@ -314,6 +327,7 @@ class CreateServer$Type extends MessageType<CreateServer> {
         message.serverType = "";
         message.mcVersion = "";
         message.acceptEula = false;
+        message.game = "";
         if (value !== undefined)
             reflectionMergePartial<CreateServer>(this, message, value);
         return message;
@@ -331,6 +345,9 @@ class CreateServer$Type extends MessageType<CreateServer> {
                     break;
                 case /* bool accept_eula */ 3:
                     message.acceptEula = reader.bool();
+                    break;
+                case /* string game */ 4:
+                    message.game = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -353,6 +370,9 @@ class CreateServer$Type extends MessageType<CreateServer> {
         /* bool accept_eula = 3; */
         if (message.acceptEula !== false)
             writer.tag(3, WireType.Varint).bool(message.acceptEula);
+        /* string game = 4; */
+        if (message.game !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.game);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -370,7 +390,8 @@ class ImportServer$Type extends MessageType<ImportServer> {
             { no: 1, name: "server_type", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "mc_version", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 3, name: "accept_eula", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
-            { no: 4, name: "archive_path", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 4, name: "archive_path", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "game", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<ImportServer>): ImportServer {
@@ -379,6 +400,7 @@ class ImportServer$Type extends MessageType<ImportServer> {
         message.mcVersion = "";
         message.acceptEula = false;
         message.archivePath = "";
+        message.game = "";
         if (value !== undefined)
             reflectionMergePartial<ImportServer>(this, message, value);
         return message;
@@ -399,6 +421,9 @@ class ImportServer$Type extends MessageType<ImportServer> {
                     break;
                 case /* string archive_path */ 4:
                     message.archivePath = reader.string();
+                    break;
+                case /* string game */ 5:
+                    message.game = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -424,6 +449,9 @@ class ImportServer$Type extends MessageType<ImportServer> {
         /* string archive_path = 4; */
         if (message.archivePath !== "")
             writer.tag(4, WireType.LengthDelimited).string(message.archivePath);
+        /* string game = 5; */
+        if (message.game !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.game);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

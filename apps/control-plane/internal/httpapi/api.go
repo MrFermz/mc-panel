@@ -13,40 +13,39 @@ import (
 	"github.com/mc-panel/control-plane/internal/auth"
 	"github.com/mc-panel/control-plane/internal/console"
 	"github.com/mc-panel/control-plane/internal/events"
+	"github.com/mc-panel/control-plane/internal/games"
 	"github.com/mc-panel/control-plane/internal/jobs"
-	"github.com/mc-panel/control-plane/internal/playerface"
 	"github.com/mc-panel/control-plane/internal/serverstats"
 	"github.com/mc-panel/control-plane/internal/store"
-	"github.com/mc-panel/control-plane/internal/versions"
 )
 
 type API struct {
-	st       *store.Store
-	auth     *auth.Manager
-	disp     *jobs.Dispatcher
-	versions *versions.Service
-	rings    *console.Registry
-	stats    *serverstats.Cache
-	hub      *agenthub.Hub
-	events   *events.Hub
-	js       jetstream.JetStream
-	faces    *playerface.Cache
-	log      *slog.Logger
+	st   *store.Store
+	auth *auth.Manager
+	disp *jobs.Dispatcher
+	// games = registry ของ game definition — ความรู้เฉพาะเกมทุกอย่างที่ handler ต้องใช้
+	// มาจากที่นี่ที่เดียว (ห้าม hardcode ชื่อ variant/ไฟล์/คำสั่งของเกมใน handler)
+	games  *games.Registry
+	rings  *console.Registry
+	stats  *serverstats.Cache
+	hub    *agenthub.Hub
+	events *events.Hub
+	js     jetstream.JetStream
+	log    *slog.Logger
 }
 
-func New(st *store.Store, am *auth.Manager, disp *jobs.Dispatcher, vs *versions.Service, rings *console.Registry, stats *serverstats.Cache, hub *agenthub.Hub, ev *events.Hub, js jetstream.JetStream, log *slog.Logger) *API {
+func New(st *store.Store, am *auth.Manager, disp *jobs.Dispatcher, gr *games.Registry, rings *console.Registry, stats *serverstats.Cache, hub *agenthub.Hub, ev *events.Hub, js jetstream.JetStream, log *slog.Logger) *API {
 	return &API{
-		st:       st,
-		auth:     am,
-		disp:     disp,
-		versions: vs,
-		rings:    rings,
-		stats:    stats,
-		hub:      hub,
-		events:   ev,
-		js:       js,
-		faces:    playerface.NewCache(st),
-		log:      log,
+		st:     st,
+		auth:   am,
+		disp:   disp,
+		games:  gr,
+		rings:  rings,
+		stats:  stats,
+		hub:    hub,
+		events: ev,
+		js:     js,
+		log:    log,
 	}
 }
 
@@ -155,6 +154,7 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 
 			pr.Get("/jobs/{id}", a.handleGetJob)
 
+			pr.Get("/meta/games", a.handleGames)
 			pr.Get("/meta/server-types", a.handleServerTypes)
 			pr.Get("/meta/versions", a.handleVersions)
 			pr.Get("/meta/nodes", a.handleMetaNodes)

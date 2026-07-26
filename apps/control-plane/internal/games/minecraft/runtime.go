@@ -1,4 +1,4 @@
-package jobs
+package minecraft
 
 import (
 	"strconv"
@@ -12,7 +12,7 @@ const runtimeImagePrefix = "mcpanel/mc-runtime"
 // ดังนั้น jar ที่ target Java เก่ากว่ารันบน JVM ใหม่นี้ได้ปกติ (ปลอดภัยเป็น default)
 const latestJavaTag = "25"
 
-// DockerImage เลือก Java runtime image ตามชนิดและเวอร์ชันของ server:
+// RuntimeImage เลือก Java runtime image ตามชนิดและเวอร์ชันของ server:
 //
 //	velocity            -> :25 (velocity รองรับ Java ใหม่เสมอ)
 //	MC calendar (26.x…) -> :25 (รุ่นใหม่ตั้งแต่ 2025 ต้องการ Java 25)
@@ -21,8 +21,10 @@ const latestJavaTag = "25"
 //	MC เก่ากว่า 1.17     -> :8 (รุ่นเก่าพังบน Java ใหม่ ต้องใช้ Java เดิม)
 //
 // เวอร์ชันที่ parse ไม่ได้ (snapshot ฯลฯ) fallback :25 (ใหม่สุด = ปลอดภัยกับ jar ใหม่)
-func DockerImage(serverType, mcVersion string) string {
-	if serverType == "velocity" {
+//
+// logic ชุดนี้ต้องตรงกับฝั่ง agent ที่เลือก image ให้ forge installer (games/minecraft ของ node-agent)
+func RuntimeImage(variant, mcVersion string) string {
+	if variant == "velocity" {
 		return runtimeImagePrefix + ":" + latestJavaTag
 	}
 

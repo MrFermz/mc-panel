@@ -27,12 +27,14 @@ func (h *Handler) Process(ctx context.Context, env *jobv1.JobEnvelope) (detail s
 	switch p := env.Payload.(type) {
 	case *jobv1.JobEnvelope_CreateServer:
 		return h.prov.CreateServer(ctx, env.ServerId, provision.Spec{
+			Game:       p.CreateServer.Game,
 			ServerType: p.CreateServer.ServerType,
 			MCVersion:  p.CreateServer.McVersion,
 			AcceptEULA: p.CreateServer.AcceptEula,
 		})
 	case *jobv1.JobEnvelope_ImportServer:
 		detectedVersion, ierr := h.prov.ImportServer(ctx, env.ServerId, provision.ImportSpec{
+			Game:        p.ImportServer.Game,
 			ServerType:  p.ImportServer.ServerType,
 			MCVersion:   p.ImportServer.McVersion,
 			AcceptEULA:  p.ImportServer.AcceptEula,

@@ -1,11 +1,11 @@
-package provision
+package minecraft
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestJavaTagForMC(t *testing.T) {
+func TestJavaTagFor(t *testing.T) {
 	cases := []struct {
 		version string
 		want    string
@@ -26,24 +26,28 @@ func TestJavaTagForMC(t *testing.T) {
 		{"weird", "25"},
 	}
 	for _, c := range cases {
-		if got := javaTagForMC(c.version); got != c.want {
-			t.Errorf("javaTagForMC(%q) = %q, want %q", c.version, got, c.want)
+		if got := javaTagFor("vanilla", c.version); got != c.want {
+			t.Errorf("javaTagFor(%q) = %q, want %q", c.version, got, c.want)
 		}
+	}
+	// velocity ไม่ผูกกับเวอร์ชัน MC — ใช้ Java ใหม่สุดเสมอ (ตรงกับ control-plane)
+	if got := javaTagFor("velocity", "3.4.0"); got != latestJavaTag {
+		t.Errorf("javaTagFor(velocity) = %q, want %q", got, latestJavaTag)
 	}
 }
 
 func TestLaunchScript_ExecsJavaLast(t *testing.T) {
 	// java ต้องถูก exec เป็นคำสั่งสุดท้ายเสมอเพื่อเป็น PID 1 (รับ stdin/SIGTERM ตรง)
-	for _, serverType := range []string{"vanilla", "paper", "fabric", "velocity", "forge"} {
-		script := launchScript(serverType)
+	for _, variant := range []string{"vanilla", "paper", "fabric", "velocity", "forge"} {
+		script := launchScript(variant)
 		if !strings.HasPrefix(script, "#!/bin/sh\n") {
-			t.Errorf("%s: launch script must start with a shebang", serverType)
+			t.Errorf("%s: launch script must start with a shebang", variant)
 		}
 		if !strings.Contains(script, "exec ") {
-			t.Errorf("%s: launch script must contain exec", serverType)
+			t.Errorf("%s: launch script must contain exec", variant)
 		}
 		if !strings.Contains(script, "${MC_MEMORY_MB") {
-			t.Errorf("%s: launch script must read MC_MEMORY_MB from env", serverType)
+			t.Errorf("%s: launch script must read MC_MEMORY_MB from env", variant)
 		}
 	}
 

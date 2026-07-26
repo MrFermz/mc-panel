@@ -20,10 +20,11 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+
+	"github.com/mc-panel/node-agent/internal/games"
 )
 
 const (
-	mcPort = "25565/tcp"
 	// grace period ตอน stop: รอ save world หลัง stop word ก่อน fallback SIGTERM
 	gracefulWait = 30 * time.Second
 	sigtermWait  = 10 // วินาที — ให้ docker ส่ง SIGKILL ต่อเองถ้า SIGTERM ไม่พอ
@@ -36,17 +37,21 @@ type DockerRunner struct {
 	cli     *client.Client
 	dataDir string
 	network string
+	// games = ตัวหา game definition ของแต่ละ instance — runner ไม่รู้จักเกมใด ๆ เอง
+	// (container port, env ของ launch script, คำสั่ง stop มาจาก definition ของ instance นั้น)
+	games games.InstanceLookup
 
 	mu sync.Mutex
 	// จำว่า server ไหนถูก "สั่ง" stop/kill — ใช้แยก STOPPED กับ ERRORED ตอน die event
 	stopRequested map[string]struct{}
 }
 
-func NewDockerRunner(cli *client.Client, dataDir, network string) *DockerRunner {
+func NewDockerRunner(cli *client.Client, dataDir, network string, gl games.InstanceLookup) *DockerRunner {
 	return &DockerRunner{
 		cli:           cli,
 		dataDir:       dataDir,
 		network:       network,
+		games:         gl,
 		stopRequested: make(map[string]struct{}),
 	}
 }
@@ -72,6 +77,12 @@ func (r *DockerRunner) ConsumeStopRequested(id string) bool {
 func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 	name := containerName(cfg.ID)
 
+	// instance บน disk บอกเองว่าเป็นเกมอะไร (.mcpanel/meta.json) — job start ไม่ได้พกมา
+	def, _, ok := r.games.DefinitionFor(cfg.ID)
+	if !ok {
+		return fmt.Errorf("server %s references a game this agent does not support", cfg.ID)
+	}
+
 	if insp, err := r.cli.ContainerInspect(ctx, name); err == nil {
 		if insp.State != nil && insp.State.Running {
 			// โดน redeliver ซ้ำหรือ user กด start ซ้อน — ถือว่าสำเร็จแล้ว
@@ -90,23 +101,23 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		return fmt.Errorf("server directory %s not found (server not provisioned?): %w", cfg.WorkDir, err)
 	}
 
-	if err := EnsureRuntimeImage(ctx, r.cli, cfg.Image); err != nil {
+	if err := games.EnsureRuntimeImage(ctx, r.cli, cfg.Image); err != nil {
 		return err
 	}
 
 	pidsLimit := int64(512)
 	memoryBytes := int64(cfg.MemoryMB) * 1024 * 1024
-	heapMB := HeapMB(cfg.MemoryMB)
+	// HOME=/mc: image hardened ของเราตั้ง HOME ให้แล้ว แต่ base eclipse-temurin ที่ pull มา cache
+	// ไม่ได้ตั้ง — modded server บางตัวเขียน cache ลง $HOME ต้องชี้เข้า /mc ที่ write ได้
+	env := append(def.LaunchEnv(cfg.MemoryMB), "HOME=/mc")
 
 	config := &container.Config{
 		Image: cfg.Image,
 		// สั่ง launch.sh ตรง ๆ ไม่พึ่ง CMD ของ image — runtime image ที่ agent auto-pull
 		// (eclipse-temurin re-tag) ไม่มี CMD ของเรา entrypoint เลย exec ว่างแล้ว exit 0 ทันที
 		// (เฉพาะ image ที่ build ด้วย make runtime-images ถึงจะมี CMD launch.sh) ตั้งตรงนี้ครอบทั้งสองแบบ
-		Cmd: []string{"/bin/sh", "/mc/.mcpanel/launch.sh"},
-		// HOME=/mc: image hardened ของเราตั้ง HOME ให้แล้ว แต่ base eclipse-temurin ที่ pull มา cache
-		// ไม่ได้ตั้ง — modded server บางตัวเขียน cache ลง $HOME ต้องชี้เข้า /mc ที่ write ได้
-		Env:        []string{fmt.Sprintf("MC_MEMORY_MB=%d", heapMB), "HOME=/mc"},
+		Cmd:        []string{"/bin/sh", "/mc/" + games.PanelDir + "/" + games.LaunchScriptName},
+		Env:        env,
 		User:       "1000:1000",
 		WorkingDir: "/mc",
 		OpenStdin:  true,
@@ -131,9 +142,11 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		},
 	}
 	if cfg.Port > 0 {
-		config.ExposedPorts = nat.PortSet{mcPort: struct{}{}}
+		// port ที่ server ฟังใน container มาจาก game definition (minecraft = 25565)
+		gamePort := nat.Port(strconv.Itoa(def.ContainerPort) + "/tcp")
+		config.ExposedPorts = nat.PortSet{gamePort: struct{}{}}
 		hostConfig.PortBindings = nat.PortMap{
-			mcPort: []nat.PortBinding{{HostPort: strconv.Itoa(cfg.Port)}},
+			gamePort: []nat.PortBinding{{HostPort: strconv.Itoa(cfg.Port)}},
 		}
 	}
 	netConfig := &network.NetworkingConfig{
@@ -157,7 +170,8 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		}
 		return classifyStartError(err, cfg.Port)
 	}
-	log.Printf("container started: server=%s image=%s memory_mb=%d heap_mb=%d host_port=%d", cfg.ID, cfg.Image, cfg.MemoryMB, heapMB, cfg.Port)
+	log.Printf("container started: server=%s game=%s image=%s memory_mb=%d host_port=%d",
+		cfg.ID, def.ID, cfg.Image, cfg.MemoryMB, cfg.Port)
 	return nil
 }
 
@@ -309,20 +323,21 @@ func (r *DockerRunner) Stats(id string) (ResourceStats, error) {
 	return stats, nil
 }
 
-// stopCommand อ่าน stop word จาก meta.json ที่ provision เขียนไว้
-// ("end" สำหรับ velocity, "stop" สำหรับที่เหลือ) — อ่านไม่ได้ให้ใช้ "stop"
+// stopCommand คืนคำที่เขียนเข้า stdin เพื่อสั่งปิดอย่างสุภาพ — เชื่อ meta.json ที่ provision
+// เขียนไว้ก่อน (instance เก่าที่ยังไม่มี field `game` ก็ยังหยุดถูก) แล้ว fallback ไป definition
+// อ่านอะไรไม่ได้เลย = เกม default + variant ว่าง ซึ่งให้คำสั่งมาตรฐานของเกมนั้น
 func (r *DockerRunner) stopCommand(id string) string {
-	b, err := os.ReadFile(filepath.Join(r.dataDir, id, ".mcpanel", "meta.json"))
-	if err != nil {
-		return "stop"
+	def, meta, ok := r.games.DefinitionFor(id)
+	if meta.StopCommand != "" {
+		return meta.StopCommand
 	}
-	var meta struct {
-		StopCommand string `json:"stop_command"`
+	if !ok {
+		def = r.games.Registry.Default()
 	}
-	if json.Unmarshal(b, &meta) != nil || meta.StopCommand == "" {
-		return "stop"
+	if def == nil {
+		return ""
 	}
-	return meta.StopCommand
+	return def.StopCommand(meta.ServerType)
 }
 
 // writeStdin เปิด attach ชั่วคราวเฉพาะ stdin เพื่อส่งคำสั่งเดียว

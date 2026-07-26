@@ -3,13 +3,27 @@ package mcstate
 import (
 	"testing"
 	"time"
+
+	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/mc-panel/node-agent/internal/games/minecraft"
 )
+
+// mcLookup = GameLookup ปลอมที่คืน console spec ของ minecraft ให้ทุก server
+// (เทสต์ที่นี่ตรวจเครื่องจักรของ tracker บน parser จริงของเกม ไม่ใช่ parser ปลอม)
+type mcLookup struct{}
+
+func (mcLookup) ConsoleSpecFor(string) (games.ConsoleSpec, bool) {
+	return minecraft.New().Console, true
+}
+
+func newTracker() *Tracker { return NewTracker(mcLookup{}) }
 
 // newAttached สร้าง tracker ที่ "attach" server ไว้แล้วโดยไม่เริ่ม poll loop
 // (poll ยิงคำสั่งจริงผ่าน writer — เทสต์สนใจแค่การอ่านบรรทัด)
 func newAttached(id string) (*Tracker, *serverState) {
-	t := NewTracker()
-	st := &serverState{online: make(map[string]struct{}), stop: make(chan struct{})}
+	t := newTracker()
+	spec, _ := t.games.ConsoleSpecFor(id)
+	st := &serverState{console: spec, online: make(map[string]struct{}), stop: make(chan struct{})}
 	t.servers[id] = st
 	return t, st
 }
@@ -99,17 +113,17 @@ func TestListReplyReplacesOnlineSet(t *testing.T) {
 
 func TestObserveLineTPSPaper(t *testing.T) {
 	tr, st := newAttached("s1")
-	st.tpsSentAt = time.Now()
+	st.metricSentAt = time.Now()
 
 	// paper แทรก color code — ต้องถูกตัดก่อน parse
 	shown := tr.ObserveLine("s1", "[12:34:56 INFO]: §6TPS from last 1m, 5m, 15m: §a19.98, §a20.0, §a20.0")
 	if shown {
 		t.Error("reply to a tracker-issued command must be hidden from the user's console")
 	}
-	if tps := tr.Snapshot("s1").TPS; tps != 19.98 {
+	if tps := tr.Snapshot("s1").Metric; tps != 19.98 {
 		t.Fatalf("want tps 19.98, got %v", tps)
 	}
-	if st.tpsUnsupported {
+	if st.metricUnsupported {
 		t.Error("paper supports tps — should not be marked unsupported")
 	}
 }
@@ -117,16 +131,16 @@ func TestObserveLineTPSPaper(t *testing.T) {
 // vanilla ไม่มีคำสั่ง tps — probe ครั้งเดียวแล้วต้องเลิกถามถาวร
 func TestUnknownCommandMarksTPSUnsupported(t *testing.T) {
 	tr, st := newAttached("s1")
-	st.tpsSentAt = time.Now()
+	st.metricSentAt = time.Now()
 
 	shown := tr.ObserveLine("s1", "[12:34:56] [Server thread/INFO]: Unknown or incomplete command, see below for error")
 	if shown {
 		t.Error("probe error must not appear in the user's console")
 	}
-	if !st.tpsUnsupported {
-		t.Fatal("want tpsUnsupported after unknown command")
+	if !st.metricUnsupported {
+		t.Fatal("want metricUnsupported after unknown command")
 	}
-	if tps := tr.Snapshot("s1").TPS; tps != 0 {
+	if tps := tr.Snapshot("s1").Metric; tps != 0 {
 		t.Fatalf("want tps 0 for unsupported, got %v", tps)
 	}
 }
@@ -134,7 +148,7 @@ func TestUnknownCommandMarksTPSUnsupported(t *testing.T) {
 // user พิมพ์ `list` เองต้องเห็น reply ตามปกติ (นอกหน้าต่างของคำสั่งที่ tracker ยิง)
 func TestUserTypedListReplyStaysVisible(t *testing.T) {
 	tr, st := newAttached("s1")
-	st.listSentAt = time.Now().Add(-time.Minute)
+	st.rosterSentAt = time.Now().Add(-time.Minute)
 
 	shown := tr.ObserveLine("s1", "[12:34:56] [Server thread/INFO]: There are 1 of a max of 20 players online: CreeperKing")
 	if !shown {
@@ -143,8 +157,8 @@ func TestUserTypedListReplyStaysVisible(t *testing.T) {
 }
 
 func TestSnapshotUnknownServer(t *testing.T) {
-	tr := NewTracker()
-	if snap := tr.Snapshot("nope"); len(snap.Online) != 0 || snap.TPS != 0 || snap.MaxPlayers != 0 {
+	tr := newTracker()
+	if snap := tr.Snapshot("nope"); len(snap.Online) != 0 || snap.Metric != 0 || snap.MaxPlayers != 0 {
 		t.Fatalf("want zero snapshot, got %+v", snap)
 	}
 }
@@ -160,25 +174,12 @@ func TestOnDetachClearsState(t *testing.T) {
 	}
 }
 
-func TestMessageOf(t *testing.T) {
-	cases := map[string]string{
-		"[12:34:56] [Server thread/INFO]: hello": "hello",
-		"[12:34:56 INFO]: hello":                 "hello",
-		"no prefix at all":                       "no prefix at all",
-	}
-	for in, want := range cases {
-		if got := messageOf(in); got != want {
-			t.Errorf("messageOf(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // regression: console.Manager ต้องเรียก OnAttach ก่อนสตาร์ท pump เสมอ
 // ถ้า container ตายทันที (attach ผ่านแต่ EOF เลย) ลำดับกลับด้านจะทำให้ OnDetach
 // วิ่งตอน tracker ยังไม่รู้จัก server → state ที่ OnAttach สร้างทีหลังไม่มีใครล้าง
 // (poll loop ค้างถาวร + รายชื่อผู้เล่นค้างของ session ที่ตายไปแล้ว)
 func TestAttachThenImmediateDetachLeavesNoState(t *testing.T) {
-	tr := NewTracker()
+	tr := newTracker()
 
 	tr.OnAttach("s1")
 	tr.ObserveLine("s1", "[12:00:00] [Server thread/INFO]: CreeperKing joined the game")
@@ -201,16 +202,16 @@ func TestAttachThenImmediateDetachLeavesNoState(t *testing.T) {
 // ในช่วง reply window ของ probe — ไม่งั้น TPS หายไปทั้ง session
 func TestUserTypoDoesNotDisableTPSOnPaper(t *testing.T) {
 	tr, st := newAttached("s1")
-	st.tpsSentAt = time.Now()
+	st.metricSentAt = time.Now()
 	tr.ObserveLine("s1", "[12:00:00 INFO]: TPS from last 1m, 5m, 15m: 19.98, 20.0, 20.0")
 
-	st.tpsSentAt = time.Now()
+	st.metricSentAt = time.Now()
 	tr.ObserveLine("s1", "[12:00:01] [Server thread/INFO]: Unknown or incomplete command, see below for error")
 
-	if st.tpsUnsupported {
+	if st.metricUnsupported {
 		t.Fatal("a server that previously reported TPS should not be marked unsupported")
 	}
-	if tps := tr.Snapshot("s1").TPS; tps != 19.98 {
+	if tps := tr.Snapshot("s1").Metric; tps != 19.98 {
 		t.Fatalf("want tps 19.98, got %v", tps)
 	}
 }

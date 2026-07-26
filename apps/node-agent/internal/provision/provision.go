@@ -1,5 +1,8 @@
-// Package provision สร้าง directory + ดาวน์โหลด server jar จาก official source
-// + เขียน config/launch script ของ instance ใหม่ (ยังไม่ start)
+// Package provision สร้าง directory ของ instance ใหม่ แล้วให้ game definition เป็นคน
+// โหลด artifact จาก official source + บอกว่าไฟล์ config/launch script ต้องเป็นอะไร
+//
+// package นี้ไม่รู้จักเกมใด ๆ: มันคุมเรื่อง filesystem (jail, chown, แตก zip อย่างปลอดภัย,
+// เขียน .mcpanel/) ส่วน "โหลดอะไรจากไหน / รันยังไง" มาจาก internal/games ทั้งหมด
 //
 // ทุกขั้นตอนต้อง idempotent — job โดน redeliver ซ้ำได้เสมอ ขั้นที่เสร็จแล้วให้ข้าม
 package provision
@@ -7,7 +10,6 @@ package provision
 import (
 	"archive/zip"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,12 +19,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
+
 	"github.com/mc-panel/node-agent/internal/filemanager"
+	"github.com/mc-panel/node-agent/internal/games"
 )
 
 const (
@@ -30,14 +33,14 @@ const (
 	mcUID = 1000
 	mcGID = 1000
 
-	userAgent = "mc-panel-agent/0.1.0 (https://github.com/mc-panel)"
-
 	// maxImportUncompressed กัน zip-bomb — รวมขนาดหลัง decompress ของทุก entry ต้องไม่เกินนี้
 	// (เผื่อ world/mod ใหญ่ได้จริงหลาย GB แต่มีเพดานกัน decompress bomb ที่พอง disk เต็ม)
 	maxImportUncompressed = 8 << 30 // 8 GiB
 )
 
+// Spec = input ของ CreateServer (Game ว่าง = เกม default — job เก่าที่ค้างใน stream)
 type Spec struct {
+	Game       string
 	ServerType string
 	MCVersion  string
 	AcceptEULA bool
@@ -45,6 +48,7 @@ type Spec struct {
 
 // ImportSpec คือ input ของ ImportServer — zip ถูก stage ไว้แล้วที่ ArchivePath (relative ต่อ jail)
 type ImportSpec struct {
+	Game        string
 	ServerType  string
 	MCVersion   string
 	AcceptEULA  bool
@@ -55,16 +59,18 @@ type Provisioner struct {
 	docker             *client.Client
 	dataDir            string
 	runtimeImagePrefix string
+	games              *games.Registry
 	http               *http.Client
 }
 
-func New(docker *client.Client, dataDir, runtimeImagePrefix string) *Provisioner {
+func New(docker *client.Client, dataDir, runtimeImagePrefix string, gr *games.Registry) *Provisioner {
 	return &Provisioner{
 		docker:             docker,
 		dataDir:            dataDir,
 		runtimeImagePrefix: runtimeImagePrefix,
+		games:              gr,
 		http: &http.Client{
-			// jar/installer ใหญ่ได้หลายร้อย MB บน connection ช้า — timeout รวมต้องยาว
+			// artifact/installer ใหญ่ได้หลายร้อย MB บน connection ช้า — timeout รวมต้องยาว
 			// แต่ connect/header ต้องสั้นเพื่อ fail เร็วเมื่อ upstream ล่ม
 			Timeout: 10 * time.Minute,
 			Transport: &http.Transport{
@@ -90,7 +96,25 @@ func (p *Provisioner) serverDir(serverID string) (string, error) {
 	return dir, nil
 }
 
+// resolveGame หา definition + เช็คว่า variant ที่ขอมามีจริงในเกมนั้น
+// (payload มาจาก NATS — ห้ามเชื่อว่าตรงกับที่ control-plane validate ไว้แล้ว)
+func (p *Provisioner) resolveGame(game, variant string) (*games.Definition, error) {
+	def, ok := p.games.Resolve(game)
+	if !ok {
+		return nil, fmt.Errorf("unsupported game %q", game)
+	}
+	if !def.HasVariant(variant) {
+		return nil, fmt.Errorf("unsupported server_type %q for game %q", variant, def.ID)
+	}
+	return def, nil
+}
+
 func (p *Provisioner) CreateServer(ctx context.Context, serverID string, spec Spec) (string, error) {
+	def, err := p.resolveGame(spec.Game, spec.ServerType)
+	if err != nil {
+		return "", err
+	}
+
 	dir, err := p.serverDir(serverID)
 	if err != nil {
 		return "", err
@@ -98,89 +122,92 @@ func (p *Provisioner) CreateServer(ctx context.Context, serverID string, spec Sp
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create server directory: %w", err)
 	}
-	// forge installer รันเป็น uid 1000 ต้องเขียน dir ได้ — chown ก่อนเริ่มโหลด
+	// tool ของเกมที่รันเป็น uid 1000 (เช่น forge installer) ต้องเขียน dir ได้ — chown ก่อนเริ่มโหลด
 	p.chownRecursive(dir)
 
-	var detail string
-	switch spec.ServerType {
-	case "vanilla":
-		detail, err = p.provisionVanilla(ctx, dir, spec.MCVersion)
-	case "paper":
-		detail, err = p.provisionPaperProject(ctx, dir, "paper", spec.MCVersion, "server.jar")
-	case "velocity":
-		detail, err = p.provisionPaperProject(ctx, dir, "velocity", spec.MCVersion, "velocity.jar")
-	case "fabric":
-		detail, err = p.provisionFabric(ctx, dir, spec.MCVersion)
-	case "forge":
-		detail, err = p.provisionForge(ctx, dir, serverID, spec.MCVersion)
-	default:
-		return "", fmt.Errorf("unsupported server_type %q", spec.ServerType)
-	}
+	detail, err := def.Provision(ctx, p.provisionEnv(def, serverID, dir, spec.ServerType, spec.MCVersion))
 	if err != nil {
 		return "", err
 	}
 
-	if err := writePanelFiles(dir, spec.ServerType, spec.MCVersion, spec.AcceptEULA); err != nil {
+	if err := p.writePanelFiles(dir, def, spec.ServerType, spec.MCVersion, spec.AcceptEULA); err != nil {
 		return "", err
 	}
 
 	p.chownRecursive(dir)
-	log.Printf("server provisioned: server=%s type=%s version=%s", serverID, spec.ServerType, spec.MCVersion)
+	log.Printf("server provisioned: server=%s game=%s type=%s version=%s",
+		serverID, def.ID, spec.ServerType, spec.MCVersion)
 	return detail, nil
 }
 
-// writePanelFiles เขียน config ที่ panel เป็นเจ้าของ: eula.txt (ถ้า user ยอมรับ),
-// server.properties (ถ้ายังไม่มี, non-velocity), .mcpanel/meta.json + launch.sh
+func (p *Provisioner) provisionEnv(def *games.Definition, serverID, dir, variant, version string) games.ProvisionEnv {
+	return games.ProvisionEnv{
+		ServerID:           serverID,
+		Dir:                dir,
+		Variant:            variant,
+		Version:            version,
+		HTTP:               p.http,
+		Docker:             p.docker,
+		RuntimeImagePrefix: p.runtimeImagePrefix,
+		Chown:              func() { p.chownRecursive(dir) },
+	}
+}
+
+// writePanelFiles เขียนไฟล์ที่ panel เป็นเจ้าของ: seed config ของเกม (eula/config เริ่มต้น)
+// + .mcpanel/meta.json + .mcpanel/launch.sh
 // meta.json/launch.sh ถูกเขียนทับเสมอ (WriteFile truncate) — ตอน import จึงมั่นใจได้ว่า
 // panel คุม launch ไม่ว่า zip จะมี .mcpanel เดิมติดมาหรือไม่
-func writePanelFiles(dir, serverType, mcVersion string, acceptEULA bool) error {
-	if acceptEULA {
-		// เขียนเฉพาะเมื่อ user ติ๊กยอมรับเอง — ระบบห้าม default eula ให้เด็ดขาด
-		if err := os.WriteFile(filepath.Join(dir, "eula.txt"), []byte("eula=true\n"), 0o644); err != nil {
-			return fmt.Errorf("write eula.txt: %w", err)
+func (p *Provisioner) writePanelFiles(dir string, def *games.Definition, variant, version string, acceptEULA bool) error {
+	// seed file ของเกม — path มาจาก definition (ค่าคงที่ในโค้ด) ยังผ่าน SafeJoin ไว้อีกชั้น
+	// เพื่อไม่ให้ definition ที่เขียนพลาดหลุดออกนอก jail ได้เลย
+	for _, f := range def.SeedFiles(variant, acceptEULA) {
+		target, err := filemanager.SafeJoin(dir, f.Path)
+		if err != nil {
+			return fmt.Errorf("seed file %q: %w", f.Path, err)
 		}
-	}
-
-	if serverType != "velocity" {
-		propsPath := filepath.Join(dir, "server.properties")
-		if _, err := os.Stat(propsPath); errors.Is(err, fs.ErrNotExist) {
-			// port ใน container ตายตัว 25565 เสมอ — host port ไปกำหนดที่ PortBindings ตอน start
-			if err := os.WriteFile(propsPath, []byte("server-port=25565\n"), 0o644); err != nil {
-				return fmt.Errorf("write server.properties: %w", err)
+		if !f.Overwrite {
+			if _, err := os.Stat(target); err == nil {
+				continue
+			} else if !errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("stat seed file %q: %w", f.Path, err)
 			}
 		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return fmt.Errorf("create dir for seed file %q: %w", f.Path, err)
+		}
+		if err := os.WriteFile(target, f.Content, f.Mode); err != nil {
+			return fmt.Errorf("write %s: %w", f.Path, err)
+		}
 	}
 
-	mcpanelDir := filepath.Join(dir, ".mcpanel")
-	if err := os.MkdirAll(mcpanelDir, 0o755); err != nil {
-		return fmt.Errorf("create .mcpanel directory: %w", err)
+	panelDir := filepath.Join(dir, games.PanelDir)
+	if err := os.MkdirAll(panelDir, 0o755); err != nil {
+		return fmt.Errorf("create %s directory: %w", games.PanelDir, err)
 	}
 
-	stopCommand := "stop"
-	if serverType == "velocity" {
-		stopCommand = "end"
+	if err := games.WriteInstanceMeta(dir, games.InstanceMeta{
+		Game:        def.ID,
+		ServerType:  variant,
+		MCVersion:   version,
+		StopCommand: def.StopCommand(variant),
+	}); err != nil {
+		return fmt.Errorf("write %s: %w", games.MetaFileName, err)
 	}
-	meta, err := json.MarshalIndent(map[string]string{
-		"server_type":  serverType,
-		"mc_version":   mcVersion,
-		"stop_command": stopCommand,
-	}, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(mcpanelDir, "meta.json"), append(meta, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write meta.json: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(mcpanelDir, "launch.sh"), []byte(launchScript(serverType)), 0o755); err != nil {
-		return fmt.Errorf("write launch.sh: %w", err)
+	if err := os.WriteFile(filepath.Join(panelDir, games.LaunchScriptName), []byte(def.LaunchScript(variant)), 0o755); err != nil {
+		return fmt.Errorf("write %s: %w", games.LaunchScriptName, err)
 	}
 	return nil
 }
 
-// ImportServer แตก zip ที่ถูก stage ไว้ใน jail ของ server แล้ว provision โดยไม่โหลด jar
-// (jar/world/config มาจาก zip ที่ user อัปโหลด) — ทุก path ที่แตะ filesystem ผ่าน SafeJoin,
+// ImportServer แตก zip ที่ถูก stage ไว้ใน jail ของ server แล้ว provision โดยไม่โหลด artifact
+// (artifact/world/config มาจาก zip ที่ user อัปโหลด) — ทุก path ที่แตะ filesystem ผ่าน SafeJoin,
 // ไม่ materialize symlink, มี size cap กัน disk-fill/zip-bomb
 func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec ImportSpec) (detectedVersion string, err error) {
+	def, err := p.resolveGame(spec.Game, spec.ServerType)
+	if err != nil {
+		return "", err
+	}
+
 	dir, err := p.serverDir(serverID)
 	if err != nil {
 		return "", err
@@ -248,41 +275,39 @@ func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec Im
 		return "", fmt.Errorf("remove staged archive: %w", err)
 	}
 
-	// launch script รัน `java -jar server.jar` (หรือ velocity.jar) ตายตัว — zip ที่ user
-	// อัปโหลดมักมี jar ชื่ออื่น (paper-1.21.1.jar ฯลฯ) ต้อง normalize ชื่อ ไม่งั้น start crash
-	// jarName = ชื่อไฟล์เดิมของ jar หลัก (ใช้ fallback เดา version จากชื่อ)
-	renamedTo, jarName := p.normalizeServerJar(dir, spec.ServerType, serverID)
+	// launch script รัน artifact ชื่อตายตัวตาม definition — zip ที่ user อัปโหลดมักตั้งชื่ออื่น
+	// (paper-1.21.1.jar ฯลฯ) ต้อง normalize ชื่อ ไม่งั้น start crash
+	// originalName = ชื่อไฟล์เดิมของ artifact หลัก (ใช้ fallback เดา version)
+	renamedTo, originalName := normalizeMainArtifact(dir, def, spec.ServerType, serverID)
 
-	// เดา mc_version best-effort เพื่อ pre-fill panel — เชื่อ version.json ใน jar ก่อน,
-	// ไม่ได้ค่อย parse จากชื่อไฟล์เดิม, สุดท้าย fallback ค่าที่ user กรอก
-	detectedVersion = p.detectMCVersion(dir, renamedTo, jarName)
+	// เดาเวอร์ชัน best-effort เพื่อ pre-fill panel — สุดท้าย fallback ค่าที่ user กรอก
+	artifactPath := ""
+	if renamedTo != "" {
+		artifactPath = filepath.Join(dir, renamedTo)
+	}
+	detectedVersion = def.Import.DetectVersion(artifactPath, originalName)
 	if detectedVersion == "" {
 		detectedVersion = spec.MCVersion
 	}
 
 	// meta.json ต้องสะท้อน version จริงที่ detect ได้ (ไม่ใช่ค่าที่ user เดา)
-	if err := writePanelFiles(dir, spec.ServerType, detectedVersion, spec.AcceptEULA); err != nil {
+	if err := p.writePanelFiles(dir, def, spec.ServerType, detectedVersion, spec.AcceptEULA); err != nil {
 		return "", err
 	}
 
 	p.chownRecursive(dir)
-	log.Printf("server imported: server=%s type=%s version=%s files=%d bytes=%d",
-		serverID, spec.ServerType, detectedVersion, fileCount, totalIn)
+	log.Printf("server imported: server=%s game=%s type=%s version=%s files=%d bytes=%d",
+		serverID, def.ID, spec.ServerType, detectedVersion, fileCount, totalIn)
 	return detectedVersion, nil
 }
 
-// normalizeServerJar เปลี่ยนชื่อ jar หลักที่ root เป็น server.jar (หรือ velocity.jar)
-// ให้ตรงกับ launch script. forge ใช้ run.sh/forge-*.jar อยู่แล้ว — ข้ามไป.
-// คืน (ชื่อไฟล์ target ที่ใช้จริง, ชื่อไฟล์เดิมของ jar หลัก) เพื่อไปเดา version ต่อ
-func (p *Provisioner) normalizeServerJar(dir, serverType, serverID string) (target, originalName string) {
-	switch serverType {
-	case "forge":
-		// forge จัดการผ่าน run.sh / forge-*.jar ใน launchScript — ไม่แตะ
+// normalizeMainArtifact เปลี่ยนชื่อ artifact หลักที่ root ให้ตรงกับที่ launch script คาดหวัง
+// variant ที่ definition บอกว่าไม่มี main artifact (เช่น forge ที่ใช้ run.sh) จะถูกข้าม
+// คืน (ชื่อไฟล์ target ที่ใช้จริง, ชื่อไฟล์เดิม) เพื่อไปเดา version ต่อ
+func normalizeMainArtifact(dir string, def *games.Definition, variant, serverID string) (target, originalName string) {
+	target = def.Import.MainArtifact(variant)
+	if target == "" {
 		return "", ""
-	case "velocity":
-		target = "velocity.jar"
-	default:
-		target = "server.jar"
 	}
 
 	// มี target อยู่แล้ว = zip ตั้งชื่อถูกมาแต่แรก, ไม่ต้อง rename แต่ยังคืนชื่อไว้เดา version
@@ -290,118 +315,61 @@ func (p *Provisioner) normalizeServerJar(dir, serverType, serverID string) (targ
 		return target, target
 	}
 
-	jars := rootJars(dir)
-	if len(jars) == 0 {
-		// อาจเป็น setup ที่ไม่มี jar (velocity บาง config) — ไม่ fail ที่นี่
+	candidates := rootFilesWithExt(dir, def.Import.Ext)
+	if len(candidates) == 0 {
+		// อาจเป็น setup ที่ไม่มี artifact ที่ root (velocity บาง config) — ไม่ fail ที่นี่
 		// ปล่อยให้ start เป็นคน surface error จริงทีหลัง
-		log.Printf("import: no root jar to rename to %s: server=%s", target, serverID)
+		log.Printf("import: no root %s to rename to %s: server=%s", def.Import.Ext, target, serverID)
 		return "", ""
 	}
 
-	pick := pickMainJar(dir, jars)
+	pick := pickMainArtifact(dir, candidates, def.Import.NameHints)
 	if err := os.Rename(filepath.Join(dir, pick), filepath.Join(dir, target)); err != nil {
 		log.Printf("import: rename %s to %s failed: server=%s err=%v", pick, target, serverID, err)
 		return "", pick
 	}
-	log.Printf("import: renamed main jar %s to %s: server=%s", pick, target, serverID)
+	log.Printf("import: renamed main artifact %s to %s: server=%s", pick, target, serverID)
 	return target, pick
 }
 
-// rootJars คืนชื่อ *.jar ที่ root ของ server dir (non-recursive)
-func rootJars(dir string) []string {
+// rootFilesWithExt คืนชื่อไฟล์นามสกุลที่กำหนดที่ root ของ server dir (non-recursive)
+func rootFilesWithExt(dir, ext string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
-	var jars []string
+	var out []string
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		if strings.HasSuffix(strings.ToLower(e.Name()), ".jar") {
-			jars = append(jars, e.Name())
+		if strings.HasSuffix(strings.ToLower(e.Name()), ext) {
+			out = append(out, e.Name())
 		}
 	}
-	return jars
+	return out
 }
 
-// pickMainJar เดา jar หลักจากหลายไฟล์: jar เดียวเลือกเลย, หลายไฟล์เลือกจากชื่อที่คุ้น
-// (paper/purpur/...) ไม่มีเลยเลือกไฟล์ใหญ่สุด (server jar มักใหญ่กว่า plugin/lib)
-func pickMainJar(dir string, jars []string) string {
-	if len(jars) == 1 {
-		return jars[0]
+// pickMainArtifact เดาไฟล์หลักจากหลายไฟล์: ไฟล์เดียวเลือกเลย, หลายไฟล์เลือกจากชื่อที่คุ้น
+// (hint ของเกม) ไม่มีเลยเลือกไฟล์ใหญ่สุด (artifact หลักมักใหญ่กว่า plugin/lib)
+func pickMainArtifact(dir string, candidates, hints []string) string {
+	if len(candidates) == 1 {
+		return candidates[0]
 	}
-	knownHints := []string{"paper", "purpur", "spigot", "vanilla", "fabric-server", "minecraft_server", "craftbukkit", "server"}
-	for _, hint := range knownHints {
-		for _, j := range jars {
-			if strings.Contains(strings.ToLower(j), hint) {
-				return j
+	for _, hint := range hints {
+		for _, c := range candidates {
+			if strings.Contains(strings.ToLower(c), hint) {
+				return c
 			}
 		}
 	}
-	// fallback: ไฟล์ใหญ่สุด — server jar มักใหญ่กว่า plugin/mod jar ที่เผลอวางไว้ root
-	largest, largestSize := jars[0], int64(-1)
-	for _, j := range jars {
-		if fi, err := os.Stat(filepath.Join(dir, j)); err == nil && fi.Size() > largestSize {
-			largest, largestSize = j, fi.Size()
+	largest, largestSize := candidates[0], int64(-1)
+	for _, c := range candidates {
+		if fi, err := os.Stat(filepath.Join(dir, c)); err == nil && fi.Size() > largestSize {
+			largest, largestSize = c, fi.Size()
 		}
 	}
 	return largest
-}
-
-var versionTokenRe = regexp.MustCompile(`\d+\.\d+(\.\d+)?`)
-
-// detectMCVersion เดา version จาก jar: version.json ใน jar ก่อน แล้ว fallback ชื่อไฟล์เดิม
-func (p *Provisioner) detectMCVersion(dir, target, originalName string) string {
-	if target != "" {
-		if v := versionFromJarManifest(filepath.Join(dir, target)); v != "" {
-			return v
-		}
-	}
-	// fallback: token version ในชื่อไฟล์เดิม เช่น paper-1.21.1.jar
-	if originalName != "" {
-		if v := versionTokenRe.FindString(originalName); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// versionFromJarManifest เปิด jar เป็น zip อ่าน version.json ที่ root → คืน id/name
-// (vanilla/paper/fabric bundle ไฟล์นี้มา) — อ่านไม่ได้/ไม่มีให้คืน ""
-func versionFromJarManifest(jarPath string) string {
-	zr, err := zip.OpenReader(jarPath)
-	if err != nil {
-		return ""
-	}
-	defer zr.Close()
-	for _, f := range zr.File {
-		if f.Name != "version.json" {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return ""
-		}
-		// version.json เล็ก (ไม่กี่ร้อย byte) — จำกัดขนาดกันไฟล์ผิดปกติ
-		b, err := io.ReadAll(io.LimitReader(rc, 1<<20))
-		rc.Close()
-		if err != nil {
-			return ""
-		}
-		var vj struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		}
-		if json.Unmarshal(b, &vj) != nil {
-			return ""
-		}
-		if vj.ID != "" {
-			return vj.ID
-		}
-		return vj.Name
-	}
-	return ""
 }
 
 // extractFile แตก 1 regular entry ไปที่ target โดยคุมขนาดสะสม (written) กัน zip-bomb
@@ -464,28 +432,6 @@ func (p *Provisioner) DeleteServer(serverID string) error {
 	}
 	log.Printf("server directory removed: server=%s", serverID)
 	return nil
-}
-
-// launchScript — java ต้องเป็น process สุดท้ายผ่าน exec เสมอ เพื่อให้เป็น PID 1
-// (รับ stdin จาก docker attach และ SIGTERM ตรง ไม่ผ่าน shell)
-func launchScript(serverType string) string {
-	const header = "#!/bin/sh\ncd /mc\n"
-	const mem = "${MC_MEMORY_MB:-1024}"
-	switch serverType {
-	case "velocity":
-		return header + "exec java -Xms" + mem + "M -Xmx" + mem + "M -jar velocity.jar\n"
-	case "forge":
-		// forge ใหม่ (>=1.17) ได้ run.sh + อ่าน jvm args จาก user_jvm_args.txt
-		// forge เก่าได้ jar ชื่อ forge-{mc}-{build}.jar รันตรง ๆ
-		return header +
-			"if [ -f run.sh ]; then\n" +
-			"  echo \"-Xms" + mem + "M -Xmx" + mem + "M\" > user_jvm_args.txt\n" +
-			"  exec sh run.sh nogui\n" +
-			"fi\n" +
-			"exec java -Xms" + mem + "M -Xmx" + mem + "M -jar forge-*.jar nogui\n"
-	default: // vanilla / paper / fabric
-		return header + "exec java -Xms" + mem + "M -Xmx" + mem + "M -jar server.jar nogui\n"
-	}
 }
 
 // chownRecursive โอนทุกไฟล์ให้ uid 1000 — fail ได้บน dev host ที่ไม่ใช่ root (เช่น mac)

@@ -1,11 +1,11 @@
-// Package versions proxy รายชื่อ MC version จาก upstream (Mojang/PaperMC/Fabric/Forge)
+// versions.go — proxy รายชื่อ MC version จาก upstream (Mojang/PaperMC/Fabric/Forge)
 // พร้อม cache in-memory 10 นาที — คืนรายการเรียงใหม่ -> เก่าเสมอ
-package versions
+// (นี่คือ implementation ของ games.VersionSpec.List สำหรับเกมนี้)
+package minecraft
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mc-panel/control-plane/internal/games"
 )
 
 const (
@@ -27,9 +29,9 @@ const (
 	forgePromotionsURL  = "https://files.minecraftforge.net/maven/net/minecraftforge/forge/promotions_slim.json"
 )
 
-var ErrUnknownType = errors.New("versions: unknown server type")
-
-type Service struct {
+// versionService ถือ cache ของรายการเวอร์ชันต่อ variant — มี state จึงต้องสร้างครั้งเดียว
+// ต่อ process แล้วผูกเข้า Definition (ดู New)
+type versionService struct {
 	client *http.Client
 
 	mu    sync.Mutex
@@ -41,22 +43,24 @@ type cacheEntry struct {
 	versions  []string
 }
 
-func New() *Service {
-	return &Service{
+func newVersionService() *versionService {
+	return &versionService{
 		client: &http.Client{Timeout: 15 * time.Second},
 		cache:  make(map[string]cacheEntry),
 	}
 }
 
-func (s *Service) Versions(ctx context.Context, serverType string) ([]string, error) {
-	switch serverType {
+// list = games.VersionSpec.List — variant ที่ไม่รู้จักคืน games.ErrUnknownVariant
+// (caller เช็คกับ catalog ของ Definition มาก่อนแล้ว นี่เป็นด่านสำรอง)
+func (s *versionService) list(ctx context.Context, variant string) ([]string, error) {
+	switch variant {
 	case "vanilla", "paper", "velocity", "fabric", "forge":
 	default:
-		return nil, ErrUnknownType
+		return nil, games.ErrUnknownVariant
 	}
 
 	s.mu.Lock()
-	if e, ok := s.cache[serverType]; ok && time.Since(e.fetchedAt) < cacheTTL {
+	if e, ok := s.cache[variant]; ok && time.Since(e.fetchedAt) < cacheTTL {
 		s.mu.Unlock()
 		return e.versions, nil
 	}
@@ -66,11 +70,11 @@ func (s *Service) Versions(ctx context.Context, serverType string) ([]string, er
 		versions []string
 		err      error
 	)
-	switch serverType {
+	switch variant {
 	case "vanilla":
 		versions, err = s.fetchVanilla(ctx)
 	case "paper", "velocity":
-		versions, err = s.fetchPaperProject(ctx, serverType)
+		versions, err = s.fetchPaperProject(ctx, variant)
 	case "fabric":
 		versions, err = s.fetchFabric(ctx)
 	case "forge":
@@ -81,12 +85,12 @@ func (s *Service) Versions(ctx context.Context, serverType string) ([]string, er
 	}
 
 	s.mu.Lock()
-	s.cache[serverType] = cacheEntry{fetchedAt: time.Now(), versions: versions}
+	s.cache[variant] = cacheEntry{fetchedAt: time.Now(), versions: versions}
 	s.mu.Unlock()
 	return versions, nil
 }
 
-func (s *Service) fetchJSON(ctx context.Context, url string, dst any) error {
+func (s *versionService) fetchJSON(ctx context.Context, url string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -103,7 +107,7 @@ func (s *Service) fetchJSON(ctx context.Context, url string, dst any) error {
 	return json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(dst)
 }
 
-func (s *Service) fetchVanilla(ctx context.Context) ([]string, error) {
+func (s *versionService) fetchVanilla(ctx context.Context) ([]string, error) {
 	var manifest struct {
 		Versions []struct {
 			ID   string `json:"id"`
@@ -123,7 +127,7 @@ func (s *Service) fetchVanilla(ctx context.Context) ([]string, error) {
 	return versions, nil
 }
 
-func (s *Service) fetchPaperProject(ctx context.Context, project string) ([]string, error) {
+func (s *versionService) fetchPaperProject(ctx context.Context, project string) ([]string, error) {
 	// Fill v3 คืน versions เป็น map family -> รายการ version (ลำดับ family หายใน Go map
 	// ต้อง flatten แล้ว sort เอง)
 	var out struct {
@@ -150,7 +154,7 @@ func (s *Service) fetchPaperProject(ctx context.Context, project string) ([]stri
 	return versions, nil
 }
 
-func (s *Service) fetchFabric(ctx context.Context) ([]string, error) {
+func (s *versionService) fetchFabric(ctx context.Context) ([]string, error) {
 	var out []struct {
 		Version string `json:"version"`
 		Stable  bool   `json:"stable"`
@@ -167,7 +171,7 @@ func (s *Service) fetchFabric(ctx context.Context) ([]string, error) {
 	return versions, nil
 }
 
-func (s *Service) fetchForge(ctx context.Context) ([]string, error) {
+func (s *versionService) fetchForge(ctx context.Context) ([]string, error) {
 	var out struct {
 		Promos map[string]string `json:"promos"`
 	}

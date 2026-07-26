@@ -4,6 +4,8 @@
 - Linux-first, **full Docker**: ทั้งระบบหลักและทุก MC instance รันบน Docker ทั้งหมด
 - Native process runner อยู่นอก scope ปัจจุบัน (interface `Runner` ยังเผื่อไว้ แต่ implement เฉพาะ Docker)
 - รองรับ Vanilla, Paper (plugin), Fabric/Forge (modded), Velocity (proxy) ผ่าน abstraction เดียวกัน
+  — ทั้งหมดเป็น **variant** ของ game definition `minecraft` ซึ่งเป็นเกมเดียวที่ลงทะเบียนไว้ตอนนี้
+  (ดูหัวข้อ Game definition)
 - Auth เป็น local อย่างเดียว (username+password — ระบบไม่เก็บ email เลย) — OIDC เป็น backlog
 
 ## 3 ชั้นหลัก
@@ -55,6 +57,26 @@ Fan-out เป็น `events.Hub` (non-blocking, drop เมื่อ buffer เ
 - Velocity คุยกับ backend servers ผ่าน DNS alias `mc-{server_id}` ในวง `mcpanel-servers`
 - Server ที่ไม่ตั้ง host_port จะเข้าถึงได้จาก velocity เท่านั้น
 
+## Game definition (abstraction ของ "เกม")
+
+server ทุกตัวผูกกับ **เกม** หนึ่งเกม (`servers.game`) และ `server_type` เดิมกลายเป็น **variant**
+ภายในเกมนั้น ความรู้เฉพาะเกมทั้งหมดถูกรวบไว้ใน `Definition` ตัวเดียวต่อเกม ต่อ app:
+
+| ที่อยู่ | ถืออะไร |
+|---|---|
+| `apps/control-plane/internal/games` | Registry + `Definition`: variant + EULA, กติกาเวอร์ชัน, runtime image, catalog/ไวยากรณ์ของไฟล์ config, กติกาผู้เล่น (identity service, allowlist, ไฟล์ state, action, playtime, รูปหน้า), port เริ่มต้น, memory ขั้นต่ำ |
+| `apps/control-plane/internal/games/minecraft` | ค่าจริงของ Minecraft (Mojang/PaperMC/Fabric/Forge, `server.properties`, `whitelist.json`, `op/kick/ban`, Java image mapping) |
+| `apps/node-agent/internal/games` | Registry + `Definition` ฝั่งรันจริง: ที่มาของ artifact, launch script, env, คำสั่ง stop, seed config, port ใน container, กติกา import, การอ่านสถานะในเกมจาก console + `.mcpanel/meta.json` (instance บน disk บอกเองว่าเป็นเกมอะไร) |
+| `apps/node-agent/internal/games/minecraft` | ค่าจริงของ Minecraft ฝั่ง agent |
+
+- สอง app แยก module กันจึง **ไม่ import ข้ามกัน** — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
+  ซึ่งเดินทางผ่าน job payload (`CreateServer.game` / `ImportServer.game`) และ `.mcpanel/meta.json`
+- ชั้นอื่น ๆ (httpapi, jobs, provision, runner, mcstate) **ห้ามมี switch ตามชื่อเกม/variant** —
+  ทุกอย่างถามผ่าน definition. เพิ่มเกมใหม่ = เพิ่ม package `games/<เกม>` ทั้งสองฝั่ง แล้วลงทะเบียน
+  ใน registry ที่ `cmd/server` / `cmd/agent`
+- field ที่ยังใช้ศัพท์ Minecraft (`mc_version`, `server_type`, `whitelist_enabled`, `tps`,
+  error code `mojang_unavailable`) คงชื่อไว้เพื่อไม่ break contract ฝั่ง web — ความหมายเป็นแบบทั่วไปแล้ว
+
 ## Design decisions สำคัญ
 
 - **Storage**: bind mount เสมอ (ไม่ใช้ named volume) — 1 instance = 1 directory `{MC_DATA_DIR}/{server_id}`
@@ -72,8 +94,9 @@ Fan-out เป็น `events.Hub` (non-blocking, drop เมื่อ buffer เ
 - **Container cleanup**: container ที่ start ล้มกลางทาง หรือ crash (die exit≠0 ที่ไม่ได้สั่ง stop) —
   agent ลบทิ้งทันที + push console line แจ้ง user (ไม่ทิ้ง dead container ค้าง; directory ข้อมูลคงไว้เสมอ)
 - **Java mapping**: calendar version (26.x+)/velocity/fallback→25, MC 1.20.5–1.21.x→21, 1.17–1.20.4→17,
-  ≤1.16.5→8 (logic ต้องตรงกัน 2 ที่: control-plane `jobs/image.go` เลือก image ของ job, agent
-  `provision/forge.go` เลือก image ตอนรัน forge installer). Java backward-compatible → เวอร์ชันที่ parse
+  ≤1.16.5→8 (logic อยู่ใน game definition ของ minecraft และต้องตรงกัน 2 ที่:
+  control-plane `internal/games/minecraft/runtime.go` เลือก image ของ job, agent
+  `internal/games/minecraft/runtime.go` เลือก image ตอนรัน forge installer). Java backward-compatible → เวอร์ชันที่ parse
   ไม่ได้/รุ่นใหม่ default เป็น Java ใหม่สุดเสมอ (jar เก่ารันบน JVM ใหม่ได้; เฉพาะ MC เก่ามาก ≤1.16 ที่พังบน Java ใหม่จึงตรึงไว้ 8)
 - **File manager**: กัน path traversal ด้วย `SafeJoin` — resolve symlink จาก ancestor ที่ลึกที่สุดที่มีจริง
   ใช้ทุกครั้งก่อนแตะ filesystem จาก path ภายนอก รวมถึงก่อน `RemoveAll` ตอนลบ server

@@ -1,12 +1,12 @@
-package jobs
+package minecraft
 
 import "testing"
 
-func TestDockerImage(t *testing.T) {
+func TestRuntimeImage(t *testing.T) {
 	tests := []struct {
-		serverType string
-		mcVersion  string
-		want       string
+		variant   string
+		mcVersion string
+		want      string
 	}{
 		{"velocity", "3.4.0", "mcpanel/mc-runtime:25"},
 		{"velocity", "", "mcpanel/mc-runtime:25"},
@@ -47,8 +47,8 @@ func TestDockerImage(t *testing.T) {
 		{"vanilla", " 1.16.5", "mcpanel/mc-runtime:8"},
 	}
 	for _, tt := range tests {
-		if got := DockerImage(tt.serverType, tt.mcVersion); got != tt.want {
-			t.Errorf("DockerImage(%q, %q) = %q, want %q", tt.serverType, tt.mcVersion, got, tt.want)
+		if got := RuntimeImage(tt.variant, tt.mcVersion); got != tt.want {
+			t.Errorf("RuntimeImage(%q, %q) = %q, want %q", tt.variant, tt.mcVersion, got, tt.want)
 		}
 	}
 }

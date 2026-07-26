@@ -27,22 +27,28 @@ message JobEnvelope {
   }
 }
 
-// CreateServer = provision: สร้าง directory, โหลด jar จาก official source,
+// CreateServer = provision: สร้าง directory, โหลด artifact จาก official source,
 // เขียน eula.txt / config / launch script — ยังไม่ start
+//
+// game เป็นตัวเลือก game definition ฝั่ง agent (registry เดียวกับ control-plane) ส่วน
+// server_type เป็น variant ภายในเกมนั้น — ว่าง = "minecraft" (job เก่าที่ค้างใน stream
+// ก่อนมี field นี้ต้อง provision ได้เหมือนเดิม)
 message CreateServer {
-  string server_type = 1; // vanilla | paper | fabric | forge | velocity
+  string server_type = 1; // variant ของเกม เช่น vanilla | paper | fabric | forge | velocity
   string mc_version = 2;  // เช่น "1.21.4" (สำหรับ velocity = velocity version)
   bool accept_eula = 3;   // user ต้องติ๊กยอมรับเองตอนสร้าง ระบบห้าม default เป็น true
+  string game = 4;        // game definition id — ว่าง = minecraft
 }
 
 // ImportServer = เหมือน CreateServer แต่ไม่โหลด jar — แตก zip ที่ upload มา (staged ไว้ที่
 // archive_path ใน jail ผ่าน chunked file write) เข้า server dir แล้ว provision (eula/meta/launch) ต่อ
 // ทุก entry ใน zip ต้องผ่าน SafeJoin ก่อนเขียน (กัน zip-slip) + chown 1000:1000
 message ImportServer {
-  string server_type = 1; // vanilla | paper | fabric | forge | velocity
+  string server_type = 1; // variant ของเกม เช่น vanilla | paper | fabric | forge | velocity
   string mc_version = 2;
   bool accept_eula = 3;
   string archive_path = 4; // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".mcpanel/import.zip"
+  string game = 5;         // game definition id — ว่าง = minecraft
 }
 
 message StartServer {

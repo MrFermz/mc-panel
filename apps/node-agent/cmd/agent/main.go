@@ -26,6 +26,8 @@ import (
 	"github.com/mc-panel/node-agent/internal/console"
 	"github.com/mc-panel/node-agent/internal/events"
 	"github.com/mc-panel/node-agent/internal/filemanager"
+	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/mc-panel/node-agent/internal/games/minecraft"
 	"github.com/mc-panel/node-agent/internal/grpcclient"
 	"github.com/mc-panel/node-agent/internal/heartbeat"
 	"github.com/mc-panel/node-agent/internal/jobs"
@@ -121,11 +123,16 @@ func run() error {
 		return err
 	}
 
-	dockerRunner := runner.NewDockerRunner(dockerCli, cfg.mcDataDir, cfg.mcNetwork)
+	// registry ของ game definition — เกมที่ agent นี้รันได้ ลงทะเบียนที่นี่ที่เดียว
+	// (เฟสนี้มี minecraft เกมเดียว) instance บน disk บอกเองว่าเป็นเกมอะไรผ่าน .mcpanel/meta.json
+	gameRegistry := games.NewRegistry(minecraft.New())
+	gameLookup := games.InstanceLookup{Registry: gameRegistry, DataDir: cfg.mcDataDir}
+
+	dockerRunner := runner.NewDockerRunner(dockerCli, cfg.mcDataDir, cfg.mcNetwork, gameLookup)
 	grpcCli := grpcclient.New(cfg.controlPlaneGRPC, cfg.agentToken, buildHello(cfg.mcDataDir))
-	// tracker อ่านสถานะในเกมจาก console (ผู้เล่นออนไลน์/TPS) แล้ว serverstats แนบไปกับ stats
+	// tracker อ่านสถานะในเกมจาก console (ผู้เล่นออนไลน์/metric) แล้ว serverstats แนบไปกับ stats
 	// สองตัวอ้างถึงกัน: Manager ต้องมี observer ตั้งแต่สร้าง / tracker เขียน stdin ผ่าน Manager
-	mcTracker := mcstate.NewTracker()
+	mcTracker := mcstate.NewTracker(gameLookup)
 	consoles := console.NewManager(dockerRunner, grpcCli, mcTracker)
 	mcTracker.SetWriter(consoles)
 	defer consoles.DetachAll()
@@ -184,7 +191,7 @@ func run() error {
 	defer nc.Drain()
 	log.Printf("nats connected")
 
-	prov := provision.New(dockerCli, cfg.mcDataDir, cfg.runtimeImagePrefix)
+	prov := provision.New(dockerCli, cfg.mcDataDir, cfg.runtimeImagePrefix, gameRegistry)
 	consumer, err := jobs.NewConsumer(nc, nodeID, jobs.NewHandler(dockerRunner, prov, cfg.mcDataDir))
 	if err != nil {
 		return fmt.Errorf("create jobs consumer: %w", err)

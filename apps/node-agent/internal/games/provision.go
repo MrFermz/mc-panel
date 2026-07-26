@@ -1,4 +1,7 @@
-package provision
+// provision.go — เครื่องมือกลางที่ Definition.Provision ของทุกเกมใช้ร่วมกัน
+// (โหลดไฟล์จาก official source พร้อม verify checksum, อ่าน metadata JSON)
+// ตัวที่ "รู้ว่าโหลดอะไรจากที่ไหน" คือ definition ของเกม ไม่ใช่ที่นี่
+package games
 
 import (
 	"context"
@@ -13,9 +16,34 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/docker/docker/client"
 )
 
-func (p *Provisioner) fetchJSON(ctx context.Context, url string, v any) error {
+// UserAgent ที่ agent ใช้ยิง upstream ทุกเส้น
+const UserAgent = "mc-panel-agent/0.1.0 (https://github.com/mc-panel)"
+
+// ProvisionEnv = ทุกอย่างที่ Definition.Provision ต้องใช้เพื่อทำงานหนึ่งครั้ง
+// (dir ผ่าน SafeJoin มาจาก provisioner แล้ว — definition ไม่ต้อง validate path ซ้ำ
+// แต่ก็ต้องไม่ประกอบ path จาก input ภายนอกเอง)
+type ProvisionEnv struct {
+	ServerID string
+	// Dir = directory ของ server บนเครื่องนี้ (absolute, validate แล้ว)
+	Dir     string
+	Variant string
+	Version string
+
+	HTTP   *http.Client
+	Docker *client.Client
+	// RuntimeImagePrefix มาจาก config ของ agent (MC_RUNTIME_IMAGE_PREFIX)
+	RuntimeImagePrefix string
+	// Chown โอน ownership ของทั้ง dir ให้ user ที่ container รัน — เรียกหลังเขียนไฟล์
+	// ที่ tool ของเกม (เช่น installer ที่รันเป็น uid 1000) ต้องแตะต่อ
+	Chown func()
+}
+
+// FetchJSON โหลด metadata JSON จาก upstream
+func (e ProvisionEnv) FetchJSON(ctx context.Context, url string, v any) error {
 	// metadata เป็นไฟล์เล็ก — timeout สั้นกว่า download ปกติมาก
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -24,8 +52,8 @@ func (p *Provisioner) fetchJSON(ctx context.Context, url string, v any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := p.http.Do(req)
+	req.Header.Set("User-Agent", UserAgent)
+	resp, err := e.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", url, err)
 	}
@@ -50,9 +78,9 @@ func newHasher(algo string) hash.Hash {
 	}
 }
 
-// downloadFile โหลด url ลง dest พร้อม verify checksum (เมื่อ upstream ให้มา)
+// Download โหลด url ลง dest พร้อม verify checksum (เมื่อ upstream ให้มา)
 // idempotent: ไฟล์ที่มีอยู่แล้วและ checksum ตรง (หรือไม่มี checksum ให้เทียบ) จะข้าม
-func (p *Provisioner) downloadFile(ctx context.Context, url, dest, algo, wantSum string) error {
+func (e ProvisionEnv) Download(ctx context.Context, url, dest, algo, wantSum string) error {
 	if fileVerified(dest, algo, wantSum) {
 		log.Printf("download skipped (already present): %s", dest)
 		return nil
@@ -62,8 +90,8 @@ func (p *Provisioner) downloadFile(ctx context.Context, url, dest, algo, wantSum
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := p.http.Do(req)
+	req.Header.Set("User-Agent", UserAgent)
+	resp, err := e.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", url, err)
 	}

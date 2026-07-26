@@ -12,6 +12,14 @@
 
 ## กฎเหล็ก (ห้ามละเมิดไม่ว่าจะดูสมเหตุสมผลแค่ไหน)
 
+0. **ความรู้เฉพาะเกมอยู่ใน game definition ที่เดียว** — server ทุกตัวผูกกับเกม (`servers.game`,
+   ตอนนี้มี `minecraft` เกมเดียว) และ `server_type` คือ **variant** ภายในเกมนั้น. ทุกอย่างที่
+   "เป็นของเกม" (รายการ variant/EULA, กติกาเวอร์ชัน, runtime image, ชื่อ+catalog+ไวยากรณ์ของไฟล์
+   config, กติกาผู้เล่น/allowlist/คำสั่ง moderation/playtime, ที่มาของ artifact, launch script,
+   คำสั่ง stop, port ใน container, การอ่าน console) อยู่ใน `internal/games` ของแต่ละ app
+   — **ห้ามเขียน `switch` ตามชื่อเกม/variant หรือ hardcode ชื่อไฟล์/คำสั่งของเกมในชั้นอื่น**
+   (httpapi, jobs, store, provision, runner, mcstate) เด็ดขาด ดูเช็คลิสต์ในหัวข้อ
+   "เพิ่มเกมใหม่ / แก้ของเกมเดิม" ด้านล่าง
 1. **แก้ contract ก่อนแก้โค้ด** — interface ระหว่าง service มี source of truth 3 ที่:
    - REST/WS: `docs/api.md`
    - gRPC/NATS: `packages/proto/mcpanel/**/*.proto` (แก้แล้วรัน `make proto-gen` และ **commit generated code**)
@@ -243,7 +251,8 @@ storage — จำกัด 512KB, ชนิดตัดสินจาก conte
 NATS เป็นแค่ job transport ไม่เกี่ยวกับ auth. ทั้ง Postgres/Redis/NATS อยู่ network `core` (internal)
 เข้าจากภายนอกไม่ได้ ต้อง `docker compose exec` เข้า container หรือใช้ CLI ข้างบนที่รันในวงเดียวกัน
 
-**สร้าง server**: POST /api/servers → insert แถว (status=provisioning) + job `create_server` → agent
+**สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = `minecraft`)
+→ insert แถว (status=provisioning) + job `create_server` → agent
 โหลด jar + เขียน eula/launch script → JobResult → status=stopped → user สั่ง start ต่อ
 (import server: job `import_server` — agent อาจ detect เวอร์ชันจริงแล้วรายงานใน `JobResult.Detail` JSON
 `{"mc_version":"..."}` → control-plane update `mc_version` ของ server ให้ ถ้าเวอร์ชันผ่าน validate)
@@ -309,7 +318,9 @@ control-plane อ่าน `.zip` แบบ streaming (ไม่ buffer ทั�
 dispatch ล้ม = mark errored. audit `server_import`
 
 **Online players / TPS ต่อ instance**: MC ไม่มี API ให้ถาม — agent อ่านจาก **console** เอง
-(`internal/mcstate`): เกาะกับ console session (attach = server รันอยู่ = เขียน stdin ได้), ยิงคำสั่ง
+(`internal/mcstate` = เครื่องจักรกลางที่ไม่รู้จักเกม + `games.ConsoleSpec` ของเกมนั้นเป็นคนบอกว่า
+ยิงคำสั่งอะไรและแปลบรรทัดยังไง — parser จริงอยู่ที่ `internal/games/minecraft/console.go`):
+เกาะกับ console session (attach = server รันอยู่ = เขียน stdin ได้), ยิงคำสั่ง
 `list` ตอน attach + ทุก 30 วิ เป็น source of truth (ได้ทั้งรายชื่อ + max players ทุก server type)
 แล้วอัปเดตทันทีระหว่างรอบจากบรรทัด `joined/left the game`. **TPS มีเฉพาะ Paper/Spigot** — probe ด้วย
 คำสั่ง `tps` ครั้งแรก ถ้าเจอ `Unknown command` (vanilla/fabric/forge) จำไว้แล้วเลิกถามตลอด session
@@ -356,6 +367,43 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   key `custom` ใน `RoleKey`/`ServerRoleKey` เหลือไว้เป็น fallback ของ **ข้อมูลเก่า** ที่เคยติ๊กรายข้อ
   ไว้ตอน UI ยังให้แก้ได้ (จงใจไม่ล้างใน migration — เขียนทับสิทธิ์ user เงียบ ๆ อันตรายกว่า)
   เลือก preset ทับเมื่อไหร่ก็หายไปเอง; เพิ่ม preset ใหม่ = แก้ที่ `ROLE_PRESETS`/`SERVER_ROLE_PRESETS`
+
+**Game definition (abstraction ของ "เกม") — อ่านก่อนแตะอะไรที่เป็นของ Minecraft**
+
+`servers.game` (migration `00019`) ผูก server กับเกมหนึ่งเกม, `servers.server_type` = variant
+ภายในเกมนั้น. ความรู้เฉพาะเกมอยู่ใน `Definition` ตัวเดียวต่อเกมต่อ app:
+
+- `apps/control-plane/internal/games` — `Definition` + `Registry` (validation/metadata ฝั่ง API):
+  `Variants` (id/label/NeedsEULA), `DefaultHostPort`, `MinMemoryMB`, `Version` (MaxLen / ListVersions
+  จาก upstream / ValidDetected / RuntimeImage), `Config` (FileName / Fields / Format / EditableWhileRunning),
+  `Players` (IdentityService / ValidateUsername / ConsoleSafeUsername / Lookup / Face / Allowlist /
+  StateFiles / Actions / Playtime)
+  → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft` (`versions.go` แทน `internal/versions` เดิม,
+  `runtime.go` แทน `jobs/image.go` เดิม, `properties.go`, `players.go`)
+- `apps/node-agent/internal/games` — `Definition` + `Registry` ฝั่งรันจริง: `Variants`, `ContainerPort`,
+  `StopCommand`, `LaunchScript`, `LaunchEnv`, `SeedFiles`, `Provision`, `RuntimeImage`, `Import`
+  (Ext/NameHints/MainArtifact/DetectVersion), `Console` (RosterCommand/MetricCommand/Parse)
+  + `InstanceLookup` ที่อ่าน `.mcpanel/meta.json` เพื่อรู้ว่า instance บน disk เป็นเกมอะไร
+  → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft`
+- **สอง app ไม่ import ข้ามกัน** (คนละ module) — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
+  ซึ่งเดินทางผ่าน job payload (`CreateServer.game`/`ImportServer.game` ใน proto) และ `.mcpanel/meta.json`
+  ⚠️ การ map เวอร์ชัน → Java image มีสองที่ (control-plane เลือก image ให้ job, agent เลือกให้
+  forge installer) — **แก้ที่หนึ่งต้องแก้อีกที่เสมอ** มี test คุมทั้งสองฝั่ง
+- ชั้นอื่นทั้งหมดทำงานผ่าน definition: httpapi ใช้ `a.gameOf(w, srv)` / `a.gameFromQuery(w, r)`,
+  jobs ใช้ `d.runtimeImage(srv)`, provision/runner/mcstate ใช้ registry + `InstanceLookup`
+- field ที่ยังใช้ศัพท์ Minecraft คงชื่อไว้เพื่อไม่ break contract: `mc_version` (= เวอร์ชันของเกม),
+  `server_type` (= variant), `whitelist_enabled`, `tps` (= metric จาก console), error code
+  `mojang_unavailable`, path `/api/servers/{id}/properties` — **อย่าเปลี่ยนชื่อโดยไม่แก้ web พร้อมกัน**
+
+**เพิ่มเกมใหม่ / แก้ของเกมเดิม (เช็คลิสต์บังคับ)**
+1. แก้พฤติกรรมของ Minecraft = แก้ใน `internal/games/minecraft` ของ app ที่เกี่ยวข้อง
+   **ห้ามแก้ที่ handler/runner** ถ้าสิ่งนั้นเป็นความรู้ของเกม
+2. เพิ่มเกมใหม่ = เพิ่ม package `internal/games/<เกม>` **ทั้งสองฝั่ง** (id ต้องตรงกัน) แล้ว
+   ลงทะเบียนใน `games.NewRegistry(...)` ที่ `apps/control-plane/cmd/server/main.go` และ
+   `apps/node-agent/cmd/agent/main.go`
+3. web: `DEFAULT_GAME` ใน `lib/types.ts` เป็นค่าคงที่เพราะยังมีเกมเดียว — มีเกมที่สองเมื่อไร
+   ต้องกลายเป็น state ของ wizard + ดึงรายการจาก `GET /api/meta/games`
+4. `docs/api.md` + `docs/architecture.md` (หัวข้อ Game definition)
 
 **เพิ่ม feature ใหม่ → ต้องแตะ permission (เช็คลิสต์บังคับ)**
 1. `internal/httpapi/capabilities.go` — เพิ่ม const + entry ใน `capabilityCatalog`
@@ -411,7 +459,8 @@ agent FileWrite (stream เดียวกับ file manager, SafeJoin ที�
 
 **`memory_mb` = container limit ไม่ใช่ heap**: ค่าที่ user ตั้ง = hard limit ของทั้ง container
 (cgroup memory + memorySwap) → `stats.memory_limit_mb` คืนค่าเดียวกับที่ตั้ง. agent คำนวณ `-Xmx`
-เองด้วย `runner.HeapMB()` (`internal/runner/runner.go`) โดยกัน non-heap ของ JVM ไว้ ~1/3 (floor 256MB,
+เองด้วย `minecraft.HeapMB()` (`internal/games/minecraft/launch.go` ของ agent — เป็นของ game
+definition เพราะเป็นเรื่องของ JVM ที่เกมนี้ใช้; runner แค่เรียก `def.LaunchEnv(memoryMB)`) โดยกัน non-heap ของ JVM ไว้ ~1/3 (floor 256MB,
 cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส่งเข้า container เป็น env `MC_MEMORY_MB` ให้ launch.sh ใช้ —
 **อย่ากลับไปตีความ `memory_mb` เป็น heap** เพราะจะทำให้ admission control ข้างล่างนับต่ำกว่าจริง 1.5x
 

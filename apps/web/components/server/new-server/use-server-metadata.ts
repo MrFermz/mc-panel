@@ -9,6 +9,7 @@ import {
   nodesResponseSchema,
   serversResponseSchema,
   versionsResponseSchema,
+  DEFAULT_GAME,
   type MetaNode,
   type MetaServerType,
 } from "@/lib/types";
@@ -131,16 +132,20 @@ export function useServerMetadata(): ServerMetadata {
     retry: false,
   });
 
+  // variant + รายการเวอร์ชันเป็นของ game definition — ทุก query ต้องบอกว่าถามในนามเกมไหน
   const typesQuery = useQuery({
-    queryKey: ["meta", "server-types"],
-    queryFn: () =>
-      apiGet("/api/meta/server-types", metaServerTypesResponseSchema),
-  });
-  const versionsQuery = useQuery({
-    queryKey: ["meta", "versions", serverType],
+    queryKey: ["meta", "server-types", DEFAULT_GAME],
     queryFn: () =>
       apiGet(
-        `/api/meta/versions?type=${encodeURIComponent(serverType)}`,
+        `/api/meta/server-types?game=${encodeURIComponent(DEFAULT_GAME)}`,
+        metaServerTypesResponseSchema,
+      ),
+  });
+  const versionsQuery = useQuery({
+    queryKey: ["meta", "versions", DEFAULT_GAME, serverType],
+    queryFn: () =>
+      apiGet(
+        `/api/meta/versions?game=${encodeURIComponent(DEFAULT_GAME)}&type=${encodeURIComponent(serverType)}`,
         versionsResponseSchema,
       ),
     enabled: serverType !== "",

@@ -59,6 +59,11 @@ export const nodeSchema = z.object({
 });
 export type Node = z.infer<typeof nodeSchema>;
 
+// GAME คือ id ของ game definition ฝั่ง backend (internal/games) — เฟสนี้มีเกมเดียว
+// จึงเป็นค่าคงที่ ไม่มี UI ให้เลือก. เพิ่มเกมที่สองเมื่อไรค่านี้ต้องกลายเป็น state ของฟอร์ม
+// และดึงรายการจาก GET /api/meta/games
+export const DEFAULT_GAME = "minecraft";
+
 export const serverTypeIdSchema = z.enum([
   "vanilla",
   "paper",
@@ -94,7 +99,8 @@ export const serverStatsSchema = z.object({
   // online_players ว่าง = ยังไม่ได้ resync รอบแรก หรือไม่มีใครออนไลน์
   online_players: z.array(z.string()).default([]),
   max_players: z.number().default(0),
-  // tps 0 = server type ไม่มีคำสั่ง `tps` (vanilla/fabric/forge) — มีเฉพาะ paper/spigot
+  // tps = metric ประจำเกมที่อ่านจาก console; minecraft: 0 = server type ไม่มีคำสั่ง `tps`
+  // (vanilla/fabric/forge) — มีเฉพาะ paper/spigot
   tps: z.number().default(0),
   updated_at: z.string(),
 });
@@ -105,6 +111,8 @@ export const serverSchema = z.object({
   node_id: z.string(),
   owner_id: z.string().nullable().default(null),
   name: z.string(),
+  // game = เกมของ instance นี้, server_type = variant ภายในเกมนั้น
+  game: z.string().default(DEFAULT_GAME),
   server_type: serverTypeIdSchema,
   mc_version: z.string(),
   memory_mb: z.number(),

@@ -15,6 +15,7 @@ import (
 	jobv1 "github.com/mc-panel/proto/gen/go/mcpanel/job/v1"
 
 	"github.com/mc-panel/control-plane/internal/events"
+	"github.com/mc-panel/control-plane/internal/games"
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
@@ -24,16 +25,30 @@ type Dispatcher struct {
 	// events push ความคืบหน้าของ job + สถานะ transition ตอน dispatch ไป browser
 	// (nil ได้ในเทสต์ — emit* เช็คก่อนใช้)
 	events *events.Hub
-	log    *slog.Logger
+	// games ใช้เลือก runtime image ของ start_server ตาม game definition ของ server นั้น
+	games *games.Registry
+	log   *slog.Logger
 }
 
-func NewDispatcher(st *store.Store, js jetstream.JetStream, ev *events.Hub, log *slog.Logger) *Dispatcher {
-	return &Dispatcher{st: st, js: js, events: ev, log: log}
+func NewDispatcher(st *store.Store, js jetstream.JetStream, ev *events.Hub, gr *games.Registry, log *slog.Logger) *Dispatcher {
+	return &Dispatcher{st: st, js: js, events: ev, games: gr, log: log}
+}
+
+// runtimeImage เลือก image ของ start_server จาก game definition ของ server
+// เกมที่ registry ไม่รู้จัก (deploy ผิด) = คืน "" ให้ agent เป็นคน fail ชัด ๆ ตอน start
+func (d *Dispatcher) runtimeImage(srv *store.Server) string {
+	def, ok := d.games.Resolve(srv.Game)
+	if !ok || def.Version.RuntimeImage == nil {
+		d.log.Error("dispatch start with unknown game", "server_id", srv.ID, "game", srv.Game)
+		return ""
+	}
+	return def.Version.RuntimeImage(srv.ServerType, srv.MCVersion)
 }
 
 func (d *Dispatcher) CreateServer(ctx context.Context, srv *store.Server, acceptEula bool, requestedBy uuid.UUID) (*store.Job, error) {
 	env := &jobv1.JobEnvelope{
 		Payload: &jobv1.JobEnvelope_CreateServer{CreateServer: &jobv1.CreateServer{
+			Game:       srv.Game,
 			ServerType: srv.ServerType,
 			McVersion:  srv.MCVersion,
 			AcceptEula: acceptEula,
@@ -48,6 +63,7 @@ func (d *Dispatcher) CreateServer(ctx context.Context, srv *store.Server, accept
 func (d *Dispatcher) ImportServer(ctx context.Context, srv *store.Server, acceptEula bool, archivePath string, requestedBy uuid.UUID) (*store.Job, error) {
 	env := &jobv1.JobEnvelope{
 		Payload: &jobv1.JobEnvelope_ImportServer{ImportServer: &jobv1.ImportServer{
+			Game:        srv.Game,
 			ServerType:  srv.ServerType,
 			McVersion:   srv.MCVersion,
 			AcceptEula:  acceptEula,
@@ -66,7 +82,7 @@ func (d *Dispatcher) StartServer(ctx context.Context, srv *store.Server, request
 		Payload: &jobv1.JobEnvelope_StartServer{StartServer: &jobv1.StartServer{
 			MemoryMb:    int32(srv.MemoryMB),
 			HostPort:    int32(hostPort),
-			DockerImage: DockerImage(srv.ServerType, srv.MCVersion),
+			DockerImage: d.runtimeImage(srv),
 		}},
 	}
 	// สถานะ running จริงมาจาก ServerStatus ผ่าน gRPC — dispatch แค่ set starting

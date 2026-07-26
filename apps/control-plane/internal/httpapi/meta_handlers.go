@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/mc-panel/control-plane/internal/auth"
+	"github.com/mc-panel/control-plane/internal/games"
 	"github.com/mc-panel/control-plane/internal/store"
-	"github.com/mc-panel/control-plane/internal/versions"
 )
 
 func (a *API) handleGetJob(w http.ResponseWriter, r *http.Request) {
@@ -58,32 +58,62 @@ func (a *API) canSeeJob(r *http.Request, user *store.User, job *store.Job) bool 
 	return job.RequestedBy != nil && *job.RequestedBy == user.ID
 }
 
+type gameMeta struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// handleGames: เกมทั้งหมดที่ instance นี้รองรับ (เฟสนี้มีแค่ minecraft) — endpoint meta
+// อื่น ๆ รับ `?game=` ที่หยิบมาจากรายการนี้ได้ทุกเส้น ว่างไว้ = เกม default
+func (a *API) handleGames(w http.ResponseWriter, r *http.Request) {
+	defs := a.games.All()
+	views := make([]gameMeta, 0, len(defs))
+	for _, d := range defs {
+		views = append(views, gameMeta{ID: d.ID, Label: d.Label})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"games": views})
+}
+
 type serverTypeMeta struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
 	NeedsEula bool   `json:"needs_eula"`
 }
 
+// handleServerTypes คืน variant ของเกมที่ระบุ (`?game=`, ว่าง = default) —
+// รายการนี้เป็นของ game definition ไม่ใช่ค่าคงที่ของ handler
 func (a *API) handleServerTypes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"types": []serverTypeMeta{
-		{ID: "vanilla", Label: "Vanilla", NeedsEula: true},
-		{ID: "paper", Label: "Paper", NeedsEula: true},
-		{ID: "fabric", Label: "Fabric", NeedsEula: true},
-		{ID: "forge", Label: "Forge", NeedsEula: true},
-		{ID: "velocity", Label: "Velocity (proxy)", NeedsEula: false},
-	}})
+	def, ok := a.gameFromQuery(w, r)
+	if !ok {
+		return
+	}
+	views := make([]serverTypeMeta, 0, len(def.Variants))
+	for _, v := range def.Variants {
+		views = append(views, serverTypeMeta{ID: v.ID, Label: v.Label, NeedsEula: v.NeedsEULA})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"types": views})
 }
 
 func (a *API) handleVersions(w http.ResponseWriter, r *http.Request) {
-	serverType := r.URL.Query().Get("type")
-	list, err := a.versions.Versions(r.Context(), serverType)
-	if errors.Is(err, versions.ErrUnknownType) {
+	def, ok := a.gameFromQuery(w, r)
+	if !ok {
+		return
+	}
+	variant := r.URL.Query().Get("type")
+	if !def.HasVariant(variant) || def.Version.List == nil {
 		writeError(w, http.StatusBadRequest, "invalid_server_type",
-			"type must be one of: vanilla, paper, fabric, forge, velocity")
+			"type must be one of: "+def.VariantList())
+		return
+	}
+
+	list, err := def.Version.List(r.Context(), variant)
+	if errors.Is(err, games.ErrUnknownVariant) {
+		writeError(w, http.StatusBadRequest, "invalid_server_type",
+			"type must be one of: "+def.VariantList())
 		return
 	}
 	if err != nil {
-		a.log.Error("fetch upstream versions failed", "type", serverType, "error", err)
+		a.log.Error("fetch upstream versions failed", "game", def.ID, "type", variant, "error", err)
 		writeError(w, http.StatusBadGateway, "upstream_unavailable",
 			"failed to fetch versions from upstream")
 		return
@@ -118,9 +148,15 @@ func (a *API) handleMetaNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"nodes": views})
 }
 
-// handleMetaNextPort: suggestion เท่านั้น — host_port ว่างต่ำสุดบน node (เริ่ม 25565)
-// สำหรับ prefill ฟอร์มสร้าง server. ไม่ reserve จริง (create เป็นคน enforce UNIQUE)
+// handleMetaNextPort: suggestion เท่านั้น — host_port ว่างต่ำสุดบน node นับจาก port เริ่มต้น
+// ของเกมนั้น (minecraft = 25565) สำหรับ prefill ฟอร์มสร้าง server
+// ไม่ reserve จริง (create เป็นคน enforce UNIQUE)
 func (a *API) handleMetaNextPort(w http.ResponseWriter, r *http.Request) {
+	def, ok := a.gameFromQuery(w, r)
+	if !ok {
+		return
+	}
+
 	nodeID, err := uuid.Parse(r.URL.Query().Get("node_id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "node_id must be a valid UUID")
@@ -136,7 +172,7 @@ func (a *API) handleMetaNextPort(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	port, err := a.st.NextFreeHostPort(r.Context(), nodeID)
+	port, err := a.st.NextFreeHostPort(r.Context(), nodeID, def.DefaultHostPort)
 	if err != nil {
 		a.log.Error("next free host port failed", "node_id", nodeID, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")

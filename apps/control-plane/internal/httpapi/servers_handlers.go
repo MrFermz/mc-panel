@@ -14,10 +14,6 @@ import (
 	"github.com/mc-panel/control-plane/internal/store"
 )
 
-var validServerTypes = map[string]bool{
-	"vanilla": true, "paper": true, "fabric": true, "forge": true, "velocity": true,
-}
-
 // loadServerAccess โหลด server + permission ของ user ปัจจุบัน
 // เขียน error response เองเมื่อไม่เจอ/ไม่มีสิทธิ์เห็น (viewer ขึ้นไป)
 // perm เป็น nil สำหรับ admin (ทำได้ทุกอย่างโดยไม่มีแถว permission)
@@ -262,6 +258,7 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
 		NodeID     string `json:"node_id"`
+		Game       string `json:"game"`
 		ServerType string `json:"server_type"`
 		MCVersion  string `json:"mc_version"`
 		MemoryMB   int    `json:"memory_mb"`
@@ -274,33 +271,43 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
+	req.Game = strings.TrimSpace(req.Game)
 	req.MCVersion = strings.TrimSpace(req.MCVersion)
+
+	// game ว่าง = เกม default (client เก่าที่ยังไม่ส่ง field นี้)
+	def, ok := a.games.Resolve(req.Game)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_game", "unknown game: "+req.Game)
+		return
+	}
 
 	if req.Name == "" || len(req.Name) > 100 {
 		writeError(w, http.StatusBadRequest, "invalid_name", "name is required (max 100 characters)")
 		return
 	}
-	if !validServerTypes[req.ServerType] {
+	if !def.HasVariant(req.ServerType) {
 		writeError(w, http.StatusBadRequest, "invalid_server_type",
-			"server_type must be one of: vanilla, paper, fabric, forge, velocity")
+			"server_type must be one of: "+def.VariantList())
 		return
 	}
-	if req.MCVersion == "" || len(req.MCVersion) > 50 {
-		writeError(w, http.StatusBadRequest, "invalid_mc_version", "mc_version is required (max 50 characters)")
+	if req.MCVersion == "" || len(req.MCVersion) > def.Version.MaxLen {
+		writeError(w, http.StatusBadRequest, "invalid_mc_version",
+			"mc_version is required (max "+strconv.Itoa(def.Version.MaxLen)+" characters)")
 		return
 	}
-	if req.MemoryMB < 256 {
-		writeError(w, http.StatusBadRequest, "invalid_memory", "memory_mb must be at least 256")
+	if req.MemoryMB < def.MinMemoryMB {
+		writeError(w, http.StatusBadRequest, "invalid_memory",
+			"memory_mb must be at least "+strconv.Itoa(def.MinMemoryMB))
 		return
 	}
 	if !validateHostPort(req.HostPort) {
 		writeError(w, http.StatusBadRequest, "invalid_host_port", "host_port must be between 1024 and 65535")
 		return
 	}
-	// velocity เป็น proxy ไม่รัน Mojang server jar — ไม่มี EULA ให้ยอมรับ
-	if !req.AcceptEula && req.ServerType != "velocity" {
+	// variant ที่ไม่รัน jar ของเกม (เช่น velocity ที่เป็น proxy) ไม่มี EULA ให้ยอมรับ
+	if !req.AcceptEula && def.NeedsEULA(req.ServerType) {
 		writeError(w, http.StatusBadRequest, "eula_required",
-			"you must accept the Minecraft EULA to create this server")
+			"you must accept the "+def.Label+" EULA to create this server")
 		return
 	}
 
@@ -327,7 +334,7 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	srv, err := a.st.CreateServerWithOwner(r.Context(), nodeID, user.ID,
-		req.Name, req.ServerType, req.MCVersion, req.MemoryMB, req.HostPort)
+		req.Name, def.ID, req.ServerType, req.MCVersion, req.MemoryMB, req.HostPort)
 	if store.IsUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "host_port_taken", "host_port is already used on this node")
 		return
@@ -339,8 +346,8 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.audit(r, &user.ID, &srv.ID, "server_created", map[string]any{
-		"name": srv.Name, "server_type": srv.ServerType, "mc_version": srv.MCVersion,
-		"node_id": srv.NodeID.String(),
+		"name": srv.Name, "game": srv.Game, "server_type": srv.ServerType,
+		"mc_version": srv.MCVersion, "node_id": srv.NodeID.String(),
 	})
 
 	// row เกิดแล้ว → แจ้ง browser refetch server list (dashboard อัปเดตทันที)
@@ -393,6 +400,10 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	def, ok := a.gameOf(w, srv)
+	if !ok {
+		return
+	}
 
 	var req struct {
 		Name     *string `json:"name"`
@@ -412,8 +423,9 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		}
 		req.Name = &trimmed
 	}
-	if req.MemoryMB != nil && *req.MemoryMB < 256 {
-		writeError(w, http.StatusBadRequest, "invalid_memory", "memory_mb must be at least 256")
+	if req.MemoryMB != nil && *req.MemoryMB < def.MinMemoryMB {
+		writeError(w, http.StatusBadRequest, "invalid_memory",
+			"memory_mb must be at least "+strconv.Itoa(def.MinMemoryMB))
 		return
 	}
 	// host_port = 0 หมายถึงเลิก expose host port (set NULL)

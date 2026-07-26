@@ -8,12 +8,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const serverCols = `id, node_id, owner_id, name, server_type, mc_version,
+const serverCols = `id, node_id, owner_id, name, game, server_type, mc_version,
 	memory_mb, host_port, status, created_at, updated_at, deleted_at`
 
 func scanServer(row pgx.Row) (*Server, error) {
 	var v Server
-	err := row.Scan(&v.ID, &v.NodeID, &v.OwnerID, &v.Name, &v.ServerType,
+	err := row.Scan(&v.ID, &v.NodeID, &v.OwnerID, &v.Name, &v.Game, &v.ServerType,
 		&v.MCVersion, &v.MemoryMB, &v.HostPort, &v.Status, &v.CreatedAt, &v.UpdatedAt,
 		&v.DeletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -40,7 +40,7 @@ func collectServers(rows pgx.Rows) ([]*Server, error) {
 
 // CreateServerWithOwner ทำใน tx เดียว: server row + permission owner ของคนสร้าง
 // เพื่อไม่ให้เกิด server ที่ไม่มี owner ถ้า insert permission ล้ม
-func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.UUID, name, serverType, mcVersion string, memoryMB int, hostPort *int) (*Server, error) {
+func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.UUID, name, game, serverType, mcVersion string, memoryMB int, hostPort *int) (*Server, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -48,10 +48,10 @@ func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.
 	defer tx.Rollback(ctx)
 
 	srv, err := scanServer(tx.QueryRow(ctx, `
-		INSERT INTO servers (node_id, owner_id, name, server_type, mc_version, memory_mb, host_port)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO servers (node_id, owner_id, name, game, server_type, mc_version, memory_mb, host_port)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+serverCols,
-		nodeID, ownerID, name, serverType, mcVersion, memoryMB, hostPort))
+		nodeID, ownerID, name, game, serverType, mcVersion, memoryMB, hostPort))
 	if err != nil {
 		return nil, err
 	}
