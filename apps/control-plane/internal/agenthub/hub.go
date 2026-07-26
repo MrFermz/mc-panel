@@ -12,12 +12,12 @@ import (
 
 	"github.com/google/uuid"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 
-	"github.com/mc-panel/control-plane/internal/console"
-	"github.com/mc-panel/control-plane/internal/events"
-	"github.com/mc-panel/control-plane/internal/serverstats"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/console"
+	"github.com/game-manager/control-plane/internal/events"
+	"github.com/game-manager/control-plane/internal/serverstats"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 const (

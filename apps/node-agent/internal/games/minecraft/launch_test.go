@@ -46,8 +46,8 @@ func TestLaunchScript_ExecsJavaLast(t *testing.T) {
 		if !strings.Contains(script, "exec ") {
 			t.Errorf("%s: launch script must contain exec", variant)
 		}
-		if !strings.Contains(script, "${MC_MEMORY_MB") {
-			t.Errorf("%s: launch script must read MC_MEMORY_MB from env", variant)
+		if !strings.Contains(script, "${GM_MEMORY_MB") {
+			t.Errorf("%s: launch script must read GM_MEMORY_MB from env", variant)
 		}
 	}
 

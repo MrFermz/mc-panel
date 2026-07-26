@@ -339,7 +339,7 @@ export default function AdminServersPage() {
                         </div>
                       </TableCell>
                       <TableCell className="capitalize">
-                        {s.server_type} {s.mc_version}
+                        {s.variant} {s.game_version}
                       </TableCell>
                       <TableCell>
                         {trashed ? (

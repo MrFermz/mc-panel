@@ -14,6 +14,7 @@ export default function PlayersPage() {
     >
       {({ server, can }) => (
         <ServerPlayers
+          game={server.game}
           serverId={server.id}
           isRunning={server.status === "running"}
           onlineNames={server.stats?.online_players ?? []}

@@ -9,8 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/playerface"
+	"github.com/game-manager/control-plane/internal/games"
 )
 
 // ไฟล์ผู้เล่นที่ root ของ server dir
@@ -32,14 +31,14 @@ const (
 // ไม่งั้นเป็น command injection เข้า server console ได้ตรง ๆ (WriteInput ต่อ "\n" ท้ายคำสั่ง)
 var safeUsernameRe = regexp.MustCompile(`^[A-Za-z0-9_.*-]{1,32}$`)
 
-func playerSpec(faces *playerface.Cache) games.PlayerSpec {
+func playerSpec(avatars games.AvatarFetcher) games.PlayerSpec {
 	return games.PlayerSpec{
 		IdentityService:     "Mojang",
 		UsernameRule:        "username must be 3-16 characters of A-Z, a-z, 0-9, or underscore",
 		ValidateUsername:    isValidUsername,
 		ConsoleSafeUsername: safeUsernameRe.MatchString,
 		Lookup:              lookupProfile,
-		Face:                faceFetcher(faces),
+		Avatar:              avatars,
 		Allowlist: games.AllowlistSpec{
 			FileName: whitelistFileName,
 			// ต้อง white-list=true ใน server.properties ถึงจะ enforce จริง
@@ -62,10 +61,10 @@ func playerSpec(faces *playerface.Cache) games.PlayerSpec {
 			"pardon": "pardon",
 		},
 		Playtime: &games.PlaytimeSpec{
-			WorldNameKey:     "level-name",
-			DefaultWorldName: defaultLevelName,
-			Path:             playtimePath,
-			Decode:           decodePlaytime,
+			SaveNameKey:     "level-name",
+			DefaultSaveName: defaultLevelName,
+			Path:            playtimePath,
+			Decode:          decodePlaytime,
 		},
 	}
 }

@@ -20,11 +20,11 @@ func runtimeImage(prefix, variant, version string) string {
 // velocity → java ใหม่สุด, MC <= 1.16.5 → java 8, 1.17–1.20.4 → java 17,
 // 1.20.5–1.21.x → java 21, calendar version (26.x…) และ parse ไม่ได้ → java ใหม่สุด
 // (Java backward-compatible: jar เก่ารันบน JVM ใหม่ได้ ปลอดภัยเป็น default)
-func javaTagFor(variant, mcVersion string) string {
+func javaTagFor(variant, gameVersion string) string {
 	if variant == "velocity" {
 		return latestJavaTag
 	}
-	parts := strings.Split(strings.TrimSpace(mcVersion), ".")
+	parts := strings.Split(strings.TrimSpace(gameVersion), ".")
 	if len(parts) < 2 {
 		return latestJavaTag
 	}

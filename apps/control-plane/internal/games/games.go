@@ -1,7 +1,7 @@
 // Package games นิยาม "เกม" ที่ panel รองรับ (game definition)
 //
 // ความรู้เฉพาะเกมทุกอย่างที่ control-plane ต้องใช้ — ชนิดของ server (variant), กติกาเวอร์ชัน,
-// runtime image, catalog ของไฟล์ config, กติกาผู้เล่น/whitelist/คำสั่ง moderation — อยู่ใน
+// runtime image, catalog ของไฟล์ config, กติกาผู้เล่น/allowlist/คำสั่ง moderation — อยู่ใน
 // Definition ตัวเดียว ส่วนที่เหลือของ control-plane ทำงานผ่าน Registry นี้เท่านั้น
 // **ห้ามเขียน switch ตามชื่อเกมหรือชื่อ variant กระจายอยู่ในโค้ดอื่นอีก** — เพิ่มเกมใหม่ต้อง
 // แปลว่า "เพิ่ม Definition หนึ่งตัว" ไม่ใช่ไล่แก้ handler ทีละเส้น
@@ -28,16 +28,19 @@ var (
 	ErrUnknownVariant = errors.New("games: unknown variant")
 	// ErrPlayerNotFound: identity service ของเกมยืนยันว่าไม่มีผู้เล่นชื่อนี้
 	ErrPlayerNotFound = errors.New("games: player not found")
-	// ErrNoFace: ผู้เล่นคนนี้ไม่มีรูปหน้าให้แสดง (uuid offline-mode / ไม่มี texture)
-	ErrNoFace = errors.New("games: no face for player")
+	// ErrNoAvatar: ผู้เล่นคนนี้ไม่มีรูปประจำตัวให้แสดง (uuid offline-mode / ไม่มี texture)
+	ErrNoAvatar = errors.New("games: no avatar for player")
 )
 
 // Definition = ทุกอย่างที่ control-plane ต้องรู้เกี่ยวกับเกมหนึ่งเกม
 type Definition struct {
 	// ID เดินทางไปกับ job payload และเก็บใน servers.game — ต้องตรงกับ id ฝั่ง agent
 	ID string
-	// Label ชื่อที่โผล่ใน UI และในข้อความ error ของ API ("Minecraft EULA", "Minecraft account")
+	// Label ชื่อที่โผล่ใน UI และในข้อความ error ของ API
 	Label string
+	// LicenseName ชื่อข้อตกลงที่ user ต้องยอมรับก่อนสร้าง server ของเกมนี้
+	// (minecraft = "Minecraft EULA") — โผล่ในข้อความ 400 license_required
+	LicenseName string
 
 	// Variants = ชนิดของ server ในเกมนี้ เรียงตามลำดับที่อยากให้ UI แสดง
 	Variants []Variant
@@ -53,15 +56,16 @@ type Definition struct {
 }
 
 // Variant = ชนิดของ server ภายในเกมหนึ่ง (minecraft: vanilla/paper/fabric/forge/velocity)
-// เดินทางใน API/DB ในชื่อเดิม `server_type`
+// เดินทางใน API/DB ในชื่อเดิม `variant`
 type Variant struct {
 	ID    string
 	Label string
-	// NeedsEULA = variant นี้ต้องให้ user ติ๊กยอมรับ EULA เองก่อนสร้าง (ห้าม default true)
-	NeedsEULA bool
+	// RequiresLicense = variant นี้ต้องให้ user ติ๊กยอมรับ license ของเกมเองก่อนสร้าง
+	// (ห้าม default true เด็ดขาด — user ต้องติ๊กเอง)
+	RequiresLicense bool
 }
 
-// Variant คืน variant ตาม id — ไม่รู้จัก = ok=false (caller ตอบ 400 invalid_server_type)
+// Variant คืน variant ตาม id — ไม่รู้จัก = ok=false (caller ตอบ 400 invalid_variant)
 func (d *Definition) Variant(id string) (Variant, bool) {
 	for _, v := range d.Variants {
 		if v.ID == id {
@@ -77,11 +81,11 @@ func (d *Definition) HasVariant(id string) bool {
 	return ok
 }
 
-// NeedsEULA = variant นี้บังคับให้ยอมรับ EULA ไหม (variant ที่ไม่รู้จักถือว่าไม่บังคับ —
+// RequiresLicense = variant นี้บังคับให้ยอมรับ EULA ไหม (variant ที่ไม่รู้จักถือว่าไม่บังคับ —
 // caller เช็ค HasVariant ก่อนอยู่แล้ว จึงไปไม่ถึงตรงนี้)
-func (d *Definition) NeedsEULA(variantID string) bool {
+func (d *Definition) RequiresLicense(variantID string) bool {
 	v, ok := d.Variant(variantID)
-	return ok && v.NeedsEULA
+	return ok && v.RequiresLicense
 }
 
 // VariantList = รายชื่อ variant คั่นด้วย ", " สำหรับข้อความ error ("must be one of: ...")
@@ -95,7 +99,7 @@ func (d *Definition) VariantList() string {
 
 // ---------- เวอร์ชันของ server ----------
 
-// VersionSpec = กติกาเรื่องเวอร์ชันของเกม (field `mc_version` ใน API/DB — ชื่อเดิมที่คงไว้
+// VersionSpec = กติกาเรื่องเวอร์ชันของเกม (field `game_version` ใน API/DB — ชื่อเดิมที่คงไว้
 // เพื่อไม่ break contract, ความหมายคือ "เวอร์ชันของเกม")
 type VersionSpec struct {
 	// MaxLen = ความยาวสูงสุดที่ยอมรับจาก user
@@ -212,8 +216,9 @@ type PlayerSpec struct {
 	// Lookup verify ชื่อกับ identity service → uuid + ชื่อในรูป canonical
 	// คืน ErrPlayerNotFound เมื่อไม่มีตัวตน, error อื่น = upstream ไม่พร้อม
 	Lookup func(ctx context.Context, username string) (Profile, error)
-	// Face รูปหน้าผู้เล่นเป็น PNG (nil = เกมนี้ไม่มีรูป) — คืน ErrNoFace เมื่อไม่มี skin
-	Face func(ctx context.Context, id uuid.UUID) ([]byte, error)
+	// Avatar รูปประจำตัวผู้เล่นเป็น PNG (nil = เกมนี้ไม่มีรูป) — คืน ErrNoAvatar เมื่อไม่มีรูป
+	// ปกติ definition จะเสียบ avatarcache.Cache.Avatar เข้ามา ไม่ยิง upstream ตรง ๆ
+	Avatar AvatarFetcher
 
 	// Allowlist ไฟล์รายชื่อที่ panel rebuild จาก DB ทุกครั้งที่รายชื่อเปลี่ยน
 	Allowlist AllowlistSpec
@@ -224,6 +229,9 @@ type PlayerSpec struct {
 	// Playtime ที่อยู่ของสถิติเวลาเล่น (nil = เกมนี้ไม่มี)
 	Playtime *PlaytimeSpec
 }
+
+// AvatarFetcher คืน PNG รูปประจำตัวของผู้เล่นหนึ่งคน — คืน ErrNoAvatar เมื่อไม่มีรูป
+type AvatarFetcher func(ctx context.Context, id uuid.UUID) ([]byte, error)
 
 // Profile = ผลของการ verify ชื่อกับ identity service
 type Profile struct {
@@ -275,12 +283,12 @@ type PlayerRef struct {
 
 // PlaytimeSpec = ที่อยู่ของสถิติเวลาเล่นต่อผู้เล่น (ไฟล์ละคน)
 type PlaytimeSpec struct {
-	// WorldNameKey = key ใน ConfigSpec ที่บอกชื่อ world (path ของไฟล์อิงชื่อนี้)
-	WorldNameKey string
-	// DefaultWorldName ใช้เมื่ออ่าน config ไม่ได้/ไม่มีค่า
-	DefaultWorldName string
+	// SaveNameKey = key ใน ConfigSpec ที่บอกชื่อ save/world ปัจจุบัน (path ของไฟล์อิงชื่อนี้)
+	SaveNameKey string
+	// DefaultSaveName ใช้เมื่ออ่าน config ไม่ได้/ไม่มีค่า
+	DefaultSaveName string
 	// Path ที่อยู่ของไฟล์สถิติของผู้เล่นคนหนึ่ง (relative ต่อ jail)
-	Path func(worldName string, playerUUID uuid.UUID) string
+	Path func(saveName string, playerUUID uuid.UUID) string
 	// Decode แปลงเนื้อไฟล์เป็นวินาที — อ่านไม่ได้/ไม่รู้ให้คืน 0
 	Decode func(content []byte) int64
 }

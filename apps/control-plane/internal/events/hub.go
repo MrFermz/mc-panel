@@ -13,22 +13,22 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 // ServerStatsPayload มิเรอร์ httpapi.serverStatsView field-for-field
 type ServerStatsPayload struct {
-	CPUPercent    float64   `json:"cpu_percent"`
-	MemoryUsedMB  int64     `json:"memory_used_mb"`
-	MemoryLimitMB int64     `json:"memory_limit_mb"`
-	NetRxBps      float64   `json:"net_rx_bps"`
-	NetTxBps      float64   `json:"net_tx_bps"`
-	DiskReadBps   float64   `json:"disk_read_bps"`
+	CPUPercent    float64    `json:"cpu_percent"`
+	MemoryUsedMB  int64      `json:"memory_used_mb"`
+	MemoryLimitMB int64      `json:"memory_limit_mb"`
+	NetRxBps      float64    `json:"net_rx_bps"`
+	NetTxBps      float64    `json:"net_tx_bps"`
+	DiskReadBps   float64    `json:"disk_read_bps"`
 	DiskWriteBps  float64    `json:"disk_write_bps"`
 	StartedAt     *time.Time `json:"started_at"`
 	OnlinePlayers []string   `json:"online_players"`
 	MaxPlayers    int        `json:"max_players"`
-	TPS           float64    `json:"tps"`
+	TickRate      float64    `json:"tick_rate"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 

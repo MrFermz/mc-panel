@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 type userCtxKey struct{}

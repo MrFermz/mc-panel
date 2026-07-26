@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 func (a *API) handleGetJob(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +63,7 @@ type gameMeta struct {
 	Label string `json:"label"`
 }
 
-// handleGames: เกมทั้งหมดที่ instance นี้รองรับ (เฟสนี้มีแค่ minecraft) — endpoint meta
+// handleGames: เกมทั้งหมดที่ instance นี้รองรับ (มาจาก registry) — endpoint meta
 // อื่น ๆ รับ `?game=` ที่หยิบมาจากรายการนี้ได้ทุกเส้น ว่างไว้ = เกม default
 func (a *API) handleGames(w http.ResponseWriter, r *http.Request) {
 	defs := a.games.All()
@@ -74,22 +74,22 @@ func (a *API) handleGames(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"games": views})
 }
 
-type serverTypeMeta struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	NeedsEula bool   `json:"needs_eula"`
+type variantMeta struct {
+	ID              string `json:"id"`
+	Label           string `json:"label"`
+	RequiresLicense bool   `json:"requires_license"`
 }
 
-// handleServerTypes คืน variant ของเกมที่ระบุ (`?game=`, ว่าง = default) —
+// handleVariants คืน variant ของเกมที่ระบุ (`?game=`, ว่าง = default) —
 // รายการนี้เป็นของ game definition ไม่ใช่ค่าคงที่ของ handler
-func (a *API) handleServerTypes(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleVariants(w http.ResponseWriter, r *http.Request) {
 	def, ok := a.gameFromQuery(w, r)
 	if !ok {
 		return
 	}
-	views := make([]serverTypeMeta, 0, len(def.Variants))
+	views := make([]variantMeta, 0, len(def.Variants))
 	for _, v := range def.Variants {
-		views = append(views, serverTypeMeta{ID: v.ID, Label: v.Label, NeedsEula: v.NeedsEULA})
+		views = append(views, variantMeta{ID: v.ID, Label: v.Label, RequiresLicense: v.RequiresLicense})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"types": views})
 }
@@ -101,14 +101,14 @@ func (a *API) handleVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	variant := r.URL.Query().Get("type")
 	if !def.HasVariant(variant) || def.Version.List == nil {
-		writeError(w, http.StatusBadRequest, "invalid_server_type",
+		writeError(w, http.StatusBadRequest, "invalid_variant",
 			"type must be one of: "+def.VariantList())
 		return
 	}
 
 	list, err := def.Version.List(r.Context(), variant)
 	if errors.Is(err, games.ErrUnknownVariant) {
-		writeError(w, http.StatusBadRequest, "invalid_server_type",
+		writeError(w, http.StatusBadRequest, "invalid_variant",
 			"type must be one of: "+def.VariantList())
 		return
 	}
@@ -149,7 +149,7 @@ func (a *API) handleMetaNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMetaNextPort: suggestion เท่านั้น — host_port ว่างต่ำสุดบน node นับจาก port เริ่มต้น
-// ของเกมนั้น (minecraft = 25565) สำหรับ prefill ฟอร์มสร้าง server
+// ของเกมนั้น (Definition.DefaultHostPort) สำหรับ prefill ฟอร์มสร้าง server
 // ไม่ reserve จริง (create เป็นคน enforce UNIQUE)
 func (a *API) handleMetaNextPort(w http.ResponseWriter, r *http.Request) {
 	def, ok := a.gameFromQuery(w, r)

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"

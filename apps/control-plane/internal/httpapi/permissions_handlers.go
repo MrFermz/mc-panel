@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 var validRoles = map[string]bool{"owner": true, "member": true}

@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 // provision = games.Definition.Provision — เลือกที่มาของ artifact ตาม variant
@@ -25,7 +25,7 @@ func provision(ctx context.Context, env games.ProvisionEnv) (string, error) {
 	case "forge":
 		return provisionForge(ctx, env)
 	default:
-		return "", fmt.Errorf("unsupported server_type %q", env.Variant)
+		return "", fmt.Errorf("unsupported variant %q", env.Variant)
 	}
 }
 

@@ -4,7 +4,7 @@ package minecraft
 import (
 	"strings"
 
-	"github.com/mc-panel/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/games"
 )
 
 // server.properties เป็นไฟล์ text ที่ root ของ server instance — จัดการผ่าน file manager

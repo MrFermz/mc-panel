@@ -9,14 +9,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/mc-panel/control-plane/internal/agenthub"
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/console"
-	"github.com/mc-panel/control-plane/internal/events"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/jobs"
-	"github.com/mc-panel/control-plane/internal/serverstats"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/agenthub"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/console"
+	"github.com/game-manager/control-plane/internal/events"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/jobs"
+	"github.com/game-manager/control-plane/internal/serverstats"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 type API struct {
@@ -139,13 +139,13 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.With(a.requireCap(capFilesDelete)).Delete("/servers/{id}/files", a.handleDeleteFile)
 
 			pr.With(a.requireCap(capSettingsView)).
-				Get("/servers/{id}/properties", a.handleGetProperties)
+				Get("/servers/{id}/config", a.handleGetConfig)
 			pr.With(a.requireCap(capSettingsEdit)).
-				Put("/servers/{id}/properties", a.handleUpdateProperties)
+				Put("/servers/{id}/config", a.handleUpdateConfig)
 
 			pr.With(a.requireCap(capPlayersView)).Get("/servers/{id}/players", a.handleListPlayers)
 			pr.With(a.requireCap(capPlayersView)).
-				Get("/servers/{id}/players/{uuid}/face", a.handlePlayerFace)
+				Get("/servers/{id}/players/{uuid}/avatar", a.handlePlayerAvatar)
 			pr.With(a.requireCap(capPlayersManage)).Post("/servers/{id}/players", a.handleAddPlayer)
 			pr.With(a.requireCap(capPlayersManage)).
 				Delete("/servers/{id}/players/{uuid}", a.handleRemovePlayer)
@@ -155,12 +155,12 @@ func (a *API) Router(consoleWS, eventsWS http.HandlerFunc) http.Handler {
 			pr.Get("/jobs/{id}", a.handleGetJob)
 
 			pr.Get("/meta/games", a.handleGames)
-			pr.Get("/meta/server-types", a.handleServerTypes)
+			pr.Get("/meta/variants", a.handleVariants)
 			pr.Get("/meta/versions", a.handleVersions)
 			pr.Get("/meta/nodes", a.handleMetaNodes)
 			pr.Get("/meta/next-port", a.handleMetaNextPort)
 			pr.Get("/meta/capabilities", a.handleCapabilities)
-			pr.Get("/meta/properties", a.handleMetaProperties)
+			pr.Get("/meta/config", a.handleMetaConfig)
 		})
 	})
 

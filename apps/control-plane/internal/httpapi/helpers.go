@@ -13,8 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 // gameOf คืน game definition ของ server ตัวหนึ่ง — handler ระดับ server ทุกเส้นที่ต้องรู้
@@ -229,7 +229,7 @@ type serverStatsView struct {
 	StartedAt     *time.Time `json:"started_at"`
 	OnlinePlayers []string   `json:"online_players"`
 	MaxPlayers    int        `json:"max_players"`
-	TPS           float64    `json:"tps"`
+	TickRate      float64    `json:"tick_rate"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
@@ -238,15 +238,15 @@ type serverView struct {
 	NodeID  uuid.UUID  `json:"node_id"`
 	OwnerID *uuid.UUID `json:"owner_id"`
 	Name    string     `json:"name"`
-	// game = id ของ game definition, server_type = variant ภายในเกมนั้น
-	Game       string           `json:"game"`
-	ServerType string           `json:"server_type"`
-	MCVersion  string           `json:"mc_version"`
-	MemoryMB   int              `json:"memory_mb"`
-	HostPort   *int             `json:"host_port"`
-	Status     string           `json:"status"`
-	CreatedAt  time.Time        `json:"created_at"`
-	UpdatedAt  time.Time        `json:"updated_at"`
+	// game = id ของ game definition, variant = variant ภายในเกมนั้น
+	Game        string    `json:"game"`
+	Variant     string    `json:"variant"`
+	GameVersion string    `json:"game_version"`
+	MemoryMB    int       `json:"memory_mb"`
+	HostPort    *int      `json:"host_port"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	// deleted_at != null = อยู่ในถังขยะ (โผล่เฉพาะ scope=all ของหน้า admin)
 	DeletedAt *time.Time       `json:"deleted_at"`
 	Stats     *serverStatsView `json:"stats"`
@@ -254,20 +254,20 @@ type serverView struct {
 
 func toServerView(s *store.Server, stats *serverStatsView) serverView {
 	return serverView{
-		ID:         s.ID,
-		NodeID:     s.NodeID,
-		OwnerID:    s.OwnerID,
-		Name:       s.Name,
-		Game:       s.Game,
-		ServerType: s.ServerType,
-		MCVersion:  s.MCVersion,
-		MemoryMB:   s.MemoryMB,
-		HostPort:   s.HostPort,
-		Status:     s.Status,
-		CreatedAt:  s.CreatedAt,
-		UpdatedAt:  s.UpdatedAt,
-		DeletedAt:  s.DeletedAt,
-		Stats:      stats,
+		ID:          s.ID,
+		NodeID:      s.NodeID,
+		OwnerID:     s.OwnerID,
+		Name:        s.Name,
+		Game:        s.Game,
+		Variant:     s.Variant,
+		GameVersion: s.GameVersion,
+		MemoryMB:    s.MemoryMB,
+		HostPort:    s.HostPort,
+		Status:      s.Status,
+		CreatedAt:   s.CreatedAt,
+		UpdatedAt:   s.UpdatedAt,
+		DeletedAt:   s.DeletedAt,
+		Stats:       stats,
 	}
 }
 

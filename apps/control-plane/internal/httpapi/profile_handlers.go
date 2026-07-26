@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 const (

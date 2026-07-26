@@ -23,20 +23,20 @@ import (
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 
-	"github.com/mc-panel/node-agent/internal/console"
-	"github.com/mc-panel/node-agent/internal/events"
-	"github.com/mc-panel/node-agent/internal/filemanager"
-	"github.com/mc-panel/node-agent/internal/games"
-	"github.com/mc-panel/node-agent/internal/games/minecraft"
-	"github.com/mc-panel/node-agent/internal/grpcclient"
-	"github.com/mc-panel/node-agent/internal/heartbeat"
-	"github.com/mc-panel/node-agent/internal/jobs"
-	"github.com/mc-panel/node-agent/internal/mcstate"
-	"github.com/mc-panel/node-agent/internal/provision"
-	"github.com/mc-panel/node-agent/internal/reconcile"
-	"github.com/mc-panel/node-agent/internal/runner"
-	"github.com/mc-panel/node-agent/internal/serverstats"
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	"github.com/game-manager/node-agent/internal/console"
+	"github.com/game-manager/node-agent/internal/events"
+	"github.com/game-manager/node-agent/internal/filemanager"
+	"github.com/game-manager/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games/minecraft"
+	"github.com/game-manager/node-agent/internal/gamestate"
+	"github.com/game-manager/node-agent/internal/grpcclient"
+	"github.com/game-manager/node-agent/internal/heartbeat"
+	"github.com/game-manager/node-agent/internal/jobs"
+	"github.com/game-manager/node-agent/internal/provision"
+	"github.com/game-manager/node-agent/internal/reconcile"
+	"github.com/game-manager/node-agent/internal/runner"
+	"github.com/game-manager/node-agent/internal/serverstats"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 )
 
 const agentVersion = "0.1.0"
@@ -55,9 +55,9 @@ func loadConfig() (config, error) {
 		agentToken:         os.Getenv("AGENT_TOKEN"),
 		controlPlaneGRPC:   os.Getenv("CONTROL_PLANE_GRPC"),
 		natsURL:            os.Getenv("NATS_URL"),
-		mcDataDir:          os.Getenv("MC_DATA_DIR"),
-		mcNetwork:          envOr("MC_NETWORK", "mcpanel-servers"),
-		runtimeImagePrefix: envOr("MC_RUNTIME_IMAGE_PREFIX", "mcpanel/mc-runtime"),
+		mcDataDir:          os.Getenv("GM_DATA_DIR"),
+		mcNetwork:          envOr("GM_NETWORK", "game-manager-servers"),
+		runtimeImagePrefix: envOr("GM_RUNTIME_IMAGE_PREFIX", "game-manager/runtime-java"),
 	}
 	if cfg.agentToken == "" {
 		return cfg, errors.New("AGENT_TOKEN is required")
@@ -69,12 +69,12 @@ func loadConfig() (config, error) {
 		return cfg, errors.New("NATS_URL is required")
 	}
 	if cfg.mcDataDir == "" {
-		return cfg, errors.New("MC_DATA_DIR is required")
+		return cfg, errors.New("GM_DATA_DIR is required")
 	}
 	if !filepath.IsAbs(cfg.mcDataDir) {
 		// path นี้ถูกส่งต่อให้ docker daemon ทำ bind mount จากมุมมอง host
 		// relative path จะชี้ผิดที่แบบเงียบ ๆ — บังคับ absolute ตั้งแต่ต้น
-		return cfg, fmt.Errorf("MC_DATA_DIR must be an absolute path, got %q", cfg.mcDataDir)
+		return cfg, fmt.Errorf("GM_DATA_DIR must be an absolute path, got %q", cfg.mcDataDir)
 	}
 	return cfg, nil
 }
@@ -124,7 +124,7 @@ func run() error {
 	}
 
 	// registry ของ game definition — เกมที่ agent นี้รันได้ ลงทะเบียนที่นี่ที่เดียว
-	// (เฟสนี้มี minecraft เกมเดียว) instance บน disk บอกเองว่าเป็นเกมอะไรผ่าน .mcpanel/meta.json
+	// (เฟสนี้มี minecraft เกมเดียว) instance บน disk บอกเองว่าเป็นเกมอะไรผ่าน .gamemanager/meta.json
 	gameRegistry := games.NewRegistry(minecraft.New())
 	gameLookup := games.InstanceLookup{Registry: gameRegistry, DataDir: cfg.mcDataDir}
 
@@ -132,7 +132,7 @@ func run() error {
 	grpcCli := grpcclient.New(cfg.controlPlaneGRPC, cfg.agentToken, buildHello(cfg.mcDataDir))
 	// tracker อ่านสถานะในเกมจาก console (ผู้เล่นออนไลน์/metric) แล้ว serverstats แนบไปกับ stats
 	// สองตัวอ้างถึงกัน: Manager ต้องมี observer ตั้งแต่สร้าง / tracker เขียน stdin ผ่าน Manager
-	mcTracker := mcstate.NewTracker(gameLookup)
+	mcTracker := gamestate.NewTracker(gameLookup)
 	consoles := console.NewManager(dockerRunner, grpcCli, mcTracker)
 	mcTracker.SetWriter(consoles)
 	defer consoles.DetachAll()
@@ -180,7 +180,7 @@ func run() error {
 	}
 
 	nc, err := nats.Connect(cfg.natsURL,
-		nats.Name("mc-panel-agent-"+nodeID),
+		nats.Name("game-manager-agent-"+nodeID),
 		nats.MaxReconnects(-1),
 		nats.RetryOnFailedConnect(true),
 		nats.ReconnectWait(2*time.Second),
@@ -244,7 +244,7 @@ func ensureNetwork(ctx context.Context, cli *client.Client, name string) error {
 	_, err := cli.NetworkCreate(ctx, name, network.CreateOptions{
 		Driver:     "bridge",
 		Attachable: true,
-		Labels:     map[string]string{"project": "mc-panel"},
+		Labels:     map[string]string{"project": "game-manager"},
 	})
 	if err != nil {
 		// สอง agent boot พร้อมกันอาจแข่งกันสร้าง — ตรวจซ้ำก่อนถือว่า fail จริง

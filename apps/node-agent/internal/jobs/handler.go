@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/mc-panel/node-agent/internal/provision"
-	"github.com/mc-panel/node-agent/internal/runner"
-	jobv1 "github.com/mc-panel/proto/gen/go/mcpanel/job/v1"
+	"github.com/game-manager/node-agent/internal/provision"
+	"github.com/game-manager/node-agent/internal/runner"
+	jobv1 "github.com/game-manager/proto/gen/go/gamemanager/job/v1"
 )
 
 // Handler แปลง JobEnvelope เป็นการเรียก runner/provisioner
@@ -27,26 +27,26 @@ func (h *Handler) Process(ctx context.Context, env *jobv1.JobEnvelope) (detail s
 	switch p := env.Payload.(type) {
 	case *jobv1.JobEnvelope_CreateServer:
 		return h.prov.CreateServer(ctx, env.ServerId, provision.Spec{
-			Game:       p.CreateServer.Game,
-			ServerType: p.CreateServer.ServerType,
-			MCVersion:  p.CreateServer.McVersion,
-			AcceptEULA: p.CreateServer.AcceptEula,
+			Game:          p.CreateServer.Game,
+			Variant:       p.CreateServer.Variant,
+			GameVersion:   p.CreateServer.GameVersion,
+			AcceptLicense: p.CreateServer.AcceptLicense,
 		})
 	case *jobv1.JobEnvelope_ImportServer:
 		detectedVersion, ierr := h.prov.ImportServer(ctx, env.ServerId, provision.ImportSpec{
-			Game:        p.ImportServer.Game,
-			ServerType:  p.ImportServer.ServerType,
-			MCVersion:   p.ImportServer.McVersion,
-			AcceptEULA:  p.ImportServer.AcceptEula,
-			ArchivePath: p.ImportServer.ArchivePath,
+			Game:          p.ImportServer.Game,
+			Variant:       p.ImportServer.Variant,
+			GameVersion:   p.ImportServer.GameVersion,
+			AcceptLicense: p.ImportServer.AcceptLicense,
+			ArchivePath:   p.ImportServer.ArchivePath,
 		})
 		if ierr != nil {
 			return "", ierr
 		}
-		// control-plane อ่าน Detail ตอน job สำเร็จเพื่อ sync mc_version ของ server ให้ตรงจริง
+		// control-plane อ่าน Detail ตอน job สำเร็จเพื่อ sync game_version ของ server ให้ตรงจริง
 		if detectedVersion != "" {
 			b, merr := json.Marshal(struct {
-				MCVersion string `json:"mc_version"`
+				GameVersion string `json:"game_version"`
 			}{detectedVersion})
 			if merr != nil {
 				return "", merr

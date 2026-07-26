@@ -24,22 +24,22 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 
-	"github.com/mc-panel/control-plane/internal/agenthub"
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/config"
-	"github.com/mc-panel/control-plane/internal/console"
-	"github.com/mc-panel/control-plane/internal/events"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/games/minecraft"
-	"github.com/mc-panel/control-plane/internal/httpapi"
-	"github.com/mc-panel/control-plane/internal/jobs"
-	"github.com/mc-panel/control-plane/internal/playerface"
-	"github.com/mc-panel/control-plane/internal/seed"
-	"github.com/mc-panel/control-plane/internal/serverstats"
-	"github.com/mc-panel/control-plane/internal/store"
-	"github.com/mc-panel/control-plane/migrations"
+	"github.com/game-manager/control-plane/internal/agenthub"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/avatarcache"
+	"github.com/game-manager/control-plane/internal/config"
+	"github.com/game-manager/control-plane/internal/console"
+	"github.com/game-manager/control-plane/internal/events"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/games/minecraft"
+	"github.com/game-manager/control-plane/internal/httpapi"
+	"github.com/game-manager/control-plane/internal/jobs"
+	"github.com/game-manager/control-plane/internal/seed"
+	"github.com/game-manager/control-plane/internal/serverstats"
+	"github.com/game-manager/control-plane/internal/store"
+	"github.com/game-manager/control-plane/migrations"
 )
 
 func main() {
@@ -229,7 +229,9 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	// registry ของ game definition — เกมที่ instance นี้รองรับ ลงทะเบียนที่นี่ที่เดียว
 	// (เฟสนี้มี minecraft เกมเดียว) ทุก layer ที่ต้องรู้เรื่องเกมรับ registry ตัวนี้ไป
 	gameRegistry := games.NewRegistry(
-		minecraft.New(minecraft.Deps{Faces: playerface.NewCache(st)}),
+		minecraft.New(minecraft.Deps{
+			Avatars: avatarcache.New(st, minecraft.FetchAvatar).Avatar,
+		}),
 	)
 	disp := jobs.NewDispatcher(st, js, eventsHub, gameRegistry, log)
 

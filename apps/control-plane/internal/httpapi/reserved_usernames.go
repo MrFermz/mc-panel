@@ -18,7 +18,7 @@ var reservedUsernames = map[string]bool{
 	// ชื่อ role ในระบบนี้ — ปลอมเป็นชื่อ role ทำให้อ่าน access list แล้วสับสน
 	"owner": true, "operator": true, "moderator": true, "viewer": true,
 	// ชื่อ component ของ panel
-	"mcpanel": true, "panel": true, "controlplane": true, "nodeagent": true,
+	"gamemanager": true, "panel": true, "controlplane": true, "nodeagent": true,
 	"agent": true, "node": true, "console": true, "api": true,
 	"daemon": true, "service": true, "bot": true, "webhook": true,
 	// ช่องทางติดต่อ — ใช้หลอกให้คนเชื่อว่าเป็นทีมงาน

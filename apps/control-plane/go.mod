@@ -1,14 +1,14 @@
-module github.com/mc-panel/control-plane
+module github.com/game-manager/control-plane
 
 go 1.24.0
 
 require (
+	github.com/game-manager/proto v0.0.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/mc-panel/proto v0.0.0
 	github.com/nats-io/nats.go v1.49.0
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/redis/go-redis/v9 v9.21.0
@@ -38,4 +38,4 @@ require (
 
 // ตอนนี้ resolve ผ่าน go.work + replace ใน monorepo
 // เมื่อแยกเป็น repo จริง (git submodules) ให้ลบ replace แล้วใช้ version tag จริง
-replace github.com/mc-panel/proto => ../../packages/proto
+replace github.com/game-manager/proto => ../../packages/proto

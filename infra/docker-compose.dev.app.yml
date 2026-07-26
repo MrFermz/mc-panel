@@ -1,5 +1,5 @@
 # ============================================================
-# mc-panel — dev override: รัน service หลักใน container พร้อม hot reload
+# game-manager — dev override: รัน service หลักใน container พร้อม hot reload
 # ใช้ซ้อนบน docker-compose.dev.yml (infra) — เปิดด้วย `make dev`
 #   docker compose -f docker-compose.dev.yml -f docker-compose.dev.app.yml up
 #
@@ -11,7 +11,7 @@
 # ทุก published port bind 127.0.0.1 เท่านั้น (กฎเดียวกับ dev infra — ห้าม 0.0.0.0)
 # GOWORK=off + repo root mount ที่ /src ให้ replace ../../packages/proto ทำงานเหมือน docker build จริง
 # ============================================================
-name: mcpanel-dev
+name: game-manager-dev
 
 services:
   control-plane:
@@ -57,9 +57,9 @@ services:
       AGENT_TOKEN: ${NODE_TOKEN}
       CONTROL_PLANE_GRPC: control-plane:9090
       NATS_URL: nats://${NATS_AGENT_USER}:${NATS_AGENT_PASSWORD}@nats:4222
-      MC_DATA_DIR: ${MC_DATA_DIR}
-      MC_NETWORK: mcpanel-servers
-      MC_RUNTIME_IMAGE_PREFIX: mcpanel/mc-runtime
+      GM_DATA_DIR: ${GM_DATA_DIR}
+      GM_NETWORK: game-manager-servers
+      GM_RUNTIME_IMAGE_PREFIX: game-manager/runtime-java
       GOWORK: "off"
       GOCACHE: /gocache
     volumes:
@@ -68,8 +68,8 @@ services:
       - devgobuild:/gocache
       # agent สร้าง sibling container ผ่าน docker daemon ของ host (attack surface ใหญ่สุด — ดู architecture.md)
       - /var/run/docker.sock:/var/run/docker.sock
-      # ต้อง mount path เดียวกันทั้งสองฝั่ง เพราะ agent สั่ง bind mount ให้ MC container (daemon มองจาก host)
-      - ${MC_DATA_DIR:?run 'make env' first}:${MC_DATA_DIR}
+      # ต้อง mount path เดียวกันทั้งสองฝั่ง เพราะ agent สั่ง bind mount ให้ container ของ instance (daemon มองจาก host)
+      - ${GM_DATA_DIR:?run 'make env' first}:${GM_DATA_DIR}
     depends_on:
       control-plane:
         condition: service_started

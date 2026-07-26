@@ -7,11 +7,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 
-	"github.com/mc-panel/control-plane/internal/agenthub"
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/agenthub"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 type fileEntryView struct {

@@ -12,11 +12,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	jobv1 "github.com/mc-panel/proto/gen/go/mcpanel/job/v1"
+	jobv1 "github.com/game-manager/proto/gen/go/gamemanager/job/v1"
 
-	"github.com/mc-panel/control-plane/internal/events"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/events"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 type Dispatcher struct {
@@ -42,32 +42,32 @@ func (d *Dispatcher) runtimeImage(srv *store.Server) string {
 		d.log.Error("dispatch start with unknown game", "server_id", srv.ID, "game", srv.Game)
 		return ""
 	}
-	return def.Version.RuntimeImage(srv.ServerType, srv.MCVersion)
+	return def.Version.RuntimeImage(srv.Variant, srv.GameVersion)
 }
 
-func (d *Dispatcher) CreateServer(ctx context.Context, srv *store.Server, acceptEula bool, requestedBy uuid.UUID) (*store.Job, error) {
+func (d *Dispatcher) CreateServer(ctx context.Context, srv *store.Server, acceptLicense bool, requestedBy uuid.UUID) (*store.Job, error) {
 	env := &jobv1.JobEnvelope{
 		Payload: &jobv1.JobEnvelope_CreateServer{CreateServer: &jobv1.CreateServer{
-			Game:       srv.Game,
-			ServerType: srv.ServerType,
-			McVersion:  srv.MCVersion,
-			AcceptEula: acceptEula,
+			Game:          srv.Game,
+			Variant:       srv.Variant,
+			GameVersion:   srv.GameVersion,
+			AcceptLicense: acceptLicense,
 		}},
 	}
 	return d.dispatch(ctx, srv, requestedBy, "create_server", "", env, false)
 }
 
-// ImportServer เหมือน CreateServer แต่ไม่โหลด jar — agent แตก zip ที่ staged ไว้ที่ archivePath
-// (relative ต่อ jail เช่น ".mcpanel/import.zip") ด้วย SafeJoin/zip-slip guard. success → stopped
+// ImportServer เหมือน CreateServer แต่ไม่โหลด artifact — agent แตก zip ที่ staged ไว้ที่ archivePath
+// (relative ต่อ jail เช่น ".gamemanager/import.zip") ด้วย SafeJoin/zip-slip guard. success → stopped
 // เหมือน create ทุกประการ (statusAfter "" ให้ค้าง provisioning จน JobResult พา stopped)
-func (d *Dispatcher) ImportServer(ctx context.Context, srv *store.Server, acceptEula bool, archivePath string, requestedBy uuid.UUID) (*store.Job, error) {
+func (d *Dispatcher) ImportServer(ctx context.Context, srv *store.Server, acceptLicense bool, archivePath string, requestedBy uuid.UUID) (*store.Job, error) {
 	env := &jobv1.JobEnvelope{
 		Payload: &jobv1.JobEnvelope_ImportServer{ImportServer: &jobv1.ImportServer{
-			Game:        srv.Game,
-			ServerType:  srv.ServerType,
-			McVersion:   srv.MCVersion,
-			AcceptEula:  acceptEula,
-			ArchivePath: archivePath,
+			Game:          srv.Game,
+			Variant:       srv.Variant,
+			GameVersion:   srv.GameVersion,
+			AcceptLicense: acceptLicense,
+			ArchivePath:   archivePath,
 		}},
 	}
 	return d.dispatch(ctx, srv, requestedBy, "import_server", "", env, false)
@@ -122,7 +122,7 @@ func (d *Dispatcher) RestartServer(ctx context.Context, srv *store.Server, reque
 }
 
 // dispatch: insert แถว jobs (payload = protojson ของ JobEnvelope เพื่อ debug/replay)
-// แล้ว publish protobuf binary ไป mcpanel.jobs.{node_id}
+// แล้ว publish protobuf binary ไป gamemanager.jobs.{node_id}
 // statusAfter = สถานะ server หลัง publish ("" = ไม่เปลี่ยน)
 // restartIntent = ติด marker ให้ ResultConsumer รู้ว่า stop นี้เป็นขาแรกของ restart
 func (d *Dispatcher) dispatch(ctx context.Context, srv *store.Server, requestedBy uuid.UUID, jobType, statusAfter string, env *jobv1.JobEnvelope, restartIntent bool) (*store.Job, error) {

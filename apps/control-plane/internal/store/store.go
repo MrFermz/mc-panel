@@ -70,16 +70,16 @@ type Server struct {
 	NodeID  uuid.UUID
 	OwnerID *uuid.UUID
 	Name    string
-	// Game = id ของ game definition (internal/games) — ServerType คือ variant ภายในเกมนั้น
-	Game       string
-	ServerType string
-	// MCVersion = เวอร์ชันของเกม (ชื่อ field/คอลัมน์เดิมที่คงไว้เพื่อไม่ break contract)
-	MCVersion string
-	MemoryMB  int
-	HostPort  *int
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// Game = id ของ game definition (internal/games) — Variant คือ variant ภายในเกมนั้น
+	Game    string
+	Variant string
+	// GameVersion = เวอร์ชันของเกม (ชื่อ field/คอลัมน์เดิมที่คงไว้เพื่อไม่ break contract)
+	GameVersion string
+	MemoryMB    int
+	HostPort    *int
+	Status      string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 	// DeletedAt != nil = ถูก soft delete (ไฟล์บน node ยังอยู่ รอ restore หรือ purge)
 	DeletedAt *time.Time
 }

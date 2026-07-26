@@ -186,7 +186,7 @@ export default function PanelLayout({
         <div className="flex h-14 items-center gap-2 border-b px-4">
           <BoxIcon className="size-5 shrink-0" />
           <Link href="/" className="truncate font-semibold">
-            mc-panel
+            game-manager
           </Link>
           <SidebarToggle collapsed={collapsed} className="ml-auto" />
         </div>
@@ -201,7 +201,7 @@ export default function PanelLayout({
           <div className="flex min-w-0 items-center gap-2">
             <MobileNav user={user} />
             <Link href="/" className="font-semibold md:hidden">
-              mc-panel
+              game-manager
             </Link>
             {/* ตอนย่อ sidebar หายไปทั้งแผง — ปุ่มกางต้องมีที่ยึดบน top bar ไม่งั้นเปิดคืนด้วย
                 keyboard/touch ไม่ได้เลย (hover ขอบซ้ายใช้ได้แต่กับเมาส์) */}

@@ -83,11 +83,11 @@ route เดียวใน `internal/httpapi/api.go`
 | `files.view` | `GET /api/servers/{id}/files`, `.../files/content` |
 | `files.write` | `PUT .../files/content`, `POST .../files/dir`, `POST .../files/rename` |
 | `files.delete` | `DELETE /api/servers/{id}/files` |
-| `players.view` | `GET /api/servers/{id}/players`, `GET .../players/{uuid}/face` |
+| `players.view` | `GET /api/servers/{id}/players`, `GET .../players/{uuid}/avatar` |
 | `players.manage` | `POST /api/servers/{id}/players`, `DELETE .../players/{uuid}` |
 | `players.moderate` | `POST /api/servers/{id}/players/action` (op/deop/kick/ban/pardon) |
-| `settings.view` | `GET /api/servers/{id}/properties` |
-| `settings.edit` | `PUT /api/servers/{id}/properties` |
+| `settings.view` | `GET /api/servers/{id}/config` |
+| `settings.edit` | `PUT /api/servers/{id}/config` |
 | `access.view` | `GET /api/servers/{id}/permissions`, `GET /api/users/{id}/servers` |
 | `access.manage` | `POST /api/servers/{id}/permissions`, `DELETE .../permissions/{user_id}`, `POST /api/users/{id}/servers`, `DELETE /api/users/{id}/servers/{server_id}` |
 
@@ -145,9 +145,9 @@ effective = `is_admin OR (hasGlobalCap(cap) AND (server_owner OR grant มี ca
 
 ### Game definition (เกม + variant)
 
-server ทุกตัวผูกกับ **เกม** หนึ่งเกม (`game`) แล้ว `server_type` คือ **variant** ภายในเกมนั้น
+server ทุกตัวผูกกับ **เกม** หนึ่งเกม (`game`) แล้ว `variant` คือ **variant** ภายในเกมนั้น
 (minecraft: `vanilla`/`paper`/`fabric`/`forge`/`velocity`). ความรู้เฉพาะเกมทั้งหมด — รายการ variant,
-กติกาเวอร์ชัน, runtime image, catalog ของไฟล์ config, กติกาผู้เล่น/whitelist/คำสั่ง moderation —
+กติกาเวอร์ชัน, runtime image, catalog ของไฟล์ config, กติกาผู้เล่น/allowlist/คำสั่ง moderation —
 อยู่ใน game definition ฝั่ง backend (`internal/games` ของทั้ง control-plane และ node-agent)
 ไม่ใช่ในตัว endpoint
 
@@ -155,8 +155,8 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 ไม่ส่ง/ส่งค่าว่าง = `minecraft` เสมอ, ส่ง id ที่ไม่รู้จัก = 400 `invalid_game`
 
 ชื่อ field ที่ยังเป็นศัพท์ Minecraft ด้วยเหตุผลเรื่อง contract (ห้ามเปลี่ยนโดยไม่มี migration ฝั่ง web):
-`mc_version` = เวอร์ชันของเกม, `server_type` = variant, `whitelist_enabled` = allowlist ของเกมเปิดอยู่ไหม,
-`tps` ใน `stats` = metric ประจำเกมที่อ่านจาก console, error code `mojang_unavailable` = identity
+`game_version` = เวอร์ชันของเกม, `variant` = variant, `allowlist_enabled` = allowlist ของเกมเปิดอยู่ไหม,
+`tick_rate` ใน `stats` = metric ประจำเกมที่อ่านจาก console, error code `identity_unavailable` = identity
 service ของเกมติดต่อไม่ได้
 
 สิทธิ์: `is_admin` เห็น/ทำได้ทุกอย่าง | นอกนั้นดูตาม `server_permissions` ต่อ server (2 ชั้น AND
@@ -179,7 +179,7 @@ user ที่มี capability `servers.create` (หรือ is_admin) สร�
 | Method | Path | ใคร | Body → Response |
 |---|---|---|---|
 | GET | `/api/servers` | login แล้ว | `?scope=mine` (default) → `{servers: [server]}` เฉพาะที่มี `server_permissions` row ของตัวเอง (admin ก็เหมือนกัน) — server ในถังขยะไม่โผล่. `?scope=all` ต้องมี `servers.view_all` (ไม่งั้น 403 `forbidden`) → ทุก server รวมที่ `deleted_at != null`; `scope` ค่าอื่น → 400 `invalid_request` |
-| POST | `/api/servers` | login แล้ว | `{name, node_id, game?, server_type, mc_version, memory_mb, host_port?, accept_eula}` → 201 `{server, job}` — `game` ไม่ส่ง = `minecraft` (id ที่ไม่รู้จัก → 400 `invalid_game`), `server_type` ต้องเป็น variant ของเกมนั้น; ต้อง accept_eula=true เว้น variant ที่ไม่ต้องยอมรับ (minecraft: velocity); 400 `insufficient_memory` เมื่อ RAM เกิน (ดู admission control ล่าง) |
+| POST | `/api/servers` | login แล้ว | `{name, node_id, game?, variant, game_version, memory_mb, host_port?, accept_license}` → 201 `{server, job}` — `game` ไม่ส่ง = `minecraft` (id ที่ไม่รู้จัก → 400 `invalid_game`), `variant` ต้องเป็น variant ของเกมนั้น; ต้อง accept_license=true เว้น variant ที่ไม่ต้องยอมรับ (minecraft: velocity); 400 `insufficient_memory` เมื่อ RAM เกิน (ดู admission control ล่าง) |
 | POST | `/api/servers/import` | `servers.create` | `multipart/form-data` (ดูด้านล่าง) → 201 `{server, job}` — import server เดิมจาก .zip; 400 `insufficient_memory` เหมือน create |
 | GET | `/api/servers/{id}` | มี access | → `{server, permissions: [permission+user]}` — คืน permission list ให้ทุกคนที่มี access (web หา row ของตัวเองไป gate แท็บ/ปุ่มด้วย effective cap) |
 | PATCH | `/api/servers/{id}` | `servers.edit` | `{name?, memory_mb?, host_port?}` → `{server}` (มีผลตอน start ครั้งถัดไป); `memory_mb`/`host_port` แก้ได้เฉพาะตอน stopped/errored (409 `invalid_state`); ขยาย `memory_mb` เกิน RAM node → 400 `insufficient_memory` |
@@ -204,7 +204,7 @@ cap 2048MB, และไม่เกินครึ่งของ limit. เช
 ### Soft delete / restore / purge
 
 `DELETE /api/servers/{id}` ไม่ลบอะไรจริง — แค่ set `servers.deleted_at` (ต้องหยุด server ก่อน)
-row ยังอยู่ ไฟล์ใน `{MC_DATA_DIR}/{server_id}` ยังอยู่ครบ ไม่มี job ถูก dispatch เลย ผลคือ
+row ยังอยู่ ไฟล์ใน `{GM_DATA_DIR}/{server_id}` ยังอยู่ครบ ไม่มี job ถูก dispatch เลย ผลคือ
 server หายจากทุก view ทันที (ทุก endpoint ระดับ server ตอบ 404 เพราะ `GetServerByID` filter
 `deleted_at IS NULL`) แต่ยังโผล่ใน `?scope=all` ให้ restore ได้
 
@@ -233,23 +233,23 @@ audit `server_deleted`, event `server_removed`). purge ทำได้เฉพ�
 รับ server instance เดิม (โลกเดิม/config/plugin) เป็น `.zip` แล้วสร้าง server ใหม่โดย**ไม่โหลด jar**
 — body เป็น `multipart/form-data` streaming (control-plane ไม่ buffer ทั้ง zip):
 
-- text parts: `name`, `node_id`, `game?`, `server_type`, `mc_version`, `memory_mb`, `host_port?`, `accept_eula`
+- text parts: `name`, `node_id`, `game?`, `variant`, `game_version`, `memory_mb`, `host_port?`, `accept_license`
   (validate เหมือน `POST /api/servers` ทุกกฎ ด้วย game definition ตัวเดียวกัน: memory_mb ≥ ขั้นต่ำของเกม
-  (minecraft = 256), host_port ว่าง=ไม่ expose ไม่งั้น 1024-65535, accept_eula ต้อง true เว้น variant
+  (minecraft = 256), host_port ว่าง=ไม่ expose ไม่งั้น 1024-65535, accept_license ต้อง true เว้น variant
   ที่ไม่ต้องยอมรับ; `game` ไม่ส่ง = `minecraft`)
 - file part **ชื่อ `archive`** (ต้องเป็น part สุดท้าย): ไฟล์ `.zip` ของ server เดิม (เพดาน 2 GiB)
 
 Flow: control-plane อ่าน zip ทีละก้อน stream เข้า agent เป็น chunked file-write (`FileWriteChunk`)
-ไปไว้ที่ `.mcpanel/import.zip` ใน jail ของ server → dispatch NATS job `import_server` ให้ agent
+ไปไว้ที่ `.gamemanager/import.zip` ใน jail ของ server → dispatch NATS job `import_server` ให้ agent
 แตก zip (ผ่าน `SafeJoin`/กัน zip-slip) เขียน eula/launch script แล้ว success → status `stopped`
 (semantics เดียวกับ `create_server`). staged bytes เป็น file I/O ปกติ, lifecycle command เป็น NATS job.
 agent อาจ detect เวอร์ชันจริงจากไฟล์ที่ import แล้วรายงานกลับใน `JobResult.Detail` เป็น JSON
-`{"mc_version":"..."}` — เมื่อ import สำเร็จ control-plane จะ update `mc_version` ของ server ตามนั้น
-(ถ้าเวอร์ชันผ่านการ validate) ดังนั้น `mc_version` ของ server row อาจเปลี่ยนหลัง import (fetch ใหม่จะเห็น)
+`{"game_version":"..."}` — เมื่อ import สำเร็จ control-plane จะ update `game_version` ของ server ตามนั้น
+(ถ้าเวอร์ชันผ่านการ validate) ดังนั้น `game_version` ของ server row อาจเปลี่ยนหลัง import (fetch ใหม่จะเห็น)
 
 - 201 → `{server, job}` (shape เดียวกับ create)
-- errors: `invalid_game`/`invalid_name`/`invalid_server_type`/`invalid_mc_version`/`invalid_memory`/`invalid_host_port`
-  (400), `eula_required` (400), `empty_archive` (400, zip ว่าง), `archive_too_large` (413, เกิน 2 GiB),
+- errors: `invalid_game`/`invalid_name`/`invalid_variant`/`invalid_game_version`/`invalid_memory`/`invalid_host_port`
+  (400), `license_required` (400), `empty_archive` (400, zip ว่าง), `archive_too_large` (413, เกิน 2 GiB),
   `node_not_found` (404), `host_port_taken` (409), `node_offline` (503, agent ไม่ออนไลน์),
   `agent_timeout` (504), `import_failed` (502, agent ปัด chunk), `dispatch_failed` (502)
 - audit action: `server_import`
@@ -273,11 +273,11 @@ error codes: `forbidden` (ไม่มี cap `files.*` ที่ตรง actio
 (path traversal/นอก jail), `node_offline` (agent ไม่ออนไลน์), `agent_timeout`. mutation ลง audit
 (`file_write`, `file_mkdir`, `file_rename`, `file_delete`)
 
-## server.properties (cap `settings.view` อ่าน, `settings.edit` เขียน — คู่กับ owner/admin)
+## Game config (cap `settings.view` อ่าน, `settings.edit` เขียน — คู่กับ owner/admin)
 
 ชื่อไฟล์ / catalog / ไวยากรณ์ / กฎ "แก้ตอนรันได้ไหม" มาจาก game definition ของ server ตัวนั้น
-(minecraft = `server.properties`, java `.properties`, แก้ได้เฉพาะตอนหยุด) — path ของ endpoint
-ยังใช้ชื่อ `properties` ตามเดิมเพื่อไม่ break contract ฝั่ง web
+(minecraft = `server.properties`, java `.properties`, แก้ได้เฉพาะตอนหยุด) — endpoint ไม่รู้จัก
+ชื่อไฟล์ของเกมใด ๆ เอง
 
 อ่าน/เขียนไฟล์ config ที่ root ของ server instance ผ่าน gRPC stream เดียวกับ file manager
 (ไฟล์ไม่มีอยู่ = ถือเป็นว่างเปล่า ไม่ 404). curated catalog ของ key ที่แก้ผ่าน UI ได้ — key อื่นในไฟล์
@@ -286,17 +286,17 @@ error codes: `forbidden` (ไม่มี cap `files.*` ที่ตรง actio
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/servers/{id}/properties` | → `{fields, values}` |
-| PUT | `/api/servers/{id}/properties` | `{values: {<key>: <string>}}` → 204 — เกมที่เขียนทับไฟล์ตอน shutdown (minecraft) ต้อง stopped/errored เท่านั้น (409 `invalid_state`). GET/read ทำได้ทุกสถานะ |
+| GET | `/api/servers/{id}/config` | → `{fields, values}` |
+| PUT | `/api/servers/{id}/config` | `{values: {<key>: <string>}}` → 204 — เกมที่เขียนทับไฟล์ตอน shutdown (minecraft) ต้อง stopped/errored เท่านั้น (409 `invalid_state`). GET/read ทำได้ทุกสถานะ |
 
 - `fields`: `[{key, label, type, options, min, max}]` — `type` = `enum`\|`int`\|`bool`\|`string`;
   `options` = array (ว่าง `[]` เมื่อไม่ใช่ enum); `min`/`max` = int หรือ `null`
 - `values`: `{<catalog-key>: <string>}` — ค่าที่ parse ได้จากไฟล์ ไม่งั้น default
 - PUT: ทุก key ใน `values` ต้องเป็น catalog key และ value ผ่าน validate ตาม type (enum ∈ options,
   int แปลงได้ + อยู่ใน [min,max], bool = `"true"`\|`"false"`) — ไม่งั้น 400 `invalid_property` (ระบุ key)
-- error อื่น: `forbidden`, `node_offline`, `agent_timeout`. mutation ลง audit (`properties_update`)
+- error อื่น: `forbidden`, `node_offline`, `agent_timeout`. mutation ลง audit (`config_update`)
 
-## Whitelist / players (cap `players.view` ดู, `players.manage` whitelist, `players.moderate` op/kick/ban — คู่กับ owner/admin)
+## Allowlist / players (cap `players.view` ดู, `players.manage` allowlist, `players.moderate` op/kick/ban — คู่กับ owner/admin)
 
 จัดการ allowlist ของ server: control-plane verify username กับ identity service ของเกม (minecraft =
 Mojang) → เก็บใน DB (`server_players`) เป็น source of truth → rebuild ไฟล์รายชื่อที่ root ของ server
@@ -311,8 +311,8 @@ path ผ่าน `SafeJoin` ที่ agent). ถ้า server กำลัง 
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/servers/{id}/players` | → `{whitelist_enabled, players: [{uuid, username, whitelisted, seen, op, banned, online, playtime_seconds}]}` (unified, เรียงตาม username) |
-| GET | `/api/servers/{id}/players/{uuid}/face` | → `image/png` (หน้า 128x128 crop จาก skin) — 404 `not_found` ถ้าไม่มี skin (offline-mode uuid/ไม่มี texture), 502 `mojang_unavailable` ถ้าเข้า Mojang ไม่ได้ |
+| GET | `/api/servers/{id}/players` | → `{allowlist_enabled, players: [{uuid, username, allowlisted, seen, op, banned, online, playtime_seconds}]}` (unified, เรียงตาม username) |
+| GET | `/api/servers/{id}/players/{uuid}/avatar` | → `image/png` (หน้า 128x128 crop จาก skin) — 404 `not_found` ถ้าไม่มี skin (offline-mode uuid/ไม่มี texture), 502 `identity_unavailable` ถ้าเข้า Mojang ไม่ได้ |
 | POST | `/api/servers/{id}/players` | `{username}` → 201 `{player: {uuid, username, added_at}}` |
 | DELETE | `/api/servers/{id}/players/{uuid}` | → 204 |
 | POST | `/api/servers/{id}/players/action` | `{action, username}` → `{ok: true}` — สั่งผ่าน console ของ server |
@@ -327,41 +327,41 @@ path ผ่าน `SafeJoin` ที่ agent). ถ้า server กำลัง 
   (เกินนั้น/อ่านไม่ได้/ไม่เคยเล่น = `0` = ไม่รู้)
 
 - GET: **unified list** merge จากหลาย source โดย key ด้วย uuid (normalize dash/case):
-  DB `server_players` → `whitelisted=true`; `usercache.json` (เคย join) → `seen=true`;
-  `ops.json` → `op=true`; `banned-players.json` → `banned=true`. `username` เลือกจากไฟล์ก่อน
-  (สะท้อนชื่อปัจจุบัน) fallback ชื่อใน DB. ไฟล์ MC อ่านผ่าน agent FileRead (gRPC เดียวกับ file manager).
-  `whitelist_enabled` = ค่า `white-list` ใน server.properties. **Graceful degradation**: ไฟล์ไม่มี
-  (server ยังไม่เคย start) = ถือว่าว่าง ไม่ error; **node offline** = ไม่ hard-fail — คืนเฉพาะ DB whitelist
-  (`whitelisted=true`, flag อื่น false) + `whitelist_enabled` best-effort (default false)
+  DB `server_players` → `allowlisted=true`; ไฟล์ state ของเกม (`StateFiles` ของ definition)
+  ติด flag `seen`/`op`/`banned` ตามที่ระบุ (minecraft = `usercache.json`/`ops.json`/`banned-players.json`). `username` เลือกจากไฟล์ก่อน
+  (สะท้อนชื่อปัจจุบัน) fallback ชื่อใน DB. ไฟล์อ่านผ่าน agent FileRead (gRPC เดียวกับ file manager).
+  `allowlist_enabled` = ค่าของ key ที่ definition ระบุใน `Allowlist.EnabledKey` (minecraft = `white-list`). **Graceful degradation**: ไฟล์ไม่มี
+  (server ยังไม่เคย start) = ถือว่าว่าง ไม่ error; **node offline** = ไม่ hard-fail — คืนเฉพาะ allowlist จาก DB
+  (`allowlisted=true`, flag อื่น false) + `allowlist_enabled` best-effort (default false)
 - POST: `username` trim แล้ว validate 3-16 ตัว `[A-Za-z0-9_]` (ไม่งั้น 400 `invalid_username`) →
-  Mojang lookup (ไม่พบ → 404 `player_not_found`; upstream error/timeout → 502 `mojang_unavailable`) →
+  Mojang lookup (ไม่พบ → 404 `player_not_found`; upstream error/timeout → 502 `identity_unavailable`) →
   ถ้าซ้ำ 409 `player_exists`. `uuid`/`username` ที่เก็บเป็นค่า canonical จาก Mojang
 - DELETE: `{uuid}` ต้อง parse ได้ (ไม่งั้น 400 `invalid_request`); ไม่พบ → 404 `not_found`
-- GET `/players/{uuid}/face`: control-plane ดึง skin จาก Mojang (`sessionserver` → `textures.minecraft.net`,
+- GET `/players/{uuid}/avatar`: control-plane ดึง skin จาก Mojang (`sessionserver` → `textures.minecraft.net`,
   egress ผ่าน edge) → crop หน้า 8×8 (base + hat overlay) ขยายเป็น 128×128 → เสิร์ฟ PNG
   (ไม่ให้ browser ยิง third-party host เอง = ไม่ leak IP ของ user). **cache ใน Postgres** (ตาราง
-  `player_faces`, key ด้วย uuid — skin เป็น global ต่อ account ไม่ผูก server): hit สด 6 ชม. /
-  negative (ไม่มี skin) สด 15 นาที แล้ว refresh เอง. **Mojang ล่มแต่มี cache เก่า → เสิร์ฟรูปเก่า**
-  (graceful); ไม่มี cache เลย + Mojang ล่ม → 502 `mojang_unavailable`; รู้ว่าไม่มี skin → 404 `not_found`.
+  `player_avatars`, key ด้วย uuid — รูปเป็น global ต่อ account ไม่ผูก server; ชั้น cache เป็นของกลางที่ `internal/avatarcache` ส่วนวิธีดึงรูปเป็นของ game definition): hit สด 6 ชม. /
+  negative (ไม่มี skin) สด 15 นาที แล้ว refresh เอง. **upstream ล่มแต่มี cache เก่า → เสิร์ฟรูปเก่า**
+  (graceful); ไม่มี cache เลย + upstream ล่ม → 502 `identity_unavailable`; รู้ว่าไม่มี skin → 404 `not_found`.
   กัน SSRF: รับ skin เฉพาะ url ที่ขึ้นต้น `https://textures.minecraft.net/`
 - error อื่น: `forbidden`, `node_offline`, `agent_timeout`. mutation ลง audit (`player_add`, `player_remove`)
-- ⚠️ ต้องตั้ง `white-list=true` ใน server.properties (ผ่าน PUT `/properties`) ถึงจะ enforce whitelist จริง —
+- ⚠️ ต้องตั้ง `white-list=true` ใน server.properties (ผ่าน PUT `/config`) ถึงจะ enforce whitelist จริง —
   endpoint นี้แค่จัดการรายชื่อ. UUID จาก Mojang ใช้กับ `online-mode=true` เท่านั้น — offline-mode ใช้ UUID
   แบบ derived คนละชุด (whitelist ที่ verify กับ Mojang จะไม่ match)
 
-`server`: `{id, node_id, owner_id, name, game, server_type, mc_version, memory_mb, host_port, status, created_at, updated_at, deleted_at, stats}`
-(`game` = id ของ game definition — ตอนนี้เป็น `"minecraft"` เสมอ; `server_type` = variant ภายในเกมนั้น)
+`server`: `{id, node_id, owner_id, name, game, variant, game_version, memory_mb, host_port, status, created_at, updated_at, deleted_at, stats}`
+(`game` = id ของ game definition — ตอนนี้เป็น `"minecraft"` เสมอ; `variant` = variant ภายในเกมนั้น)
 (`deleted_at` = RFC3339 เวลาที่ถูก soft delete หรือ `null` — ไม่ใช่ `null` ได้เฉพาะใน `?scope=all` เท่านั้น
 เพราะ view อื่นทั้งหมด filter `deleted_at IS NULL` ออกไปแล้ว)
-`stats`: `{cpu_percent, memory_used_mb, memory_limit_mb, net_rx_bps, net_tx_bps, disk_read_bps, disk_write_bps, started_at, online_players, max_players, tps, updated_at}` หรือ `null` — resource monitoring แบบ realtime
+`stats`: `{cpu_percent, memory_used_mb, memory_limit_mb, net_rx_bps, net_tx_bps, disk_read_bps, disk_write_bps, started_at, online_players, max_players, tick_rate, updated_at}` หรือ `null` — resource monitoring แบบ realtime
 ต่อ instance (agent วัดจาก container stats ทุก ~5 วิ, เก็บใน memory ของ control-plane ไม่ลง DB;
 `null` เมื่อ server ไม่ได้รันหรือยังไม่มีข้อมูล) มากับทั้ง `GET /api/servers` และ `GET /api/servers/{id}`
 (`net_rx_bps`/`net_tx_bps`/`disk_read_bps`/`disk_write_bps` = network/block-I/O rate ของ container หน่วย bytes/sec;
 `started_at` = RFC3339 เวลาที่ container รอบปัจจุบันเริ่มรัน ใช้คำนวณ uptime — `null` เมื่อ agent ไม่รู้;
 `online_players` = array ชื่อผู้เล่นที่ออนไลน์ (agent อ่านจาก console: คำสั่ง `list` ตอน attach/ทุก 30 วิ
 + บรรทัด joined/left the game ระหว่างนั้น — reply ของคำสั่งที่ agent ยิงเองถูกกรองออกจาก console stream),
-`max_players` = 0 เมื่อยังไม่ได้ resync รอบแรก, `tps` = metric ประจำเกมที่อ่านจาก console
-(minecraft = TPS จากคำสั่ง `tps` ของ Paper/Spigot) — `0` เมื่อ variant นั้นไม่มีคำสั่งนี้
+`max_players` = 0 เมื่อยังไม่ได้ resync รอบแรก, `tick_rate` = metric ประจำเกมที่อ่านจาก console
+(minecraft = TPS จากคำสั่ง `tick_rate` ของ Paper/Spigot) — `0` เมื่อ variant นั้นไม่มีคำสั่งนี้
 (vanilla/fabric/forge))
 `job`: `{id, server_id, type, status, error, requested_by_name, requested_by_username, created_at, started_at, completed_at}`
 `requested_by_name`/`requested_by_username`: identity ของ user ที่สั่งงาน
@@ -375,11 +375,11 @@ web ประกอบเป็นชื่อที่แสดงเองด�
 |---|---|---|---|
 | GET | `/api/jobs/{id}` | ผู้มีสิทธิ์เห็น server นั้น | → `{job}` — web ใช้ poll สถานะงาน |
 | GET | `/api/meta/games` | login แล้ว | → `{games: [{id, label}]}` — เกมที่ instance นี้รองรับ (ตอนนี้มีแค่ `minecraft`) — id ที่ใช้กับ `?game=` ของ endpoint meta อื่นและ field `game` ตอนสร้าง server |
-| GET | `/api/meta/server-types?game=minecraft` | login แล้ว | → `{types: [{id, label, needs_eula}]}` — variant ของเกมที่ระบุ (`game` ไม่ส่ง = `minecraft`, id ที่ไม่รู้จัก → 400 `invalid_game`) |
-| GET | `/api/meta/versions?type=paper&game=minecraft` | login แล้ว | → `{versions: [string]}` ใหม่→เก่า (proxy + cache 10 นาทีจาก upstream official ของเกม; minecraft: Mojang/PaperMC/Fabric API, forge ใช้ promoted builds); `type` ที่ไม่ใช่ variant ของเกมนั้น → 400 `invalid_server_type` |
+| GET | `/api/meta/variants?game=minecraft` | login แล้ว | → `{types: [{id, label, requires_license}]}` — variant ของเกมที่ระบุ (`game` ไม่ส่ง = `minecraft`, id ที่ไม่รู้จัก → 400 `invalid_game`) |
+| GET | `/api/meta/versions?type=paper&game=minecraft` | login แล้ว | → `{versions: [string]}` ใหม่→เก่า (proxy + cache 10 นาทีจาก upstream official ของเกม; minecraft: Mojang/PaperMC/Fabric API, forge ใช้ promoted builds); `type` ที่ไม่ใช่ variant ของเกมนั้น → 400 `invalid_variant` |
 | GET | `/api/meta/nodes` | login แล้ว | → `{nodes: [{id, name, status}]}` — ข้อมูลขั้นต่ำสำหรับ dropdown ตอนสร้าง server (ตัวเต็มดูได้เฉพาะ admin ที่ `/api/nodes`) |
 | GET | `/api/meta/next-port?node_id={uuid}&game=minecraft` | login แล้ว | → `{port}` — host_port ว่างต่ำสุดบน node นับจาก port เริ่มต้นของเกมนั้น (minecraft = 25565) สำหรับ prefill ฟอร์มสร้าง server; suggestion เท่านั้นไม่ reserve (node ไม่พบ → 404 `node_not_found`) |
-| GET | `/api/meta/properties?game=minecraft` | login แล้ว | → `{fields, values}` — catalog ไฟล์ config ของเกมที่ระบุ (เดียวกับ `/api/servers/{id}/properties`) แต่ `values` เป็นค่า default ล้วน ไม่ผูก server ตัวไหน (wizard สร้าง server ใช้ render ฟอร์มตั้งแต่ก่อนมี instance) |
+| GET | `/api/meta/config?game=minecraft` | login แล้ว | → `{fields, values}` — catalog ไฟล์ config ของเกมที่ระบุ (เดียวกับ `/api/servers/{id}/config`) แต่ `values` เป็นค่า default ล้วน ไม่ผูก server ตัวไหน (wizard สร้าง server ใช้ render ฟอร์มตั้งแต่ก่อนมี instance) |
 
 ## WebSocket — console
 
@@ -422,7 +422,7 @@ Authorization scope (filter ต่อ event ตาม connection):
 server → client (JSON, field `type` เป็นตัวแยกชนิด):
 ```json
 {"type": "server_status", "server_id": "<uuid>", "status": "running"}
-{"type": "server_stats", "server_id": "<uuid>", "stats": {"cpu_percent": 12.5, "memory_used_mb": 800, "memory_limit_mb": 2048, "net_rx_bps": 1024, "net_tx_bps": 512, "disk_read_bps": 0, "disk_write_bps": 4096, "started_at": "<rfc3339>", "online_players": ["Steve"], "max_players": 20, "tps": 19.98, "updated_at": "<rfc3339>"}}
+{"type": "server_stats", "server_id": "<uuid>", "stats": {"cpu_percent": 12.5, "memory_used_mb": 800, "memory_limit_mb": 2048, "net_rx_bps": 1024, "net_tx_bps": 512, "disk_read_bps": 0, "disk_write_bps": 4096, "started_at": "<rfc3339>", "online_players": ["Steve"], "max_players": 20, "tick_rate": 19.98, "updated_at": "<rfc3339>"}}
 {"type": "server_stats", "server_id": "<uuid>", "stats": null}
 {"type": "server_jobs", "server_id": "<uuid>"}
 {"type": "job_update", "server_id": "<uuid>", "job_id": "<uuid>", "job_type": "start_server", "status": "running", "error": "", "restart": false}
@@ -457,4 +457,4 @@ Pattern การใช้ฝั่ง web: โหลด state เริ่ม�
 `node_created`, `node_deleted`, `server_created`, `server_import`, `server_updated`,
 `server_soft_deleted` (ย้ายเข้าถังขยะ), `server_restored`, `server_deleted` (purge สำเร็จ — ไฟล์หายจริง),
 `server_action` (detail: start/stop/restart/kill), `permission_updated`, `permission_removed`, `console_command`,
-`file_write`, `file_mkdir`, `file_rename`, `file_delete`, `properties_update`, `player_add`, `player_remove`
+`file_write`, `file_mkdir`, `file_rename`, `file_delete`, `config_update`, `player_add`, `player_remove`

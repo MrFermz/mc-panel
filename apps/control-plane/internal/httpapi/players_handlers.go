@@ -12,15 +12,15 @@ import (
 
 	"github.com/google/uuid"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 
-	"github.com/mc-panel/control-plane/internal/agenthub"
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/agenthub"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
-// รายชื่อผู้เล่นที่ panel เป็นเจ้าของ (allowlist — Minecraft = whitelist.json) อยู่ที่ root
+// รายชื่อผู้เล่นที่ panel เป็นเจ้าของ (allowlist — ชื่อไฟล์มาจาก game definition) อยู่ที่ root
 // ของ server dir: DB คือ source of truth, ไฟล์ rebuild ทุกครั้งที่รายชื่อเปลี่ยน
 // ชื่อไฟล์/รูปแบบ/คำสั่ง reload มาจาก game definition
 
@@ -38,13 +38,13 @@ func toPlayerView(p store.ServerPlayer) playerView {
 type mergedPlayerView struct {
 	UUID        string `json:"uuid"`
 	Username    string `json:"username"`
-	Whitelisted bool   `json:"whitelisted"`
+	Allowlisted bool   `json:"allowlisted"`
 	Seen        bool   `json:"seen"`
 	Op          bool   `json:"op"`
 	Banned      bool   `json:"banned"`
 	// Online มาจาก serverstats cache (agent อ่านจาก console) ไม่ใช่ไฟล์ — ไม่มี I/O เพิ่ม
 	Online bool `json:"online"`
-	// PlaytimeSeconds จาก world stats ของเกม — 0 = ไม่รู้ (ยังไม่เคยเล่น/อ่านไม่ได้/เกิน cap)
+	// PlaytimeSeconds จากไฟล์สถิติของเกม — 0 = ไม่รู้ (ยังไม่เคยเล่น/อ่านไม่ได้/เกิน cap)
 	PlaytimeSeconds int64 `json:"playtime_seconds"`
 }
 
@@ -75,7 +75,7 @@ func displayUUID(s string) string {
 }
 
 // handleListPlayers รวมรายชื่อผู้เล่นจากหลาย source: DB allowlist + ไฟล์ state ของเกม
-// (usercache/ops/banned ของ Minecraft — อ่านผ่าน agent). node offline = degrade เหลือ DB
+// (StateFiles ของ game definition — อ่านผ่าน agent). node offline = degrade เหลือ DB
 // (แท็บยังใช้ได้ตอน server หยุด/offline). ไฟล์ไม่มี = ถือว่าว่าง ไม่ error
 func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 	srv, _, ok := a.loadServerCap(w, r, capPlayersView)
@@ -94,7 +94,7 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// สร้าง accumulator จาก DB ก่อน (whitelisted=true) — key ด้วย normUUID
+	// สร้าง accumulator จาก DB ก่อน (allowlisted=true) — key ด้วย normUUID
 	acc := make(map[string]*mergedPlayerView)
 	upsert := func(rawUUID, username string) *mergedPlayerView {
 		key := normUUID(rawUUID)
@@ -115,18 +115,18 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 		if p.Username == "" {
 			p.Username = dp.Username
 		}
-		p.Whitelisted = true
+		p.Allowlisted = true
 	}
 
 	// allowlist ที่ไม่มี EnabledKey = เกมนั้นบังคับใช้เสมอ
 	allowlistEnabled := def.Players.Allowlist.EnabledKey == ""
 	offline := false
-	worldName := ""
+	saveName := ""
 	if def.Players.Playtime != nil {
-		worldName = def.Players.Playtime.DefaultWorldName
+		saveName = def.Players.Playtime.DefaultSaveName
 	}
 
-	// ไฟล์ config → flag ว่า allowlist เปิดอยู่ไหม + ชื่อ world (ใช้หา stats ต่อ) best-effort
+	// ไฟล์ config → flag ว่า allowlist เปิดอยู่ไหม + ชื่อ save (ใช้หา stats ต่อ) best-effort
 	if content, found, off, ferr := a.readServerFile(r.Context(), srv, def.Config.FileName); off {
 		offline = true
 	} else if ferr != nil {
@@ -137,8 +137,8 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 			allowlistEnabled = props[key] == "true"
 		}
 		if pt := def.Players.Playtime; pt != nil {
-			if lv := strings.TrimSpace(props[pt.WorldNameKey]); lv != "" && isSafeWorldName(lv) {
-				worldName = lv
+			if lv := strings.TrimSpace(props[pt.SaveNameKey]); lv != "" && isSafeSaveName(lv) {
+				saveName = lv
 			}
 		}
 	}
@@ -186,22 +186,22 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 		players = append(players, *p)
 	}
 	if !offline && def.Players.Playtime != nil {
-		a.fillPlaytimes(r.Context(), srv, def.Players.Playtime, worldName, players)
+		a.fillPlaytimes(r.Context(), srv, def.Players.Playtime, saveName, players)
 	}
 	sort.Slice(players, func(i, j int) bool {
 		return strings.ToLower(players[i].Username) < strings.ToLower(players[j].Username)
 	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"whitelist_enabled": allowlistEnabled,
+		"allowlist_enabled": allowlistEnabled,
 		"players":           players,
 	})
 }
 
-// handlePlayerFace เสิร์ฟรูปหน้าผู้เล่นเป็น PNG — control-plane เป็นตัวดึงเอง ไม่ให้ browser
+// handlePlayerAvatar เสิร์ฟรูปประจำตัวผู้เล่นเป็น PNG — control-plane เป็นตัวดึงเอง ไม่ให้ browser
 // ยิง third-party host (leak IP + เพิ่ม host ที่ต้องเชื่อใจ)
-// uuid ที่ไม่มีรูป (offline-mode/ไม่มี texture) ตอบ 404 → web fallback ไปตัวอักษรย่อ
-func (a *API) handlePlayerFace(w http.ResponseWriter, r *http.Request) {
+// uuid ที่ไม่มีรูปตอบ 404 → web fallback ไปตัวอักษรย่อ
+func (a *API) handlePlayerAvatar(w http.ResponseWriter, r *http.Request) {
 	// สิทธิ์เท่ากับดูรายชื่อผู้เล่น (รูปโผล่ในลิสต์เดียวกัน) — ยึด access ต่อ server ไม่ให้เป็น open proxy
 	srv, _, ok := a.loadServerCap(w, r, capPlayersView)
 	if !ok {
@@ -211,8 +211,8 @@ func (a *API) handlePlayerFace(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if def.Players.Face == nil {
-		writeError(w, http.StatusNotFound, "not_found", "this game has no player faces")
+	if def.Players.Avatar == nil {
+		writeError(w, http.StatusNotFound, "not_found", "this game has no player avatars")
 		return
 	}
 
@@ -222,15 +222,15 @@ func (a *API) handlePlayerFace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	facePNG, err := def.Players.Face(r.Context(), playerUUID)
-	if errors.Is(err, games.ErrNoFace) {
-		writeError(w, http.StatusNotFound, "not_found", "no skin for this player")
+	avatarPNG, err := def.Players.Avatar(r.Context(), playerUUID)
+	if errors.Is(err, games.ErrNoAvatar) {
+		writeError(w, http.StatusNotFound, "not_found", "no avatar for this player")
 		return
 	}
 	if err != nil {
-		a.log.Warn("player face fetch failed", "uuid", playerUUID, "error", err)
-		writeError(w, http.StatusBadGateway, "mojang_unavailable",
-			"could not reach "+def.Players.IdentityService+" for the player skin")
+		a.log.Warn("player avatar fetch failed", "uuid", playerUUID, "error", err)
+		writeError(w, http.StatusBadGateway, "identity_unavailable",
+			"could not reach "+def.Players.IdentityService+" for the player avatar")
 		return
 	}
 
@@ -239,7 +239,7 @@ func (a *API) handlePlayerFace(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	w.Write(facePNG)
+	w.Write(avatarPNG)
 }
 
 // readServerFile อ่านไฟล์ text/JSON ผ่าน agent. คืน (content, found, offline, err):
@@ -320,14 +320,14 @@ func (a *API) handleAddPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		a.log.Error("player lookup failed", "game", def.ID, "username", name, "error", err)
-		writeError(w, http.StatusBadGateway, "mojang_unavailable",
+		writeError(w, http.StatusBadGateway, "identity_unavailable",
 			"could not reach "+def.Players.IdentityService+" to verify the username")
 		return
 	}
 
 	if err := a.st.AddServerPlayer(r.Context(), srv.ID, profile.UUID, profile.Username, &user.ID); err != nil {
 		if errors.Is(err, store.ErrPlayerExists) {
-			writeError(w, http.StatusConflict, "player_exists", "player is already on the whitelist")
+			writeError(w, http.StatusConflict, "player_exists", "player is already on the allowlist")
 			return
 		}
 		a.log.Error("add player failed", "server_id", srv.ID, "error", err)
@@ -390,7 +390,7 @@ func (a *API) handleRemovePlayer(w http.ResponseWriter, r *http.Request) {
 func (a *API) writeAllowlist(w http.ResponseWriter, r *http.Request, srv *store.Server, def *games.Definition) bool {
 	players, err := a.st.ListServerPlayers(r.Context(), srv.ID)
 	if err != nil {
-		a.log.Error("list players for whitelist failed", "server_id", srv.ID, "error", err)
+		a.log.Error("list players for allowlist failed", "server_id", srv.ID, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
 		return false
 	}
@@ -401,7 +401,7 @@ func (a *API) writeAllowlist(w http.ResponseWriter, r *http.Request, srv *store.
 	}
 	content, err := def.Players.Allowlist.Encode(entries)
 	if err != nil {
-		a.log.Error("marshal whitelist failed", "server_id", srv.ID, "error", err)
+		a.log.Error("marshal allowlist failed", "server_id", srv.ID, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
 		return false
 	}
@@ -423,7 +423,7 @@ func (a *API) reloadAllowlistIfRunning(srv *store.Server, def *games.Definition)
 		return
 	}
 	if err := a.hub.SendConsoleInput(srv.NodeID, srv.ID, cmd); err != nil {
-		a.log.Warn("whitelist reload skipped", "server_id", srv.ID, "error", err)
+		a.log.Warn("allowlist reload skipped", "server_id", srv.ID, "error", err)
 	}
 }
 
@@ -437,9 +437,9 @@ const (
 	playtimeWorkers    = 8
 )
 
-// isSafeWorldName กันชื่อ world จากไฟล์ config พาไปนอก jail (ค่ามาจากไฟล์ที่ user แก้ได้)
+// isSafeSaveName กันชื่อ save จากไฟล์ config พาไปนอก jail (ค่ามาจากไฟล์ที่ user แก้ได้)
 // agent มี SafeJoin อยู่แล้ว แต่ปฏิเสธตั้งแต่ต้นทางชัดกว่า
-func isSafeWorldName(s string) bool {
+func isSafeSaveName(s string) bool {
 	if s == "" || strings.Contains(s, "/") || strings.Contains(s, `\`) || strings.Contains(s, "..") {
 		return false
 	}
@@ -448,7 +448,7 @@ func isSafeWorldName(s string) bool {
 
 // fillPlaytimes อ่านไฟล์สถิติของแต่ละคนแบบขนาน (best-effort)
 // อ่านไม่ได้/ไม่มีไฟล์ = ปล่อย 0 ไม่ทำให้ทั้ง request ล่ม
-func (a *API) fillPlaytimes(ctx context.Context, srv *store.Server, spec *games.PlaytimeSpec, worldName string, players []mergedPlayerView) {
+func (a *API) fillPlaytimes(ctx context.Context, srv *store.Server, spec *games.PlaytimeSpec, saveName string, players []mergedPlayerView) {
 	targets := make([]int, 0, len(players))
 	for i := range players {
 		// ไม่เคยเข้าเซิร์ฟเวอร์ = ไม่มีไฟล์ stats แน่นอน ไม่ต้องยิงถาม
@@ -473,28 +473,28 @@ func (a *API) fillPlaytimes(ctx context.Context, srv *store.Server, spec *games.
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			players[i].PlaytimeSeconds = a.readPlaytime(ctx, srv, spec, worldName, players[i].UUID)
+			players[i].PlaytimeSeconds = a.readPlaytime(ctx, srv, spec, saveName, players[i].UUID)
 		}(idx)
 	}
 	wg.Wait()
 }
 
-func (a *API) readPlaytime(ctx context.Context, srv *store.Server, spec *games.PlaytimeSpec, worldName, playerUUID string) int64 {
+func (a *API) readPlaytime(ctx context.Context, srv *store.Server, spec *games.PlaytimeSpec, saveName, playerUUID string) int64 {
 	// uuid มาจากไฟล์ที่ user ที่มีสิทธิ์ file manager เขียนเองได้ (usercache/ops/banned) —
 	// displayUUID คืนค่าดิบเมื่อ parse ไม่ผ่าน จึงต้องบังคับให้เป็น uuid จริงก่อนเอาไปต่อเป็น path
-	// (agent มี SafeJoin กันอยู่แล้ว แต่ห้ามพึ่งชั้นเดียว — เหมือนที่ทำกับชื่อ world)
+	// (agent มี SafeJoin กันอยู่แล้ว แต่ห้ามพึ่งชั้นเดียว — เหมือนที่ทำกับชื่อ save)
 	parsed, err := uuid.Parse(strings.TrimSpace(playerUUID))
 	if err != nil {
 		return 0
 	}
-	content, found, offline, err := a.readServerFile(ctx, srv, spec.Path(worldName, parsed))
+	content, found, offline, err := a.readServerFile(ctx, srv, spec.Path(saveName, parsed))
 	if offline || err != nil || !found || len(content) == 0 {
 		return 0
 	}
 	return spec.Decode(content)
 }
 
-// ---------- player action (moderation ผ่าน console — minecraft: op/deop/kick/ban/pardon) ----------
+// ---------- player action (moderation ผ่าน console — คำสั่งมาจาก PlayerSpec.Actions) ----------
 
 // handlePlayerAction ส่งคำสั่งจัดการผู้เล่นเข้า console ของ server
 // ต้องมี cap players.moderate ต่อ server — running เพราะสั่งผ่าน stdin

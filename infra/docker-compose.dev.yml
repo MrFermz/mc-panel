@@ -1,7 +1,7 @@
 # dev infra เท่านั้น (postgres/redis/nats) — service หลักรันนอก docker ด้วย make run-*
 # ทุก port bind 127.0.0.1 เท่านั้น ห้ามเปิด 0.0.0.0 แม้จะเป็น dev
 # secret มาจาก ../.env (สร้างด้วย make env ก่อน)
-name: mcpanel-dev
+name: game-manager-dev
 
 services:
   postgres:

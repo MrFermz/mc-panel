@@ -1,4 +1,4 @@
-# Reverse proxy หน้าสุดของ mc-panel — ทำให้ web กับ API อยู่ origin เดียวกัน
+# Reverse proxy หน้าสุดของ game-manager — ทำให้ web กับ API อยู่ origin เดียวกัน
 # (httpOnly cookie ใช้ได้ตรง ๆ ไม่ต้องเปิด CORS)
 #
 # Production ที่มี domain จริง: เปลี่ยน :80 เป็น domain แล้วลบ auto_https off

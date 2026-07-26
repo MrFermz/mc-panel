@@ -8,13 +8,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const serverCols = `id, node_id, owner_id, name, game, server_type, mc_version,
+const serverCols = `id, node_id, owner_id, name, game, variant, game_version,
 	memory_mb, host_port, status, created_at, updated_at, deleted_at`
 
 func scanServer(row pgx.Row) (*Server, error) {
 	var v Server
-	err := row.Scan(&v.ID, &v.NodeID, &v.OwnerID, &v.Name, &v.Game, &v.ServerType,
-		&v.MCVersion, &v.MemoryMB, &v.HostPort, &v.Status, &v.CreatedAt, &v.UpdatedAt,
+	err := row.Scan(&v.ID, &v.NodeID, &v.OwnerID, &v.Name, &v.Game, &v.Variant,
+		&v.GameVersion, &v.MemoryMB, &v.HostPort, &v.Status, &v.CreatedAt, &v.UpdatedAt,
 		&v.DeletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -40,7 +40,7 @@ func collectServers(rows pgx.Rows) ([]*Server, error) {
 
 // CreateServerWithOwner ทำใน tx เดียว: server row + permission owner ของคนสร้าง
 // เพื่อไม่ให้เกิด server ที่ไม่มี owner ถ้า insert permission ล้ม
-func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.UUID, name, game, serverType, mcVersion string, memoryMB int, hostPort *int) (*Server, error) {
+func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.UUID, name, game, variant, gameVersion string, memoryMB int, hostPort *int) (*Server, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -48,10 +48,10 @@ func (s *Store) CreateServerWithOwner(ctx context.Context, nodeID, ownerID uuid.
 	defer tx.Rollback(ctx)
 
 	srv, err := scanServer(tx.QueryRow(ctx, `
-		INSERT INTO servers (node_id, owner_id, name, game, server_type, mc_version, memory_mb, host_port)
+		INSERT INTO servers (node_id, owner_id, name, game, variant, game_version, memory_mb, host_port)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+serverCols,
-		nodeID, ownerID, name, game, serverType, mcVersion, memoryMB, hostPort))
+		nodeID, ownerID, name, game, variant, gameVersion, memoryMB, hostPort))
 	if err != nil {
 		return nil, err
 	}
@@ -160,10 +160,10 @@ func (s *Store) UpdateServerConfig(ctx context.Context, id uuid.UUID, name *stri
 		id, name, memoryMB, hostPort, clearHostPort))
 }
 
-// UpdateServerMCVersion set mc_version จากเวอร์ชันที่ agent detect ได้หลัง import สำเร็จ
-func (s *Store) UpdateServerMCVersion(ctx context.Context, id uuid.UUID, mcVersion string) error {
+// UpdateServerGameVersion set game_version จากเวอร์ชันที่ agent detect ได้หลัง import สำเร็จ
+func (s *Store) UpdateServerGameVersion(ctx context.Context, id uuid.UUID, gameVersion string) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE servers SET mc_version = $2, updated_at = now() WHERE id = $1`, id, mcVersion)
+		`UPDATE servers SET game_version = $2, updated_at = now() WHERE id = $1`, id, gameVersion)
 	return err
 }
 

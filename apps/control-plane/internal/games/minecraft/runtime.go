@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const runtimeImagePrefix = "mcpanel/mc-runtime"
+const runtimeImagePrefix = "game-manager/runtime-java"
 
 // latestJavaTag = Java ใหม่สุดที่เรามี runtime image ให้ (ดู make runtime-images)
 // ใช้กับ calendar version (25.x/26.x…) และ fallback — Java backward-compatible
@@ -23,12 +23,12 @@ const latestJavaTag = "25"
 // เวอร์ชันที่ parse ไม่ได้ (snapshot ฯลฯ) fallback :25 (ใหม่สุด = ปลอดภัยกับ jar ใหม่)
 //
 // logic ชุดนี้ต้องตรงกับฝั่ง agent ที่เลือก image ให้ forge installer (games/minecraft ของ node-agent)
-func RuntimeImage(variant, mcVersion string) string {
+func RuntimeImage(variant, gameVersion string) string {
 	if variant == "velocity" {
 		return runtimeImagePrefix + ":" + latestJavaTag
 	}
 
-	major, minor, patch, ok := parseMCVersion(mcVersion)
+	major, minor, patch, ok := parseGameVersion(gameVersion)
 	if !ok {
 		return runtimeImagePrefix + ":" + latestJavaTag
 	}
@@ -48,9 +48,9 @@ func RuntimeImage(variant, mcVersion string) string {
 	}
 }
 
-// parseMCVersion รองรับ "1.21", "1.20.4" — ตัวเลขล้วนคั่นด้วยจุดเท่านั้น
+// parseGameVersion รองรับ "1.21", "1.20.4" — ตัวเลขล้วนคั่นด้วยจุดเท่านั้น
 // ("1.20.5-rc1" หรือ "24w14a" ถือว่า parse ไม่ได้ ให้ caller ตัดสินใจ fallback)
-func parseMCVersion(v string) (major, minor, patch int, ok bool) {
+func parseGameVersion(v string) (major, minor, patch int, ok bool) {
 	parts := strings.Split(strings.TrimSpace(v), ".")
 	if len(parts) < 2 || len(parts) > 3 {
 		return 0, 0, 0, false

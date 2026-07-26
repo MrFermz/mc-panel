@@ -17,14 +17,14 @@ rand() { openssl rand -hex "$1"; }
 
 cat > "$ENV_FILE" <<EOF
 # ============================================================
-# mc-panel secrets — generate โดย scripts/gen-env.sh
+# game-manager secrets — generate โดย scripts/gen-env.sh
 # ห้าม commit ไฟล์นี้ (.gitignore กันไว้แล้ว)
 # ============================================================
 
 # PostgreSQL
-POSTGRES_USER=mcpanel
+POSTGRES_USER=gamemanager
 POSTGRES_PASSWORD=$(rand 24)
-POSTGRES_DB=mcpanel
+POSTGRES_DB=gamemanager
 
 # Redis
 REDIS_PASSWORD=$(rand 24)
@@ -47,10 +47,10 @@ NODE_TOKEN=$(rand 32)
 # (docker compose logs control-plane | grep -A3 "INITIAL ADMIN")
 ADMIN_USERNAME=admin
 
-# path บน host สำหรับข้อมูล MC servers — ต้องเป็น absolute path
+# path บน host สำหรับข้อมูลของ game server — ต้องเป็น absolute path
 # สำคัญ: path นี้ต้องมองเห็นเหมือนกันทั้งจากใน agent container และจาก docker daemon
 # (agent ทำ bind mount ให้ sibling container ด้วย path เดียวกันนี้)
-MC_DATA_DIR=$ROOT/data/servers
+GM_DATA_DIR=$ROOT/data/servers
 
 # port ที่ Caddy เปิดรับหน้าเว็บ
 PANEL_HTTP_PORT=8000

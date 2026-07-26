@@ -3,7 +3,7 @@ package minecraft
 import (
 	"testing"
 
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 func TestMessageOf(t *testing.T) {
@@ -20,7 +20,7 @@ func TestMessageOf(t *testing.T) {
 }
 
 // parser ต้อง map บรรทัดจริงของ MC เป็น event ที่ tracker เข้าใจ (ตัว tracker เทสต์แยก
-// ที่ internal/mcstate บน parser ตัวนี้)
+// ที่ internal/gamestate บน parser ตัวนี้)
 func TestParseConsoleLineKinds(t *testing.T) {
 	cases := []struct {
 		line string

@@ -10,12 +10,12 @@ import (
 
 	"github.com/google/uuid"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 
-	"github.com/mc-panel/control-plane/internal/agenthub"
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/agenthub"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 const (
@@ -28,19 +28,19 @@ const (
 	// maxImportTextField = เพดานของ text field แต่ละอันใน multipart (name/version ฯลฯ)
 	maxImportTextField = 4096
 	// importArchivePath = ที่ staged zip ใน jail ของ server (relative) — agent แตกด้วย SafeJoin
-	importArchivePath = ".mcpanel/import.zip"
+	importArchivePath = ".gamemanager/import.zip"
 )
 
 // importMeta = text fields ที่มากับ multipart (นอกจาก part `archive`)
 type importMeta struct {
-	name       string
-	nodeID     string
-	game       string
-	serverType string
-	mcVersion  string
-	memoryMB   string
-	hostPort   string
-	acceptEula string
+	name          string
+	nodeID        string
+	game          string
+	variant       string
+	gameVersion   string
+	memoryMB      string
+	hostPort      string
+	acceptLicense string
 }
 
 func (m *importMeta) set(field, value string) {
@@ -51,34 +51,34 @@ func (m *importMeta) set(field, value string) {
 		m.nodeID = value
 	case "game":
 		m.game = value
-	case "server_type":
-		m.serverType = value
-	case "mc_version":
-		m.mcVersion = value
+	case "variant":
+		m.variant = value
+	case "game_version":
+		m.gameVersion = value
 	case "memory_mb":
 		m.memoryMB = value
 	case "host_port":
 		m.hostPort = value
-	case "accept_eula":
-		m.acceptEula = value
+	case "accept_license":
+		m.acceptLicense = value
 	}
 }
 
 // validatedImport = ผลของการ validate metadata (เหมือน handleCreateServer ทุกกฎ)
 type validatedImport struct {
-	name       string
-	nodeID     uuid.UUID
-	game       *games.Definition
-	serverType string
-	mcVersion  string
-	memoryMB   int
-	hostPort   *int
-	acceptEula bool
+	name          string
+	nodeID        uuid.UUID
+	game          *games.Definition
+	variant       string
+	gameVersion   string
+	memoryMB      int
+	hostPort      *int
+	acceptLicense bool
 }
 
 // validateImportMeta ตรวจ field ให้เหมือน create ทุกข้อ — คืน (code, message) เมื่อไม่ผ่าน
 // (status เป็น 400 ทั้งหมด ยกเว้น node_not_found = 404 จัดการแยกใน handler)
-// กติกาของเกมทั้งหมด (variant, ความยาวเวอร์ชัน, memory ขั้นต่ำ, EULA) มาจาก definition
+// กติกาของเกมทั้งหมด (variant, ความยาวเวอร์ชัน, memory ขั้นต่ำ, license) มาจาก definition
 // ตัวเดียวกับที่ create ใช้ — สองเส้นทางนี้ต้องไม่มีวันตรวจคนละมาตรฐาน
 func validateImportMeta(reg *games.Registry, m *importMeta) (*validatedImport, string, string) {
 	def, ok := reg.Resolve(strings.TrimSpace(m.game))
@@ -89,13 +89,13 @@ func validateImportMeta(reg *games.Registry, m *importMeta) (*validatedImport, s
 	if name == "" || len(name) > 100 {
 		return nil, "invalid_name", "name is required (max 100 characters)"
 	}
-	if !def.HasVariant(m.serverType) {
-		return nil, "invalid_server_type", "server_type must be one of: " + def.VariantList()
+	if !def.HasVariant(m.variant) {
+		return nil, "invalid_variant", "variant must be one of: " + def.VariantList()
 	}
-	mcVersion := strings.TrimSpace(m.mcVersion)
-	if mcVersion == "" || len(mcVersion) > def.Version.MaxLen {
-		return nil, "invalid_mc_version",
-			"mc_version is required (max " + strconv.Itoa(def.Version.MaxLen) + " characters)"
+	gameVersion := strings.TrimSpace(m.gameVersion)
+	if gameVersion == "" || len(gameVersion) > def.Version.MaxLen {
+		return nil, "invalid_game_version",
+			"game_version is required (max " + strconv.Itoa(def.Version.MaxLen) + " characters)"
 	}
 	memoryMB, err := strconv.Atoi(strings.TrimSpace(m.memoryMB))
 	if err != nil || memoryMB < def.MinMemoryMB {
@@ -112,24 +112,24 @@ func validateImportMeta(reg *games.Registry, m *importMeta) (*validatedImport, s
 	if !validateHostPort(hostPort) {
 		return nil, "invalid_host_port", "host_port must be between 1024 and 65535"
 	}
-	acceptEula := parseImportBool(m.acceptEula)
-	// variant ที่ไม่รัน jar ของเกม (เช่น velocity ที่เป็น proxy) ไม่มี EULA ให้ยอมรับ
-	if !acceptEula && def.NeedsEULA(m.serverType) {
-		return nil, "eula_required", "you must accept the " + def.Label + " EULA to import this server"
+	acceptLicense := parseImportBool(m.acceptLicense)
+	// variant ที่ไม่ได้รัน artifact ของเกมเอง (เช่น proxy) ไม่มี license ให้ยอมรับ
+	if !acceptLicense && def.RequiresLicense(m.variant) {
+		return nil, "license_required", "you must accept the " + def.LicenseName + " to import this server"
 	}
 	nodeID, err := uuid.Parse(strings.TrimSpace(m.nodeID))
 	if err != nil {
 		return nil, "invalid_request", "node_id must be a valid UUID"
 	}
 	return &validatedImport{
-		name:       name,
-		nodeID:     nodeID,
-		game:       def,
-		serverType: m.serverType,
-		mcVersion:  mcVersion,
-		memoryMB:   memoryMB,
-		hostPort:   hostPort,
-		acceptEula: acceptEula,
+		name:          name,
+		nodeID:        nodeID,
+		game:          def,
+		variant:       m.variant,
+		gameVersion:   gameVersion,
+		memoryMB:      memoryMB,
+		hostPort:      hostPort,
+		acceptLicense: acceptLicense,
 	}, "", ""
 }
 
@@ -142,7 +142,7 @@ func parseImportBool(v string) bool {
 }
 
 // handleImportServer รับ zip ของ server เดิมแบบ streaming multipart แล้ว stage เข้า agent เป็น
-// chunked FileWriteChunk (.mcpanel/import.zip ใน jail) ก่อน dispatch NATS job `import_server`
+// chunked FileWriteChunk (.gamemanager/import.zip ใน jail) ก่อน dispatch NATS job `import_server`
 // — lifecycle command เป็น job ตามกฎ #2, ส่วน bytes-over-gRPC เป็น file I/O ปกติ (file manager
 // ก็ทำแบบนี้). ห้าม buffer ทั้ง zip: อ่านทีละก้อน look-ahead หนึ่งก้อนพอให้รู้ก้อนสุดท้าย
 func (a *API) handleImportServer(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +226,7 @@ func (a *API) streamImportArchive(w http.ResponseWriter, r *http.Request, user *
 	}
 
 	srv, err := a.st.CreateServerWithOwner(r.Context(), v.nodeID, user.ID,
-		v.name, v.game.ID, v.serverType, v.mcVersion, v.memoryMB, v.hostPort)
+		v.name, v.game.ID, v.variant, v.gameVersion, v.memoryMB, v.hostPort)
 	if store.IsUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "host_port_taken", "host_port is already used on this node")
 		return
@@ -282,15 +282,15 @@ func (a *API) streamImportArchive(w http.ResponseWriter, r *http.Request, user *
 	}
 
 	a.audit(r, &user.ID, &srv.ID, "server_import", map[string]any{
-		"name": srv.Name, "game": srv.Game, "server_type": srv.ServerType,
-		"mc_version": srv.MCVersion, "node_id": srv.NodeID.String(), "archive_bytes": total,
+		"name": srv.Name, "game": srv.Game, "variant": srv.Variant,
+		"game_version": srv.GameVersion, "node_id": srv.NodeID.String(), "archive_bytes": total,
 	})
 
 	// staging สำเร็จ row คงอยู่แน่ (cleanup path ที่ลบ row อยู่ก่อนหน้านี้แล้ว)
 	// → แจ้ง browser refetch server list
 	a.events.ServerAdded(srv.ID)
 
-	job, err := a.disp.ImportServer(r.Context(), srv, v.acceptEula, importArchivePath, user.ID)
+	job, err := a.disp.ImportServer(r.Context(), srv, v.acceptLicense, importArchivePath, user.ID)
 	if err != nil {
 		// zip staged แล้วแต่ dispatch ล้ม — mark errored เหมือน create (row เป็น server ที่ provision ไม่สำเร็จ)
 		if serr := a.st.UpdateServerStatus(r.Context(), srv.ID, "errored"); serr != nil {
@@ -330,7 +330,7 @@ func (a *API) sendImportChunk(ctx context.Context, srv *store.Server, content []
 	}
 	if !resp.Success {
 		a.log.Error("import chunk rejected", "server_id", srv.ID, "error", resp.Error)
-		return http.StatusBadGateway, "import_failed", "node agent rejected archive chunk: "+resp.Error
+		return http.StatusBadGateway, "import_failed", "node agent rejected archive chunk: " + resp.Error
 	}
 	return 0, "", ""
 }

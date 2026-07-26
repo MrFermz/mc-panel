@@ -14,8 +14,9 @@ import {
 } from "@/lib/api";
 import type { ServerPlayer } from "@/lib/types";
 import { formatPlaytime } from "@/lib/format";
-import { useT, type TranslationKey } from "@/lib/i18n";
-import { PlayerHead } from "@/components/server/player-head";
+import { useT, type TranslateFn, type TranslationKey } from "@/lib/i18n";
+import { PlayerAvatar } from "@/components/server/player-avatar";
+import { gameProfile } from "@/lib/games";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,18 +36,19 @@ import { cn } from "@/lib/utils";
 // map error code จาก players endpoint → ข้อความ toast ที่เป็นมิตร
 function playerErrorMessage(
   err: unknown,
-  t: (k: TranslationKey) => string,
+  t: TranslateFn,
+  gameLabel: string,
 ): string {
   if (!(err instanceof ApiError)) return t("players.errGeneric");
   switch (err.code) {
     case "player_not_found":
-      return t("players.errNotFound");
+      return t("players.errNotFound", { game: gameLabel });
     case "player_exists":
       return t("players.errExists");
-    case "mojang_unavailable":
-      return t("players.errMojang");
+    case "identity_unavailable":
+      return t("players.errIdentity", { game: gameLabel });
     case "invalid_username":
-      return t("players.errInvalid");
+      return t("players.errInvalid", { game: gameLabel });
     case "forbidden":
       return t("players.errForbidden");
     case "node_offline":
@@ -60,7 +62,7 @@ function playerErrorMessage(
   }
 }
 
-type Filter = "all" | "online" | "whitelisted" | "op" | "banned";
+type Filter = "all" | "online" | "allowlisted" | "op" | "banned";
 
 // ROLE = สิทธิ์ในเกม ไม่ใช่สิทธิ์ในแผงควบคุม (panel มี owner/collaborator แยกที่หน้า access
 // ซึ่งผูกกับ user ของ panel ไม่ใช่ MC account — จับคู่กันไม่ได้ จึงมีแค่ Op/Member)
@@ -103,22 +105,26 @@ function StatusCell({ player }: { player: ServerPlayer }) {
 
 export default function ServerPlayers({
   serverId,
+  game: gameId,
   isRunning,
   onlineNames,
   canManage,
   canModerate,
 }: {
   serverId: string;
+  // เกมของ instance นี้ — กติกาชื่อผู้เล่น/key ของ allowlist/ชื่อที่โผล่ในข้อความ มาจาก profile
+  game?: string;
   isRunning: boolean;
   // รายชื่อที่ออนไลน์ "สด" จาก stats ของ server (WS patch cache ["servers"] ให้แล้ว) —
   // ไม่ใช้ค่า online ที่ติดมากับ payload ของ players เพราะนั่น fetch ครั้งเดียวแล้วค้าง
   // (กฎ repo: ห้าม poll REST — รับ update ต่อจาก WS)
   onlineNames: string[];
-  // canManage = players.manage (whitelist), canModerate = players.moderate (op/kick/ban)
+  // canManage = players.manage (allowlist), canModerate = players.moderate (op/kick/ban)
   canManage: boolean;
   canModerate: boolean;
 }) {
   const t = useT();
+  const game = gameProfile(gameId);
   const queryClient = useQueryClient();
   const [username, setUsername] = React.useState("");
   const [search, setSearch] = React.useState("");
@@ -129,7 +135,7 @@ export default function ServerPlayers({
     queryFn: () => listPlayers(serverId),
   });
 
-  const whitelistEnabled = players.data?.whitelist_enabled ?? false;
+  const allowlistEnabled = players.data?.allowlist_enabled ?? false;
 
   const invalidatePlayers = () =>
     queryClient.invalidateQueries({
@@ -143,13 +149,13 @@ export default function ServerPlayers({
       setUsername("");
       invalidatePlayers();
     },
-    onError: (err) => toast.error(playerErrorMessage(err, t)),
+    onError: (err) => toast.error(playerErrorMessage(err, t, game.label)),
   });
 
   // toggle whitelist ต่อ row: on → add by username, off → remove by uuid
   const toggle = useMutation({
     mutationFn: async (player: ServerPlayer) => {
-      if (player.whitelisted) {
+      if (player.allowlisted) {
         await removePlayer(serverId, player.uuid);
       } else {
         await addPlayer(serverId, player.username);
@@ -157,13 +163,13 @@ export default function ServerPlayers({
     },
     onSuccess: (_data, player) => {
       toast.success(
-        player.whitelisted
+        player.allowlisted
           ? t("players.removed")
           : t("players.added", { name: player.username }),
       );
       invalidatePlayers();
     },
-    onError: (err) => toast.error(playerErrorMessage(err, t)),
+    onError: (err) => toast.error(playerErrorMessage(err, t, game.label)),
   });
 
   // op/deop/kick/ban/pardon วิ่งผ่าน console ของ server — ผลจริงเกิดในเกมทันที
@@ -178,7 +184,7 @@ export default function ServerPlayers({
       // MC เขียนไฟล์หลังรันคำสั่งเสร็จ — หน่วงนิดให้ไฟล์ทันก่อนอ่านซ้ำ
       window.setTimeout(invalidatePlayers, 500);
     },
-    onError: (err) => toast.error(playerErrorMessage(err, t)),
+    onError: (err) => toast.error(playerErrorMessage(err, t, game.label)),
   });
 
   // acting = ปิดปุ่มทั้งแถวระหว่างสั่ง, running = spinner เฉพาะปุ่มที่ถูกกดจริง
@@ -187,13 +193,14 @@ export default function ServerPlayers({
   const running = (uuid: string, action: string) =>
     acting(uuid) && act.variables?.action === action;
 
-  const enableWhitelist = useMutation({
-    mutationFn: () => saveServerProperties(serverId, { "white-list": "true" }),
+  const enableAllowlist = useMutation({
+    mutationFn: () =>
+      saveServerProperties(serverId, { [game.allowlistEnabledKey]: "true" }),
     onSuccess: () => {
-      toast.success(t("players.whitelistEnabled"));
+      toast.success(t("players.allowlistEnabled"));
       invalidatePlayers();
       queryClient.invalidateQueries({
-        queryKey: ["servers", serverId, "properties"],
+        queryKey: ["servers", serverId, "config"],
       });
     },
     onError: (err) =>
@@ -222,7 +229,7 @@ export default function ServerPlayers({
     () => ({
       all: all.length,
       online: all.filter((p) => p.online).length,
-      whitelisted: all.filter((p) => p.whitelisted).length,
+      allowlisted: all.filter((p) => p.allowlisted).length,
       op: all.filter((p) => p.op).length,
       banned: all.filter((p) => p.banned).length,
     }),
@@ -234,7 +241,7 @@ export default function ServerPlayers({
     return all.filter((p) => {
       if (q && !p.username.toLowerCase().includes(q)) return false;
       if (filter === "online") return p.online;
-      if (filter === "whitelisted") return p.whitelisted;
+      if (filter === "allowlisted") return p.allowlisted;
       if (filter === "op") return p.op;
       if (filter === "banned") return p.banned;
       return true;
@@ -248,9 +255,9 @@ export default function ServerPlayers({
     { key: "all", labelKey: "players.filterAll", count: counts.all },
     { key: "online", labelKey: "players.filterOnline", count: counts.online },
     {
-      key: "whitelisted",
-      labelKey: "players.filterWhitelisted",
-      count: counts.whitelisted,
+      key: "allowlisted",
+      labelKey: "players.filterAllowlisted",
+      count: counts.allowlisted,
     },
     { key: "op", labelKey: "players.filterOp", count: counts.op },
     { key: "banned", labelKey: "players.filterBanned", count: counts.banned },
@@ -300,30 +307,30 @@ export default function ServerPlayers({
 
   return (
     <div className="grid gap-4">
-      {!whitelistEnabled ? (
+      {!allowlistEnabled ? (
         <div className="border-destructive/40 bg-destructive/5 grid gap-2 rounded-md border p-3 text-sm sm:flex sm:items-center sm:justify-between">
           <div className="grid gap-1">
-            <p className="font-medium">{t("players.whitelistOff")}</p>
+            <p className="font-medium">{t("players.allowlistOff")}</p>
             <p className="text-muted-foreground text-xs">
-              {t("players.whitelistApplyHint")}
+              {t("players.allowlistApplyHint")}
             </p>
           </div>
           {canManage && (
             <Button
               size="sm"
-              loading={enableWhitelist.isPending}
-              onClick={() => enableWhitelist.mutate()}
+              loading={enableAllowlist.isPending}
+              onClick={() => enableAllowlist.mutate()}
             >
-              {enableWhitelist.isPending
+              {enableAllowlist.isPending
                 ? t("common.saving")
-                : t("players.enableWhitelist")}
+                : t("players.enableAllowlist")}
             </Button>
           )}
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
-          {t("players.whitelistOn")}{" "}
-          <span className="text-xs">{t("players.whitelistApplyHint")}</span>
+          {t("players.allowlistOn")}{" "}
+          <span className="text-xs">{t("players.allowlistApplyHint")}</span>
         </p>
       )}
 
@@ -338,7 +345,7 @@ export default function ServerPlayers({
           <Input
             className="w-full sm:max-w-xs"
             maxLength={16}
-            placeholder={t("players.addPlaceholder")}
+            placeholder={t("players.addPlaceholder", { game: game.label })}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
@@ -410,7 +417,7 @@ export default function ServerPlayers({
                     className="grid gap-3 rounded-md border p-3"
                   >
                     <div className="flex items-center gap-3">
-                      <PlayerHead
+                      <PlayerAvatar
                         name={player.username}
                         serverId={serverId}
                         uuid={player.uuid}
@@ -430,13 +437,13 @@ export default function ServerPlayers({
                       </span>
                       <div className="flex items-center gap-2">
                         <Switch
-                          checked={player.whitelisted}
+                          checked={player.allowlisted}
                           disabled={toggling(player.uuid) || !canManage}
                           onCheckedChange={() => toggle.mutate(player)}
-                          aria-label={t("players.toggleWhitelist")}
+                          aria-label={t("players.toggleAllowlist")}
                         />
                         <span className="text-muted-foreground text-[10px]">
-                          {t("players.badgeWhitelisted")}
+                          {t("players.badgeAllowlisted")}
                         </span>
                       </div>
                     </div>
@@ -455,7 +462,7 @@ export default function ServerPlayers({
                         <TableHead>{t("players.colRole")}</TableHead>
                         <TableHead>{t("players.colStatus")}</TableHead>
                         <TableHead>{t("players.colPlaytime")}</TableHead>
-                        <TableHead>{t("players.whitelist")}</TableHead>
+                        <TableHead>{t("players.allowlist")}</TableHead>
                         <TableHead className="text-right">
                           {t("players.colActions")}
                         </TableHead>
@@ -466,7 +473,7 @@ export default function ServerPlayers({
                         <TableRow key={player.uuid || player.username}>
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              <PlayerHead
+                              <PlayerAvatar
                                 name={player.username}
                                 serverId={serverId}
                                 uuid={player.uuid}
@@ -494,10 +501,10 @@ export default function ServerPlayers({
                           </TableCell>
                           <TableCell>
                             <Switch
-                              checked={player.whitelisted}
+                              checked={player.allowlisted}
                               disabled={toggling(player.uuid) || !canManage}
                               onCheckedChange={() => toggle.mutate(player)}
-                              aria-label={t("players.toggleWhitelist")}
+                              aria-label={t("players.toggleAllowlist")}
                             />
                           </TableCell>
                           <TableCell>{rowActions(player)}</TableCell>

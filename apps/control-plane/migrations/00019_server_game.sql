@@ -1,7 +1,7 @@
 -- +goose Up
--- Game definition: server ทุกตัวผูกกับ "เกม" หนึ่งเกม แล้ว server_type กลายเป็น variant
+-- Game definition: server ทุกตัวผูกกับ "เกม" หนึ่งเกม แล้วคอลัมน์ variant คือชนิดของ server
 -- ภายในเกมนั้น (minecraft: vanilla/paper/fabric/forge/velocity) — ความรู้เฉพาะเกมทั้งหมด
--- (variant, กติกาเวอร์ชัน, runtime image, catalog ของ config, กติกาผู้เล่น) ย้ายไปอยู่ใน
+-- (รายการ variant, กติกาเวอร์ชัน, runtime image, catalog ของ config, กติกาผู้เล่น) อยู่ใน
 -- registry ที่ internal/games ทั้ง control-plane และ node-agent
 --
 -- เฟสนี้มีเกมเดียวคือ minecraft — DEFAULT จึงทำหน้าที่ backfill row เดิมทั้งตารางในตัว

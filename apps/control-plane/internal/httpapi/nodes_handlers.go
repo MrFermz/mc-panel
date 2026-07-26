@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/jobs"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/jobs"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 func (a *API) handleListNodes(w http.ResponseWriter, r *http.Request) {

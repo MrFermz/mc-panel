@@ -67,7 +67,7 @@ func (s *Store) RemoveServerPlayer(ctx context.Context, serverID, playerUUID uui
 
 // NextFreeHostPort คืน host_port ว่างต่ำสุดบน node เริ่มจาก startPort (cap 65535)
 // สำหรับ prefill ฝั่ง web เท่านั้น — ไม่ได้ reserve จริง (create เป็นคน enforce UNIQUE)
-// startPort มาจาก game definition (Minecraft = 25565) ไม่ใช่ค่าคงที่ของ store
+// startPort มาจาก game definition (Definition.DefaultHostPort) ไม่ใช่ค่าคงที่ของ store
 func (s *Store) NextFreeHostPort(ctx context.Context, nodeID uuid.UUID, startPort int) (int, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT host_port FROM servers

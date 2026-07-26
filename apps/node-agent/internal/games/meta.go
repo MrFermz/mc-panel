@@ -1,4 +1,4 @@
-// meta.go — .mcpanel/meta.json: บันทึกว่า instance บน disk ตัวนี้เป็นเกม/variant อะไร
+// meta.go — .gamemanager/meta.json: บันทึกว่า instance บน disk ตัวนี้เป็นเกม/variant อะไร
 //
 // จำเป็นเพราะ job start/stop ไม่ได้พก game/variant มาด้วย (payload มีแค่ memory/port/image)
 // runner จึงอ่านจากไฟล์นี้เพื่อรู้ว่าต้องใช้ definition ตัวไหน — provision เป็นคนเขียน
@@ -13,26 +13,29 @@ import (
 )
 
 const (
+	// ContainerDataDir = ที่ที่ jail ของ instance ถูก bind เข้าไปใน container เสมอ
+	// (runner เป็นคน bind, launch script ของแต่ละเกมต้องอ้างอิงค่านี้ไม่ใช่ hardcode เอง)
+	ContainerDataDir = "/data"
 	// PanelDir = directory ที่ panel เป็นเจ้าของใน jail ของแต่ละ server
-	PanelDir = ".mcpanel"
+	PanelDir = ".gamemanager"
 	// MetaFileName = ชื่อไฟล์ metadata ใน PanelDir
 	MetaFileName = "meta.json"
 	// LaunchScriptName = script ที่ container รัน (provision เขียนจาก Definition.LaunchScript)
 	LaunchScriptName = "launch.sh"
 )
 
-// InstanceMeta = เนื้อของ .mcpanel/meta.json — สัญญาระหว่าง provision กับ runner
+// InstanceMeta = เนื้อของ .gamemanager/meta.json — สัญญาระหว่าง provision กับ runner
 type InstanceMeta struct {
-	Game       string `json:"game"`
-	ServerType string `json:"server_type"`
-	MCVersion  string `json:"mc_version"`
+	Game        string `json:"game"`
+	Variant     string `json:"variant"`
+	GameVersion string `json:"game_version"`
 	// StopCommand ซ้ำกับ Definition.StopCommand(variant) โดยตั้งใจ — instance ที่ provision
 	// ไว้ก่อนมี field `game` ยังหยุดได้ถูกต้องจากไฟล์นี้ตัวเดียว
 	StopCommand string `json:"stop_command"`
 }
 
 // WriteInstanceMeta เขียนทับเสมอ — panel เป็นเจ้าของไฟล์นี้ ไม่ว่า zip ที่ import จะมี
-// .mcpanel เดิมติดมาหรือไม่
+// .gamemanager เดิมติดมาหรือไม่
 func WriteInstanceMeta(dir string, meta InstanceMeta) error {
 	b, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -63,7 +66,7 @@ func (l InstanceLookup) DefinitionFor(serverID string) (*Definition, InstanceMet
 	return def, meta, true
 }
 
-// ConsoleSpecFor = console spec ของ instance (mcstate.GameLookup)
+// ConsoleSpecFor = console spec ของ instance (gamestate.GameLookup)
 func (l InstanceLookup) ConsoleSpecFor(serverID string) (ConsoleSpec, bool) {
 	def, _, ok := l.DefinitionFor(serverID)
 	if !ok {

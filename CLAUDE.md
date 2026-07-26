@@ -1,4 +1,4 @@
-# CLAUDE.md — mc-panel
+# CLAUDE.md — game-manager
 
 คู่มือสำหรับ AI (และคน) ที่มาทำโปรเจกต์นี้ต่อ ไม่ว่าจะย้ายเครื่องหรือเริ่ม session ใหม่
 อ่านคู่กับ [`docs/architecture.md`](docs/architecture.md) (การตัดสินใจเชิงระบบ) และ
@@ -6,23 +6,28 @@
 
 ## โปรเจกต์นี้คืออะไร
 
-ระบบจัดการ Minecraft server หลาย instance (vanilla/paper/fabric/forge/velocity) แบบ microservices
+ระบบจัดการ **game server** หลาย instance แบบ microservices — ตัวระบบหลัก **ไม่ผูกกับเกมใดเกมหนึ่ง**
+ความรู้เฉพาะเกมอยู่ใน game definition แยกเป็น package (ตอนนี้ลงทะเบียนไว้เกมเดียว: `minecraft`
+variant vanilla/paper/fabric/forge/velocity)
 เขียนเองทั้งหมด ทุกอย่างรันบน Docker — web (Next.js) + control-plane (Go) + node-agent (Go)
 คุยกันผ่าน REST/WebSocket (browser), gRPC stream (realtime), NATS JetStream (jobs), protobuf
 
 ## กฎเหล็ก (ห้ามละเมิดไม่ว่าจะดูสมเหตุสมผลแค่ไหน)
 
 0. **ความรู้เฉพาะเกมอยู่ใน game definition ที่เดียว** — server ทุกตัวผูกกับเกม (`servers.game`,
-   ตอนนี้มี `minecraft` เกมเดียว) และ `server_type` คือ **variant** ภายในเกมนั้น. ทุกอย่างที่
-   "เป็นของเกม" (รายการ variant/EULA, กติกาเวอร์ชัน, runtime image, ชื่อ+catalog+ไวยากรณ์ของไฟล์
-   config, กติกาผู้เล่น/allowlist/คำสั่ง moderation/playtime, ที่มาของ artifact, launch script,
+   ตอนนี้มี `minecraft` เกมเดียว) และคอลัมน์ `variant` คือ **ชนิดของ server** ภายในเกมนั้น. ทุกอย่างที่
+   "เป็นของเกม" (รายการ variant/license, กติกาเวอร์ชัน, runtime image, ชื่อ+catalog+ไวยากรณ์ของไฟล์
+   config, กติกาผู้เล่น/allowlist/คำสั่ง moderation/playtime/avatar, ที่มาของ artifact, launch script,
    คำสั่ง stop, port ใน container, การอ่าน console) อยู่ใน `internal/games` ของแต่ละ app
+   และ `lib/games` ฝั่ง web
    — **ห้ามเขียน `switch` ตามชื่อเกม/variant หรือ hardcode ชื่อไฟล์/คำสั่งของเกมในชั้นอื่น**
-   (httpapi, jobs, store, provision, runner, mcstate) เด็ดขาด ดูเช็คลิสต์ในหัวข้อ
-   "เพิ่มเกมใหม่ / แก้ของเกมเดิม" ด้านล่าง
+   (httpapi, jobs, store, provision, runner, gamestate, component ฝั่ง web) เด็ดขาด
+   ดูเช็คลิสต์ในหัวข้อ "เพิ่มเกมใหม่ / แก้ของเกมเดิม" ด้านล่าง
+   — **schema ก็ห้ามถือความรู้ของเกม**: คอลัมน์ `variant` ไม่มี CHECK รายชื่อ และ `memory_mb`
+   เช็คแค่ `> 0` (floor จริงมาจาก `Definition.MinMemoryMB`) — อย่าเพิ่ม CHECK กลับเข้าไป
 1. **แก้ contract ก่อนแก้โค้ด** — interface ระหว่าง service มี source of truth 3 ที่:
    - REST/WS: `docs/api.md`
-   - gRPC/NATS: `packages/proto/mcpanel/**/*.proto` (แก้แล้วรัน `make proto-gen` และ **commit generated code**)
+   - gRPC/NATS: `packages/proto/gamemanager/**/*.proto` (แก้แล้วรัน `make proto-gen` และ **commit generated code**)
    - DB: `apps/control-plane/migrations/` (หลังมี release แล้วห้ามแก้ไฟล์เก่า — เพิ่มไฟล์ใหม่เท่านั้น
      ตอนนี้ยัง pre-release แก้ในที่ได้)
 2. **Lifecycle command (create/start/stop/kill/delete) ต้องเป็น job ผ่าน NATS เสมอ** โดยมี `jobs` table
@@ -36,22 +41,24 @@
    และห้ามให้ `.env` เข้า docker build context (มี `.dockerignore` กันแล้ว อย่าไปแก้ทิ้ง)
 5. **Path จากภายนอกต้องผ่าน `SafeJoin` ก่อนแตะ filesystem เสมอ** โดยเฉพาะก่อน `RemoveAll`
 6. **อย่า fork/พึ่ง panel หรือ runtime image สำเร็จรูป** (Pterodactyl, itzg ฯลฯ) — เขียนเอง 100%,
-   jar โหลดจาก official source เท่านั้น (Mojang/PaperMC/FabricMC/Forge maven) + verify checksum เมื่อมี
+   artifact โหลดจาก official source ของเกมเท่านั้น (ที่มาอยู่ใน game definition — minecraft:
+   Mojang/PaperMC/FabricMC/Forge maven) + verify checksum เมื่อมี
 7. **อย่าเปลี่ยน** bind mount → named volume, PostgreSQL → NoSQL, และอย่าเพิ่ม Windows/native runner
    (scope คือ full Docker บน Linux)
-8. **EULA ห้าม default เป็น true** — user ต้องติ๊กเอง
+8. **`accept_license` ห้าม default เป็น true** — user ต้องติ๊กยอมรับ license ของเกมเอง
+   (ชื่อที่แสดงมาจาก `Definition.LicenseName` เช่น "Minecraft EULA")
 9. Frontend **ห้ามเก็บ token เอง** (ไม่มี localStorage/sessionStorage สำหรับ auth) — cookie HttpOnly
    จาก control-plane เท่านั้น และห้ามใช้ next-auth
 
 ## โครงสร้าง repo + แผน submodules
 
 ```
-apps/control-plane   Go — module github.com/mc-panel/control-plane
-apps/node-agent      Go — module github.com/mc-panel/node-agent
+apps/control-plane   Go — module github.com/game-manager/control-plane
+apps/node-agent      Go — module github.com/game-manager/node-agent
 apps/web             Next.js (self-contained ไม่ import ข้าม directory)
-packages/proto       .proto + generated Go — module github.com/mc-panel/proto
+packages/proto       .proto + generated Go — module github.com/game-manager/proto
 packages/shared-types  TS generate จาก proto (ยังไม่ถูกใช้โดย web — เผื่ออนาคต)
-infra                compose ทั้งสองชุด, caddy, nats config, mc-runtime image
+infra                compose ทั้งสองชุด, caddy, nats config, runtime-java image (ไม่รู้จักเกม)
 ```
 
 หลักการ: **แต่ละ directory ต้องแยกเป็น git repo ได้โดยแก้น้อยที่สุด** —
@@ -65,7 +72,7 @@ infra                compose ทั้งสองชุด, caddy, nats config,
 make env              # generate .env ครั้งแรก (secret สุ่มทั้งหมด)
 make up / down / logs # full stack บน docker (build ให้เอง)
 make admin-password   # ดู initial admin credentials จาก log
-make runtime-images   # build mcpanel/mc-runtime:8/17/21/25 (ออปชัน — ข้ามได้ agent auto-pull ให้เอง)
+make runtime-images   # build game-manager/runtime-java:8/17/21/25 (ออปชัน — ข้ามได้ agent auto-pull ให้เอง)
 make bootstrap        # dev ครั้งแรก: infra + migrate + web deps
 make run-control-plane / run-agent / run-web   # dev hot-loop 3 terminals
 make test / lint      # ต้องผ่านก่อนถือว่างานเสร็จ
@@ -121,7 +128,7 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   (`app/page.tsx`) — **เห็นเฉพาะ server ที่ตัวเองมีชื่อใน access (`server_permissions` row)
   แม้เป็น is_admin/มี `servers.view_all` ก็ตาม** (`GET /api/servers` default `scope=mine`);
   การจัดการ server ทั้งระบบอยู่ที่ `/admin/servers` (`?scope=all` ต้องมี `servers.view_all`)
-  — การ์ดต่อ server (สถานะ/ผู้เล่น/TPS/uptime/port) กดแล้ว `setDashboardServerId(id)`
+  — การ์ดต่อ server (สถานะ/ผู้เล่น/tick rate/uptime/port) กดแล้ว `setDashboardServerId(id)`
   + ไป `/dashboard`. หน้านี้ mount `EventsListener` เอง (อยู่นอก panel layout) การ์ดจึงอัปเดต realtime
   ตามกฎ "ห้าม poll REST". **ไม่มี server switcher ใน sidebar แล้ว** — สลับ server ทำที่ `/` ที่เดียว
   (sidebar เหลือลิงก์ `All servers` กลับไปหน้านั้น) และชื่อ/สถานะของ server ที่กำลังจัดการอยู่บน
@@ -157,13 +164,14 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   - **server list change**: `server_added` (emit ตอน create/import ใน httpapi) / `server_removed`
     (emit ตอน delete job สำเร็จใน jobs) broadcast แบบ unfiltered (payload มีแค่ server_id) →
     web invalidate `["servers"]` refetch (dashboard เพิ่ม/เอา instance ออกเองแบบ realtime)
-- Proto: package `mcpanel.<x>.v1`, directory ต้องตรง package (buf lint STANDARD บังคับ),
+- Proto: package `gamemanager.<x>.v1` (ไม่มี hyphen — proto package เป็น identifier),
+  directory ต้องตรง package (buf lint STANDARD บังคับ),
   breaking change ต้องขึ้น v2 ไม่แก้ v1
-- NATS subjects: `mcpanel.jobs.{node_id}` (JobEnvelope), `mcpanel.results` (JobResult) —
+- NATS subjects: `gamemanager.jobs.{node_id}` (JobEnvelope), `gamemanager.results` (JobResult) —
   stream `JOBS` (WorkQueue) / `RESULTS`, consumer สร้างโดย control-plane เท่านั้น
   (NATS user ของ agent ไม่มีสิทธิ์สร้าง — ดู `infra/nats/nats-server.conf`)
-- Docker: MC container ชื่อ `mc-{server_id}`, label `mc.managed_by=mc-panel-agent`,
-  ข้อมูลอยู่ `{MC_DATA_DIR}/{server_id}` bind mount เป็น `/mc`
+- Docker: container ของ instance ชื่อ `game-manager-{server_id}`, label `gamemanager.managed_by=game-manager-agent`,
+  ข้อมูลอยู่ `{GM_DATA_DIR}/{server_id}` bind mount เป็น `/data` (`games.ContainerDataDir`)
 - เวลาแก้ Makefile: จำไว้ว่า buf/goose เรียกผ่าน `go run` (ไม่ assume ว่าติดตั้งไว้)
 
 ## Flow สำคัญที่ต้องเข้าใจก่อนแก้
@@ -251,11 +259,11 @@ storage — จำกัด 512KB, ชนิดตัดสินจาก conte
 NATS เป็นแค่ job transport ไม่เกี่ยวกับ auth. ทั้ง Postgres/Redis/NATS อยู่ network `core` (internal)
 เข้าจากภายนอกไม่ได้ ต้อง `docker compose exec` เข้า container หรือใช้ CLI ข้างบนที่รันในวงเดียวกัน
 
-**สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = `minecraft`)
+**สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = เกม default)
 → insert แถว (status=provisioning) + job `create_server` → agent
-โหลด jar + เขียน eula/launch script → JobResult → status=stopped → user สั่ง start ต่อ
+โหลด artifact + เขียน seed config/launch script → JobResult → status=stopped → user สั่ง start ต่อ
 (import server: job `import_server` — agent อาจ detect เวอร์ชันจริงแล้วรายงานใน `JobResult.Detail` JSON
-`{"mc_version":"..."}` → control-plane update `mc_version` ของ server ให้ ถ้าเวอร์ชันผ่าน validate)
+`{"game_version":"..."}` → control-plane update `game_version` ของ server ให้ ถ้าเวอร์ชันผ่าน validate)
 
 **Wizard `/servers/new` สร้าง instance ที่ step สุดท้ายเท่านั้น** — **1 step = 1 component**
 ใน `components/server/new-server/` (`step-general` / `step-properties` / `step-access` / `step-players`,
@@ -267,10 +275,10 @@ NATS เป็นแค่ job transport ไม่เกี่ยวกับ au
 สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step 2–3 ข้ามได้ (step 1 บังคับกรอกให้ครบ),
 มี node เดียวเลือกให้อัตโนมัติ. ปุ่ม create อยู่ที่ step สุดท้ายที่เดียว แล้วรันตามลำดับ:
 POST `/api/servers` → POST permission ตาม access draft → รอ job provisioning จบ →
-PUT `/properties` **เฉพาะ key ที่ต่างจาก default** (ไฟล์ยังไม่มีตอนนั้น merge จะ append ให้ ที่เหลือ MC
+PUT `/config` **เฉพาะ key ที่ต่างจาก default** (ไฟล์ยังไม่มีตอนนั้น merge จะ append ให้ ที่เหลือตัวเกม
 เขียนเองตอน start แรก) → `POST /players` ทีละชื่อ → `setDashboardServerId` + ไป `/dashboard`.
 ขั้นหลัง create ล้ม = toast บอกเป็นรายการแล้วไปต่อ (server ถูกสร้างแล้ว ห้าม rollback เงียบ ๆ) —
-**ห้ามย้ายการสร้างกลับไปไว้ step แรก**. draft ของ properties ใช้ `GET /api/meta/properties`
+**ห้ามย้ายการสร้างกลับไปไว้ step แรก**. draft ของ properties ใช้ `GET /api/meta/config`
 (catalog + default ที่ไม่ผูก server) ส่วน access/players ใช้โหมด draft ของ `ServerAccess`
 (`draft`/`onDraftChange` — เลือก user จาก directory เท่านั้น) กับ `PlayersDraft` (คนละตัวกับ
 `ServerPlayers` ที่อ่านไฟล์ ops/banned/usercache จริง)
@@ -298,36 +306,37 @@ PUT `/properties` **เฉพาะ key ที่ต่างจาก default**
 ⚠️ ของในถังขยะ **ยังจอง `host_port` (UNIQUE ไม่ได้ filter deleted) และยังถูกนับใน RAM admission
 control** โดยตั้งใจ — ไฟล์ยังกินที่จริงและ restore ต้องกลับมา start ได้เสมอ
 
-**Start**: job `start_server` (control-plane เลือก `mcpanel/mc-runtime:{8|17|21|25}` จาก mc_version) →
+**Start**: job `start_server` (control-plane เลือก `game-manager/runtime-java:{8|17|21|25}` จาก game_version) →
 agent **ensure runtime image** (มีในเครื่องแล้ว = reuse ไม่โหลดซ้ำ; ไม่มี = pull `eclipse-temurin:{ver}-jre`
-จาก official แล้ว tag เป็น `mcpanel/mc-runtime:{ver}` cache ไว้ share ข้าม instance) → สร้าง container
+จาก official แล้ว tag เป็น `game-manager/runtime-java:{ver}` cache ไว้ share ข้าม instance) → สร้าง container
 (hardening ครบ: cap-drop ALL, no-new-privileges, user 1000, mem limit, แยก network)
 → docker events → agent ส่ง `ServerStatus RUNNING` ผ่าน gRPC → DB + broadcast WS
 - ถ้า start ล้มหลังสร้าง container / container crash (die exit≠0 ที่ไม่ได้สั่ง stop) → agent **ลบ container
   ที่ค้างทิ้งทันที + push console line แจ้ง user** ว่ากำลังเอาออก (ไม่ปล่อยให้ค้างเป็น dead container)
-- runtime image cache: `mcpanel/mc-runtime:{8|17|21|25}` build เองด้วย `make runtime-images` ก็ได้ (hardened)
+- runtime image cache: `game-manager/runtime-java:{8|17|21|25}` build เองด้วย `make runtime-images` ก็ได้ (hardened)
   หรือปล่อยให้ agent auto-pull ครั้งแรกที่ต้องใช้ — reuse ตัวที่มีเสมอ ไม่โหลดซ้ำ
 
 **Import server**: POST /api/servers/import (`multipart/form-data`, ต้องมี cap `servers.create`) →
 control-plane อ่าน `.zip` แบบ streaming (ไม่ buffer ทั้งก้อน — อ่านทีละ ~768KiB look-ahead หนึ่งก้อน)
-แล้ว stream เข้า agent เป็น chunked `FileWriteChunk` ไปไว้ `.mcpanel/import.zip` ใน jail ของ server
+แล้ว stream เข้า agent เป็น chunked `FileWriteChunk` ไปไว้ `.gamemanager/import.zip` ใน jail ของ server
 (bytes-over-gRPC = file I/O ปกติ เหมือน file manager ไม่ใช่ lifecycle) → insert แถว (status=provisioning)
 + dispatch NATS job `import_server` (lifecycle command เป็น job ตามกฎ #2) → agent แตก zip ด้วย
-`SafeJoin`/กัน zip-slip **โดยไม่โหลด jar** → JobResult success → status=stopped (semantics เดียวกับ
+`SafeJoin`/กัน zip-slip **โดยไม่โหลด artifact** → JobResult success → status=stopped (semantics เดียวกับ
 `create_server`, มี handling ใน `planTransition`/`reapPlan`). staging ล้ม = ลบ row ที่เพิ่งสร้างทิ้ง,
 dispatch ล้ม = mark errored. audit `server_import`
 
-**Online players / TPS ต่อ instance**: MC ไม่มี API ให้ถาม — agent อ่านจาก **console** เอง
-(`internal/mcstate` = เครื่องจักรกลางที่ไม่รู้จักเกม + `games.ConsoleSpec` ของเกมนั้นเป็นคนบอกว่า
+**Online players / tick rate ต่อ instance**: เกมส่วนใหญ่ไม่มี API ให้ถาม — agent อ่านจาก **console** เอง
+(`internal/gamestate` = เครื่องจักรกลางที่ไม่รู้จักเกม + `games.ConsoleSpec` ของเกมนั้นเป็นคนบอกว่า
 ยิงคำสั่งอะไรและแปลบรรทัดยังไง — parser จริงอยู่ที่ `internal/games/minecraft/console.go`):
 เกาะกับ console session (attach = server รันอยู่ = เขียน stdin ได้), ยิงคำสั่ง
-`list` ตอน attach + ทุก 30 วิ เป็น source of truth (ได้ทั้งรายชื่อ + max players ทุก server type)
-แล้วอัปเดตทันทีระหว่างรอบจากบรรทัด `joined/left the game`. **TPS มีเฉพาะ Paper/Spigot** — probe ด้วย
-คำสั่ง `tps` ครั้งแรก ถ้าเจอ `Unknown command` (vanilla/fabric/forge) จำไว้แล้วเลิกถามตลอด session
-(`tps=0` = type นี้ไม่รองรับ ไม่ใช่ "TPS เป็นศูนย์"). **reply ของคำสั่งที่ agent ยิงเองถูกกรองออกจาก
+`RosterCommand` (minecraft = `list`) ตอน attach + ทุก 30 วิ เป็น source of truth (ได้ทั้งรายชื่อ +
+max players ทุก variant) แล้วอัปเดตทันทีระหว่างรอบจากบรรทัด join/left ของเกม.
+**metric (minecraft = TPS) มีเฉพาะบาง variant** — probe ด้วย `MetricCommand` ครั้งแรก
+ถ้าเจอ `Unknown command` จำไว้แล้วเลิกถามตลอด session
+(`tick_rate=0` = variant นี้ไม่รองรับ ไม่ใช่ "ค่าเป็นศูนย์"). **reply ของคำสั่งที่ agent ยิงเองถูกกรองออกจาก
 console ที่ user เห็น** (console.Manager มี `Observer` hook คืน false = ทิ้งบรรทัด) — ระวังตอนแก้ parser:
 กรองพลาด = user เห็นคำสั่งผีทุก 30 วิ / parse พลาด = ผู้เล่นหายจาก dashboard
-ค่าพวกนี้เดินทางไปกับ `ServerStats` เส้นเดิม (field `online_players`/`max_players`/`tps`)
+ค่าพวกนี้เดินทางไปกับ `ServerStats` เส้นเดิม (field `online_players`/`max_players`/`tick_rate`)
 
 **Player action (op/deop/kick/ban/pardon)**: `POST /api/servers/{id}/players/action` ส่งคำสั่งเข้า console
 (ต้อง running ไม่งั้น 409 `invalid_state`) — `action` เป็น **allow-list** และ `username` ต้องผ่าน regex
@@ -368,42 +377,56 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   ไว้ตอน UI ยังให้แก้ได้ (จงใจไม่ล้างใน migration — เขียนทับสิทธิ์ user เงียบ ๆ อันตรายกว่า)
   เลือก preset ทับเมื่อไหร่ก็หายไปเอง; เพิ่ม preset ใหม่ = แก้ที่ `ROLE_PRESETS`/`SERVER_ROLE_PRESETS`
 
-**Game definition (abstraction ของ "เกม") — อ่านก่อนแตะอะไรที่เป็นของ Minecraft**
+**Game definition (abstraction ของ "เกม") — อ่านก่อนแตะอะไรที่เป็นของเกมใดเกมหนึ่ง**
 
-`servers.game` (migration `00019`) ผูก server กับเกมหนึ่งเกม, `servers.server_type` = variant
+`servers.game` (migration `00019`) ผูก server กับเกมหนึ่งเกม, `servers.variant` = variant
 ภายในเกมนั้น. ความรู้เฉพาะเกมอยู่ใน `Definition` ตัวเดียวต่อเกมต่อ app:
 
 - `apps/control-plane/internal/games` — `Definition` + `Registry` (validation/metadata ฝั่ง API):
-  `Variants` (id/label/NeedsEULA), `DefaultHostPort`, `MinMemoryMB`, `Version` (MaxLen / ListVersions
+  `Variants` (id/label/RequiresLicense), `DefaultHostPort`, `MinMemoryMB`, `Version` (MaxLen / ListVersions
   จาก upstream / ValidDetected / RuntimeImage), `Config` (FileName / Fields / Format / EditableWhileRunning),
-  `Players` (IdentityService / ValidateUsername / ConsoleSafeUsername / Lookup / Face / Allowlist /
-  StateFiles / Actions / Playtime)
-  → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft` (`versions.go` แทน `internal/versions` เดิม,
-  `runtime.go` แทน `jobs/image.go` เดิม, `properties.go`, `players.go`)
+  `Players` (IdentityService / ValidateUsername / ConsoleSafeUsername / Lookup / Avatar / Allowlist /
+  StateFiles / Actions / Playtime), `LicenseName`
+  → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft`: `versions.go`, `runtime.go`,
+  `properties.go`, `players.go`, **`identity.go`** (Mojang lookup — เดิมคือ `internal/mojang`)
+  และ **`avatar.go`** (ดึง skin + crop หน้า — เดิมคือ `internal/playerface`)
+  ⚠️ ชั้น cache ของรูปผู้เล่นเป็น**ของกลาง** อยู่ที่ `internal/avatarcache` (DB-backed TTL +
+  เสิร์ฟรูปเก่าตอน upstream ล่ม) — รับ `Fetcher` จาก definition, **ห้ามยัดโค้ดของเกมลงไปในนั้น**
 - `apps/node-agent/internal/games` — `Definition` + `Registry` ฝั่งรันจริง: `Variants`, `ContainerPort`,
   `StopCommand`, `LaunchScript`, `LaunchEnv`, `SeedFiles`, `Provision`, `RuntimeImage`, `Import`
   (Ext/NameHints/MainArtifact/DetectVersion), `Console` (RosterCommand/MetricCommand/Parse)
-  + `InstanceLookup` ที่อ่าน `.mcpanel/meta.json` เพื่อรู้ว่า instance บน disk เป็นเกมอะไร
+  + `InstanceLookup` ที่อ่าน `.gamemanager/meta.json` เพื่อรู้ว่า instance บน disk เป็นเกมอะไร
   → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft`
 - **สอง app ไม่ import ข้ามกัน** (คนละ module) — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
-  ซึ่งเดินทางผ่าน job payload (`CreateServer.game`/`ImportServer.game` ใน proto) และ `.mcpanel/meta.json`
+  ซึ่งเดินทางผ่าน job payload (`CreateServer.game`/`ImportServer.game` ใน proto) และ `.gamemanager/meta.json`
   ⚠️ การ map เวอร์ชัน → Java image มีสองที่ (control-plane เลือก image ให้ job, agent เลือกให้
   forge installer) — **แก้ที่หนึ่งต้องแก้อีกที่เสมอ** มี test คุมทั้งสองฝั่ง
+- `apps/web/lib/games` — `GameProfile` + registry ฝั่ง web (`gameProfile(server.game)`):
+  เดา variant/version จาก archive ตอน import, `isValidPlayerName`, `allowlistEnabledKey`,
+  `highlightConsoleMessage`, `label`/`licenseName`/`licenseUrl`/`metricLabel`
+  → ค่าจริงของ Minecraft อยู่ใน `lib/games/minecraft.ts`
+  **component ห้าม import `lib/games/minecraft` ตรง ๆ** — เรียกผ่าน `gameProfile()` เสมอ
 - ชั้นอื่นทั้งหมดทำงานผ่าน definition: httpapi ใช้ `a.gameOf(w, srv)` / `a.gameFromQuery(w, r)`,
-  jobs ใช้ `d.runtimeImage(srv)`, provision/runner/mcstate ใช้ registry + `InstanceLookup`
-- field ที่ยังใช้ศัพท์ Minecraft คงชื่อไว้เพื่อไม่ break contract: `mc_version` (= เวอร์ชันของเกม),
-  `server_type` (= variant), `whitelist_enabled`, `tps` (= metric จาก console), error code
-  `mojang_unavailable`, path `/api/servers/{id}/properties` — **อย่าเปลี่ยนชื่อโดยไม่แก้ web พร้อมกัน**
+  jobs ใช้ `d.runtimeImage(srv)`, provision/runner/gamestate ใช้ registry + `InstanceLookup`
+- ศัพท์ใน contract เป็นคำกลางทั้งหมดแล้ว (เปลี่ยนจากของเดิมตอนที่ระบบยังผูกกับ Minecraft):
+  `mc_version`→`game_version`, `server_type`→`variant`, `whitelist*`→`allowlist*`, `tps`→`tick_rate`,
+  `accept_eula`→`accept_license`, `/properties`→`/config`, `/meta/server-types`→`/meta/variants`,
+  `/players/{uuid}/face`→`/avatar`, `mojang_unavailable`→`identity_unavailable`,
+  ตาราง `player_faces`→`player_avatars`
+  ศัพท์ของเกมโผล่ได้เฉพาะ **ค่า** ที่ definition ส่งมา (เช่น `LicenseName = "Minecraft EULA"`)
+  — **อย่าเปลี่ยนชื่อ field พวกนี้โดยไม่แก้ web + docs/api.md พร้อมกัน**
 
 **เพิ่มเกมใหม่ / แก้ของเกมเดิม (เช็คลิสต์บังคับ)**
-1. แก้พฤติกรรมของ Minecraft = แก้ใน `internal/games/minecraft` ของ app ที่เกี่ยวข้อง
-   **ห้ามแก้ที่ handler/runner** ถ้าสิ่งนั้นเป็นความรู้ของเกม
+1. แก้พฤติกรรมของ Minecraft = แก้ใน `internal/games/minecraft` (Go) หรือ `lib/games/minecraft.ts` (web)
+   **ห้ามแก้ที่ handler/runner/component** ถ้าสิ่งนั้นเป็นความรู้ของเกม
 2. เพิ่มเกมใหม่ = เพิ่ม package `internal/games/<เกม>` **ทั้งสองฝั่ง** (id ต้องตรงกัน) แล้ว
    ลงทะเบียนใน `games.NewRegistry(...)` ที่ `apps/control-plane/cmd/server/main.go` และ
    `apps/node-agent/cmd/agent/main.go`
-3. web: `DEFAULT_GAME` ใน `lib/types.ts` เป็นค่าคงที่เพราะยังมีเกมเดียว — มีเกมที่สองเมื่อไร
+3. web: เพิ่ม `lib/games/<เกม>.ts` (implement `GameProfile`) แล้วลงทะเบียนใน `PROFILES`
+   ที่ `lib/games/index.ts`. `DEFAULT_GAME_ID` เป็นค่าคงที่เพราะยังมีเกมเดียว — มีเกมที่สองเมื่อไร
    ต้องกลายเป็น state ของ wizard + ดึงรายการจาก `GET /api/meta/games`
-4. `docs/api.md` + `docs/architecture.md` (หัวข้อ Game definition)
+4. **ไม่ต้องเขียน migration** เพื่อรองรับ variant ใหม่ — schema ไม่มี CHECK รายชื่อ (ดูกฎเหล็กข้อ 0)
+5. `docs/api.md` + `docs/architecture.md` (หัวข้อ Game definition)
 
 **เพิ่ม feature ใหม่ → ต้องแตะ permission (เช็คลิสต์บังคับ)**
 1. `internal/httpapi/capabilities.go` — เพิ่ม const + entry ใน `capabilityCatalog`
@@ -429,12 +452,12 @@ control-plane เก็บ ring buffer 500 บรรทัด + broadcast WS →
 ## Security posture (จุดที่ต้องระวังเวลาแก้)
 
 - docker.sock ใน node-agent = จุดเสี่ยงสุดของระบบ ทุก input จาก job ต้อง validate ก่อนถึง docker API
-- Postgres/Redis/NATS อยู่ network `core` (internal, ไม่มี egress) — อย่า publish port / อย่าย้าย MC
-  container เข้า core เด็ดขาด (MC container อยู่ `mcpanel-servers` เท่านั้น)
+- Postgres/Redis/NATS อยู่ network `core` (internal, ไม่มี egress) — อย่า publish port / อย่าย้าย
+  container ของ instance เข้า core เด็ดขาด (อยู่ `game-manager-servers` เท่านั้น)
 - dev compose bind 127.0.0.1 ทุก port — อย่าเปลี่ยนเป็น 0.0.0.0
 - WS ต้องเช็ค Origin ทุก handshake / cookie เป็น SameSite=Lax / GET ห้ามมี side effect (นี่คือแนวกัน CSRF)
 - Backlog ด้าน security ที่รู้อยู่แล้ว (อย่าทำเงียบ ๆ ให้ปรึกษาก่อน): TLS ของ gRPC/NATS ข้ามเครื่อง,
-  NKey/JWT ต่อ node, docker-socket-proxy, readonly rootfs ของ MC container, 2FA
+  NKey/JWT ต่อ node, docker-socket-proxy, readonly rootfs ของ container ของ instance, 2FA
 
 **File manager**: interactive file ops (list/read/write/mkdir/rename/delete) วิ่งผ่าน **gRPC stream**
 (control-plane→agent `FileRequest`, agent→control-plane `FileResponse`, correlate ด้วย request_id) —
@@ -442,26 +465,28 @@ control-plane เก็บ ring buffer 500 บรรทัด + broadcast WS →
 ก่อนแตะ filesystem. ต้องมี cap `files.view/write/delete` ตาม action **ทั้ง 2 ชั้น** (global AND grant
 ต่อ server; owner/admin ข้าม) — enforce ผ่าน `loadServerCap(cap)`. REST อยู่ `/api/servers/{id}/files*` (ดู docs/api.md)
 
-**Whitelist/players**: control-plane verify username กับ Mojang (`internal/mojang`, egress ผ่าน edge) →
-เก็บใน DB `server_players` (source of truth) → rebuild `whitelist.json` ที่ root ของ server แล้วเขียนผ่าน
-agent FileWrite (stream เดียวกับ file manager, SafeJoin ที่ agent) → ถ้า running ส่ง `whitelist reload`
-เข้า console (best-effort). ต้องมี cap `players.view/manage` (+ `players.moderate` สำหรับ op/kick/ban)
+**Allowlist/players**: control-plane verify username กับ identity service ของเกม (minecraft = Mojang,
+`internal/games/minecraft/identity.go`, egress ผ่าน edge) → เก็บใน DB `server_players`
+(source of truth) → rebuild ไฟล์รายชื่อที่ root ของ server (ชื่อไฟล์+รูปแบบจาก `Allowlist` ของ
+definition; minecraft = `whitelist.json`) แล้วเขียนผ่าน agent FileWrite (stream เดียวกับ file manager,
+SafeJoin ที่ agent) → ถ้า running ส่ง `Allowlist.ReloadCommand` เข้า console (best-effort). ต้องมี cap `players.view/manage` (+ `players.moderate` สำหรับ op/kick/ban)
 คู่กับสิทธิ์ต่อ server เท่า file manager. REST `/api/servers/{id}/players*`. ⚠️ ต้อง `white-list=true`
 ใน server.properties ถึงจะ enforce จริง; UUID จาก Mojang ใช้กับ `online-mode=true` เท่านั้น (offline-mode คนละ UUID)
-- **GET players = unified list**: merge DB whitelist + `usercache.json` (seen) + `ops.json` (op) +
-  `banned-players.json` (banned) โดย key ด้วย uuid (normalize dash/case) — อ่านไฟล์ผ่าน agent FileRead.
-  ไฟล์ไม่มี = ว่าง (ไม่ error); **node offline = degrade** เหลือ DB whitelist (แท็บยังใช้ได้ตอน server หยุด)
+- **GET players = unified list**: merge allowlist จาก DB + ไฟล์ state ของเกม (`StateFiles` ของ
+  definition — minecraft: `usercache.json` seen / `ops.json` op / `banned-players.json` banned)
+  โดย key ด้วย uuid (normalize dash/case) — อ่านไฟล์ผ่าน agent FileRead.
+  ไฟล์ไม่มี = ว่าง (ไม่ error); **node offline = degrade** เหลือ allowlist จาก DB (แท็บยังใช้ได้ตอน server หยุด)
 - **Access picker**: `GET /api/users/directory` (authed ทุกคน ไม่ใช่ `users.view`) คืน user ที่ active
   แบบ field เบา ให้ owner เลือก collaborator; POST permission รับ `user_id` (จาก directory) หรือ `username`
 
-**Properties แก้ได้เฉพาะ stopped/errored**: PUT `/properties` ตอบ 409 `invalid_state` ถ้า server ไม่หยุด
-(MC เขียนทับ server.properties ตอน shutdown — แก้ตอนรันจะหาย); GET/read ทำได้ทุกสถานะ
+**Properties แก้ได้เฉพาะ stopped/errored**: PUT `/config` ตอบ 409 `invalid_state` ถ้า server ไม่หยุด
+(เกมเขียนทับไฟล์ config ตอน shutdown — แก้ตอนรันจะหาย); GET/read ทำได้ทุกสถานะ
 
 **`memory_mb` = container limit ไม่ใช่ heap**: ค่าที่ user ตั้ง = hard limit ของทั้ง container
 (cgroup memory + memorySwap) → `stats.memory_limit_mb` คืนค่าเดียวกับที่ตั้ง. agent คำนวณ `-Xmx`
 เองด้วย `minecraft.HeapMB()` (`internal/games/minecraft/launch.go` ของ agent — เป็นของ game
 definition เพราะเป็นเรื่องของ JVM ที่เกมนี้ใช้; runner แค่เรียก `def.LaunchEnv(memoryMB)`) โดยกัน non-heap ของ JVM ไว้ ~1/3 (floor 256MB,
-cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส่งเข้า container เป็น env `MC_MEMORY_MB` ให้ launch.sh ใช้ —
+cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส่งเข้า container เป็น env `GM_MEMORY_MB` ให้ launch.sh ใช้ —
 **อย่ากลับไปตีความ `memory_mb` เป็น heap** เพราะจะทำให้ admission control ข้างล่างนับต่ำกว่าจริง 1.5x
 
 **RAM admission control**: create/import/ขยาย `memory_mb` เช็คผลรวม `memory_mb` ทุก server บน node
@@ -475,8 +500,8 @@ cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส
 
 - Playtime ของผู้เล่น: อ่านจาก `{level-name}/stats/{uuid}.json` ตอนเรียก GET players — จำกัด 50 คน/request
   (เกินนั้นคืน 0 = ไม่รู้) เพราะเป็นไฟล์ละคน = N round-trip ต่อการเปิดหน้า
-- File manager: อัปโหลด/ดาวน์โหลดไฟล์ใหญ่แบบ binary (jar/mod) ใน UI ทั่วไป — ตอนนี้รองรับ browse/แก้ไฟล์ text/mkdir/rename/delete
-  (binary upload มีเฉพาะ flow import server: zip ผ่าน chunked `FileWriteChunk` เข้า `.mcpanel/import.zip` เท่านั้น)
+- File manager: อัปโหลด/ดาวน์โหลดไฟล์ใหญ่แบบ binary (artifact/mod) ใน UI ทั่วไป — ตอนนี้รองรับ browse/แก้ไฟล์ text/mkdir/rename/delete
+  (binary upload มีเฉพาะ flow import server: zip ผ่าน chunked `FileWriteChunk` เข้า `.gamemanager/import.zip` เท่านั้น)
 - Backup/restore, scheduler, mod/plugin browser (online-player list + player action มีแล้ว ดูหัวข้อข้างบน)
 - OIDC (Discord/Google), quota ต่อ user, multi-node TLS
 - Metrics/alerting ระยะยาว (มี resource monitoring ต่อ instance แบบ realtime แล้ว แต่ไม่เก็บ history/ไม่มี alert)

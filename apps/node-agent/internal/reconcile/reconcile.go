@@ -10,8 +10,8 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
-	"github.com/mc-panel/node-agent/internal/runner"
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	"github.com/game-manager/node-agent/internal/runner"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 )
 
 type StatusSender interface {

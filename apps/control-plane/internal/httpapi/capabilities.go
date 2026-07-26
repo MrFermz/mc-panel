@@ -3,7 +3,7 @@ package httpapi
 import (
 	"slices"
 
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 // capabilityMeta คือ 1 entry ใน catalog global capability (ดู docs/api.md).
@@ -76,9 +76,9 @@ var capabilityCatalog = []capabilityMeta{
 	{capServersViewAll, "servers", "view_all", "View all servers", "See every server, not only the shared ones"},
 	{capServersCreate, "servers", "create", "Create servers", "Create and import server instances"},
 	{capServersEdit, "servers", "edit", "Edit servers", "Rename a server and change memory or host port"},
-	{capServersDelete, "servers", "delete", "Delete servers", "Move a server to the trash, keeping its world and files"},
+	{capServersDelete, "servers", "delete", "Delete servers", "Move a server to the trash, keeping its data and files"},
 	{capServersRestore, "servers", "restore", "Restore servers", "Bring a deleted server back from the trash"},
-	{capServersPurge, "servers", "purge", "Purge servers", "Permanently erase a deleted server with its world and files"},
+	{capServersPurge, "servers", "purge", "Purge servers", "Permanently erase a deleted server with its data and files"},
 	{capServersPower, "servers", "power", "Power controls", "Start, stop, restart and kill servers"},
 
 	{capConsoleView, "console", "view", "View console", "Stream live console output and read history"},
@@ -88,12 +88,12 @@ var capabilityCatalog = []capabilityMeta{
 	{capFilesWrite, "files", "write", "Edit files", "Write files, create directories and rename entries"},
 	{capFilesDelete, "files", "delete", "Delete files", "Delete files and directories"},
 
-	{capPlayersView, "players", "view", "View players", "See the player list, whitelist and bans"},
-	{capPlayersManage, "players", "manage", "Manage whitelist", "Add and remove whitelisted players"},
+	{capPlayersView, "players", "view", "View players", "See the player list, allowlist and bans"},
+	{capPlayersManage, "players", "manage", "Manage allowlist", "Add and remove allowlisted players"},
 	{capPlayersModerate, "players", "moderate", "Moderate players", "Op, deop, kick, ban and pardon players"},
 
-	{capSettingsView, "settings", "view", "View settings", "Read server.properties and server settings"},
-	{capSettingsEdit, "settings", "edit", "Edit settings", "Change server.properties values"},
+	{capSettingsView, "settings", "view", "View settings", "Read the game config file and server settings"},
+	{capSettingsEdit, "settings", "edit", "Edit settings", "Change values in the game config file"},
 
 	{capAccessView, "access", "view", "View access", "See who a server is shared with"},
 	{capAccessManage, "access", "manage", "Manage access", "Share a server with users and revoke access"},

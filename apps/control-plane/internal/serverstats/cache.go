@@ -19,11 +19,11 @@ type Stat struct {
 	DiskWriteBps  float64
 	// เวลาที่ container เริ่มรันรอบนี้ (จาก agent) — zero = ไม่รู้, ใช้คำนวณ uptime
 	StartedAt time.Time
-	// สถานะในเกมที่ agent อ่านจาก console (ไม่ใช่ container stats) — ดู node-agent/internal/mcstate
-	// OnlinePlayers nil/ว่าง = ยังไม่ได้ resync หรือไม่มีใครออนไลน์, TPS 0 = server type ไม่รองรับ
+	// สถานะในเกมที่ agent อ่านจาก console (ไม่ใช่ container stats) — ดู node-agent/internal/gamestate
+	// OnlinePlayers nil/ว่าง = ยังไม่ได้ resync หรือไม่มีใครออนไลน์, TickRate 0 = server type ไม่รองรับ
 	OnlinePlayers []string
 	MaxPlayers    int
-	TPS           float64
+	TickRate      float64
 	UpdatedAt     time.Time
 }
 

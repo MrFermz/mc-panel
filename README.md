@@ -1,10 +1,13 @@
-# mc-panel
+# game-manager
 
-ระบบจัดการ Minecraft server หลาย instance ผ่านเว็บ เขียนขึ้นเองทั้งหมด ไม่ fork จากโปรเจกต์อื่น
-รองรับ Vanilla, Paper (plugin), Fabric/Forge (modded), และ Velocity proxy
+ระบบจัดการ **game server** หลาย instance ผ่านเว็บ เขียนขึ้นเองทั้งหมด ไม่ fork จากโปรเจกต์อื่น
 
-ทุกอย่างรันบน Docker: ระบบหลัก (web/control-plane/agent/db) และ MC ทุก instance
-แยก docker network ระหว่างระบบหลักกับ MC servers ชัดเจน
+ตัวระบบหลักไม่ผูกกับเกมใดเกมหนึ่ง — ความรู้เฉพาะเกมอยู่ใน **game definition** แยกเป็น package ของ
+ตัวเอง (`internal/games/<เกม>` ทั้ง control-plane และ node-agent, `lib/games/<เกม>` ฝั่ง web)
+เกมที่ลงทะเบียนไว้ตอนนี้คือ `minecraft` (variant: Vanilla, Paper, Fabric, Forge, Velocity proxy)
+
+ทุกอย่างรันบน Docker: ระบบหลัก (web/control-plane/agent/db) และ instance ของเกมทุกตัว
+แยก docker network ระหว่างระบบหลักกับ game servers ชัดเจน
 
 - สถาปัตยกรรม + design decisions: [`docs/architecture.md`](docs/architecture.md)
 - REST/WS contract: [`docs/api.md`](docs/api.md)
@@ -18,12 +21,14 @@
 ```
 apps/
   control-plane/   API server (Go) — auth, DB, job dispatch, gRPC hub, WS console
-  node-agent/      Agent (Go) — คุม docker, provision jar, console attach
+                   (internal/games/ = game definition ฝั่ง API)
+  node-agent/      Agent (Go) — คุม docker, provision, console attach
+                   (internal/games/ = game definition ฝั่งรันจริง)
   web/             Frontend (Next.js 15 + shadcn/ui)
 packages/
   proto/           .proto + generated Go (source of truth ของ message format)
   shared-types/    TS types ที่ generate จาก proto
-infra/             docker-compose (dev + full stack), caddy, nats config, mc-runtime image
+infra/             docker-compose (dev + full stack), caddy, nats config, runtime-java image
 scripts/           gen-env.sh และ script ประกอบ
 docs/              architecture + api contract
 ```
@@ -36,7 +41,7 @@ docs/              architecture + api contract
 (compile Go และรัน migration ทำใน container ให้หมด)
 
 ```bash
-git clone <repo-url> mc-panel && cd mc-panel
+git clone <repo-url> game-manager && cd game-manager
 make env              # สร้าง .env — สุ่ม secret ทุกตัว (ทำครั้งเดียว, ห้าม commit .env)
 make runtime-images   # build base image ของ MC (8/17/21/25) — ข้ามได้ agent auto-pull ให้ตอนใช้ครั้งแรก
 make up               # build image + เปิดทั้งระบบ
@@ -52,7 +57,7 @@ User ใหม่ทุกคนใช้ flow เดียวกัน: admin �
 ### ข้อมูล / backup / ย้ายเครื่อง
 
 - **Postgres** (users, servers, jobs, permissions) → docker named volume
-- **ไฟล์ของแต่ละ MC instance** → `MC_DATA_DIR` = `<repo>/data/servers/<server_id>` (bind mount)
+- **ไฟล์ของแต่ละ MC instance** → `GM_DATA_DIR` = `<repo>/data/servers/<server_id>` (bind mount)
 - **Backup** = dump Postgres + `tar` โฟลเดอร์ `data/servers` + เก็บ `.env` ไว้ด้วย
   (ถ้า `.env` หาย = secret เดิมหาย, decrypt/verify ของเก่าไม่ได้)
 
@@ -72,12 +77,12 @@ User ใหม่ทุกคนใช้ flow เดียวกัน: admin �
 container เป็น Linux ทั้งหมด Docker Desktop รันผ่าน VM Linux (WSL2) ให้อยู่แล้ว **ไม่ต้องแก้โค้ด** แต่ต้อง setup ให้ถูก:
 
 - **รันทุกอย่างใน WSL2 (เช่น Ubuntu) ไม่ใช่ PowerShell** — ต้องใช้ `make`/`bash`. เปิด Docker Desktop → Settings → **WSL integration** ให้ distro นั้น (`docker`/`docker compose` + `/var/run/docker.sock` จะใช้ได้ใน WSL)
-- **วาง repo + `MC_DATA_DIR` บน filesystem ของ WSL2 (ext4) เท่านั้น** เช่น `~/mc-panel` — **ห้ามวางบน `/mnt/c/...`**
-  (agent ใน container สั่ง docker daemon bind-mount `MC_DATA_DIR/<id>` แบบ path ต้องตรงกันทั้งใน/นอก และ MC รันเป็น user 1000 ต้อง chown ได้ — บน `/mnt/c` chown เป็น no-op + ช้ามาก)
+- **วาง repo + `GM_DATA_DIR` บน filesystem ของ WSL2 (ext4) เท่านั้น** เช่น `~/game-manager` — **ห้ามวางบน `/mnt/c/...`**
+  (agent ใน container สั่ง docker daemon bind-mount `GM_DATA_DIR/<id>` แบบ path ต้องตรงกันทั้งใน/นอก และ MC รันเป็น user 1000 ต้อง chown ได้ — บน `/mnt/c` chown เป็น no-op + ช้ามาก)
 - **Line endings ต้องเป็น LF** — repo มี `.gitattributes` บังคับ `eol=lf` ให้ scripts/Go/SQL/proto อยู่แล้ว
   ถ้า clone ใหม่ไม่ต้องตั้ง git config เอง (`gen-env.sh`/entrypoint จะไม่โดน CRLF)
 - **เช็ค environment ก่อนเริ่ม** — รัน `make doctor` (เรียก `scripts/preflight.sh`) ดัก misconfig ที่พบบ่อย:
-  docker เข้าไม่ได้, docker compose v2 ไม่มี, หรือ repo/`MC_DATA_DIR` วางบน `/mnt/...` (drvfs)
+  docker เข้าไม่ได้, docker compose v2 ไม่มี, หรือ repo/`GM_DATA_DIR` วางบน `/mnt/...` (drvfs)
 
 ## Dev บนเครื่องใหม่ (service รันนอก docker, hot reload)
 
@@ -86,7 +91,7 @@ container เป็น Linux ทั้งหมด Docker Desktop รันผ�
 **ต้องมีเพิ่มจาก full stack:** Go 1.24+, Node.js + pnpm (buf/goose ไม่ต้องลง — Makefile เรียกผ่าน `go run`)
 
 ```bash
-git clone <repo-url> mc-panel && cd mc-panel
+git clone <repo-url> game-manager && cd game-manager
 make bootstrap           # .env + dev infra (postgres/redis/nats) + migrate + ลง web deps ให้
 make run-control-plane   # terminal 1
 make run-agent           # terminal 2 (ต้องมี docker บนเครื่อง)

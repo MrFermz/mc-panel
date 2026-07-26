@@ -1,4 +1,4 @@
-// Package console จัดการ attach session กับ stdin/stdout ของ MC container
+// Package console จัดการ attach session กับ stdin/stdout ของ container ของ instance
 // แล้ว stream บรรทัด log เป็น batch ขึ้น control plane ผ่าน gRPC
 package console
 
@@ -18,7 +18,7 @@ const (
 	// flushMaxBytes จำกัดขนาด batch เป็น byte — 50 บรรทัด × maxLineBytes อาจทะลุ gRPC MaxRecvMsgSize
 	// ฝั่ง server ได้ จึง flush เมื่อรวม byte เกิน ~1MB (อยู่ใต้ limit แน่นอน)
 	flushMaxBytes = 1024 * 1024
-	// MC log ปกติบรรทัดสั้น แต่ stacktrace ของ modded server ยาวได้มาก
+	// log ของเกมปกติบรรทัดสั้น แต่ stacktrace ของ modded server ยาวได้มาก
 	maxLineBytes = 1024 * 1024
 )
 
@@ -32,7 +32,7 @@ type Sender interface {
 	SendConsoleOutput(serverID string, lines []string) error
 }
 
-// Observer ดักดู log ทุกบรรทัดเพื่อสกัดสถานะในเกม (ผู้เล่นออนไลน์/TPS — ดู internal/mcstate)
+// Observer ดักดู log ทุกบรรทัดเพื่อสกัดสถานะในเกม (ผู้เล่นออนไลน์/TickRate — ดู internal/gamestate)
 // ObserveLine คืน false = บรรทัดนั้นเป็น reply ของคำสั่งที่ observer ยิงเอง ให้ทิ้ง ไม่ต้องส่งให้ user
 // nil ได้ (agent ยังทำงานปกติ แค่ไม่มีข้อมูลผู้เล่น)
 type Observer interface {
@@ -205,7 +205,7 @@ func (m *Manager) pump(serverID string, rwc io.ReadWriteCloser) {
 				return
 			}
 			// observer อ่านทุกบรรทัดก่อน batch — ที่มันบอกว่าเป็น reply ของคำสั่งตัวเอง
-			// (เช่น `list`/`tps` ที่ยิงเก็บสถานะ) ถูกทิ้งไม่ให้ไปโผล่ใน console ของ user
+			// (roster/metric command ที่ยิงเก็บสถานะ) ถูกทิ้งไม่ให้ไปโผล่ใน console ของ user
 			if m.observer != nil && !m.observer.ObserveLine(serverID, line) {
 				continue
 			}

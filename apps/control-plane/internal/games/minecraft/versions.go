@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mc-panel/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/games"
 )
 
 const (
@@ -95,7 +95,7 @@ func (s *versionService) fetchJSON(ctx context.Context, url string, dst any) err
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "mc-panel/control-plane")
+	req.Header.Set("User-Agent", "game-manager/control-plane")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return err

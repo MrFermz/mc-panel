@@ -32,15 +32,15 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		HTTPAddr:        getenv("HTTP_ADDR", ":8080"),
-		GRPCAddr:        getenv("GRPC_ADDR", ":9090"),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		RedisURL:        os.Getenv("REDIS_URL"),
-		NATSURL:         os.Getenv("NATS_URL"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
+		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
+		GRPCAddr:    getenv("GRPC_ADDR", ":9090"),
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+		RedisURL:    os.Getenv("REDIS_URL"),
+		NATSURL:     os.Getenv("NATS_URL"),
+		JWTSecret:   os.Getenv("JWT_SECRET"),
 		// lowercase เสมอ — DB มี CHECK บังคับ (00018) ตั้ง ADMIN_USERNAME=Admin มาก็ต้อง seed ผ่าน
 		AdminUsername: strings.ToLower(strings.TrimSpace(getenv("ADMIN_USERNAME", "admin"))),
-		NodeToken:       os.Getenv("NODE_TOKEN"),
+		NodeToken:     os.Getenv("NODE_TOKEN"),
 		// default 1 = production หลัง Caddy 1 hop; dev set 0 ผ่าน env
 		TrustedProxyCount: 1,
 	}

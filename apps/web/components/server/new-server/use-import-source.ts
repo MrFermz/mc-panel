@@ -3,12 +3,8 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useT } from "@/lib/i18n";
-import {
-  detectFromFolder,
-  detectFromZip,
-  zipFolder,
-  type Detected,
-} from "@/components/server/new-server/detect";
+import { zipFolder } from "@/components/server/new-server/archive";
+import { gameProfile, type DetectedInstance } from "@/lib/games";
 
 export type SourceMode = "zip" | "folder";
 
@@ -18,7 +14,7 @@ export interface ImportSource {
   zipFile: File | null;
   folderFiles: File[];
   folderName: string;
-  detected: Detected | null;
+  detected: DetectedInstance | null;
   detecting: boolean;
   zipping: boolean;
   hasFile: boolean;
@@ -30,13 +26,16 @@ export interface ImportSource {
 // ไฟล์ต้นทางของโหมด import + การ detect type/version ที่ prefill ฟอร์ม metadata ให้
 // (state อยู่ที่ wizard ไฟล์ที่เลือกจึงไม่หายตอนเดินหน้า/ถอยหลัง step)
 export function useImportSource(meta: {
+  game?: string;
   name: string;
   setName: (v: string) => void;
-  setServerType: (v: string) => void;
-  setMcVersion: (v: string) => void;
+  setVariant: (v: string) => void;
+  setGameVersion: (v: string) => void;
 }): ImportSource {
   const t = useT();
-  const { setName, setServerType, setMcVersion } = meta;
+  const { setName, setVariant, setGameVersion } = meta;
+  // ความรู้เรื่อง "ไฟล์แบบไหนคือเกมอะไร" อยู่ใน game profile ตัวเดียว ไม่กระจายใน wizard
+  const game = gameProfile(meta.game);
   const metaName = meta.name;
 
   const [mode, setMode] = React.useState<SourceMode>("zip");
@@ -44,18 +43,18 @@ export function useImportSource(meta: {
   const [folderFiles, setFolderFiles] = React.useState<File[]>([]);
   const [folderName, setFolderName] = React.useState("");
   const [zipping, setZipping] = React.useState(false);
-  const [detected, setDetected] = React.useState<Detected | null>(null);
+  const [detected, setDetected] = React.useState<DetectedInstance | null>(null);
   const [detecting, setDetecting] = React.useState(false);
 
   // เอาผล detection มา prefill ฟอร์ม (user แก้ต่อได้) — ชื่อเซตเฉพาะตอนช่องยังว่าง
   const applyDetected = React.useCallback(
-    (d: Detected) => {
+    (d: DetectedInstance) => {
       setDetected(d);
       if (d.name && metaName.trim() === "") setName(d.name);
-      if (d.serverType) setServerType(d.serverType);
-      if (d.mcVersion) setMcVersion(d.mcVersion);
+      if (d.variant) setVariant(d.variant);
+      if (d.gameVersion) setGameVersion(d.gameVersion);
     },
-    [metaName, setName, setServerType, setMcVersion],
+    [metaName, setName, setVariant, setGameVersion],
   );
 
   const onZipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +70,7 @@ export function useImportSource(meta: {
     if (file) {
       setDetecting(true);
       try {
-        applyDetected(await detectFromZip(file));
+        applyDetected(await game.detectFromZip(file));
       } finally {
         setDetecting(false);
       }
@@ -94,7 +93,7 @@ export function useImportSource(meta: {
     setDetected(null);
     setDetecting(true);
     try {
-      applyDetected(await detectFromFolder(files, top));
+      applyDetected(await game.detectFromFolder(files, top));
     } finally {
       setDetecting(false);
     }

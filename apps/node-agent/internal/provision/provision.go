@@ -2,7 +2,7 @@
 // โหลด artifact จาก official source + บอกว่าไฟล์ config/launch script ต้องเป็นอะไร
 //
 // package นี้ไม่รู้จักเกมใด ๆ: มันคุมเรื่อง filesystem (jail, chown, แตก zip อย่างปลอดภัย,
-// เขียน .mcpanel/) ส่วน "โหลดอะไรจากไหน / รันยังไง" มาจาก internal/games ทั้งหมด
+// เขียน .gamemanager/) ส่วน "โหลดอะไรจากไหน / รันยังไง" มาจาก internal/games ทั้งหมด
 //
 // ทุกขั้นตอนต้อง idempotent — job โดน redeliver ซ้ำได้เสมอ ขั้นที่เสร็จแล้วให้ข้าม
 package provision
@@ -24,35 +24,35 @@ import (
 
 	"github.com/docker/docker/client"
 
-	"github.com/mc-panel/node-agent/internal/filemanager"
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/filemanager"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 const (
-	// uid/gid ที่ MC container รัน (User: 1000:1000) — ไฟล์ทั้งหมดต้องเป็นของ user นี้
+	// uid/gid ที่ container ของ instance รัน (User: 1000:1000) — ไฟล์ทั้งหมดต้องเป็นของ user นี้
 	mcUID = 1000
 	mcGID = 1000
 
 	// maxImportUncompressed กัน zip-bomb — รวมขนาดหลัง decompress ของทุก entry ต้องไม่เกินนี้
-	// (เผื่อ world/mod ใหญ่ได้จริงหลาย GB แต่มีเพดานกัน decompress bomb ที่พอง disk เต็ม)
+	// (เผื่อ save/mod ใหญ่ได้จริงหลาย GB แต่มีเพดานกัน decompress bomb ที่พอง disk เต็ม)
 	maxImportUncompressed = 8 << 30 // 8 GiB
 )
 
 // Spec = input ของ CreateServer (Game ว่าง = เกม default — job เก่าที่ค้างใน stream)
 type Spec struct {
-	Game       string
-	ServerType string
-	MCVersion  string
-	AcceptEULA bool
+	Game          string
+	Variant       string
+	GameVersion   string
+	AcceptLicense bool
 }
 
 // ImportSpec คือ input ของ ImportServer — zip ถูก stage ไว้แล้วที่ ArchivePath (relative ต่อ jail)
 type ImportSpec struct {
-	Game        string
-	ServerType  string
-	MCVersion   string
-	AcceptEULA  bool
-	ArchivePath string
+	Game          string
+	Variant       string
+	GameVersion   string
+	AcceptLicense bool
+	ArchivePath   string
 }
 
 type Provisioner struct {
@@ -83,7 +83,7 @@ func New(docker *client.Client, dataDir, runtimeImagePrefix string, gr *games.Re
 	}
 }
 
-// serverDir validate server id แล้วคืน path จริงใต้ MC_DATA_DIR
+// serverDir validate server id แล้วคืน path จริงใต้ GM_DATA_DIR
 // id มาจาก NATS message — ห้ามเชื่อว่าเป็น UUID เสมอ ต้องผ่าน SafeJoin ก่อนแตะ filesystem
 func (p *Provisioner) serverDir(serverID string) (string, error) {
 	if serverID == "" || strings.ContainsAny(serverID, "/\\") || serverID == "." || serverID == ".." {
@@ -104,13 +104,13 @@ func (p *Provisioner) resolveGame(game, variant string) (*games.Definition, erro
 		return nil, fmt.Errorf("unsupported game %q", game)
 	}
 	if !def.HasVariant(variant) {
-		return nil, fmt.Errorf("unsupported server_type %q for game %q", variant, def.ID)
+		return nil, fmt.Errorf("unsupported variant %q for game %q", variant, def.ID)
 	}
 	return def, nil
 }
 
 func (p *Provisioner) CreateServer(ctx context.Context, serverID string, spec Spec) (string, error) {
-	def, err := p.resolveGame(spec.Game, spec.ServerType)
+	def, err := p.resolveGame(spec.Game, spec.Variant)
 	if err != nil {
 		return "", err
 	}
@@ -122,21 +122,21 @@ func (p *Provisioner) CreateServer(ctx context.Context, serverID string, spec Sp
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create server directory: %w", err)
 	}
-	// tool ของเกมที่รันเป็น uid 1000 (เช่น forge installer) ต้องเขียน dir ได้ — chown ก่อนเริ่มโหลด
+	// tool ของเกมที่รันเป็น uid 1000 (installer ของบาง variant) ต้องเขียน dir ได้ — chown ก่อนเริ่มโหลด
 	p.chownRecursive(dir)
 
-	detail, err := def.Provision(ctx, p.provisionEnv(def, serverID, dir, spec.ServerType, spec.MCVersion))
+	detail, err := def.Provision(ctx, p.provisionEnv(def, serverID, dir, spec.Variant, spec.GameVersion))
 	if err != nil {
 		return "", err
 	}
 
-	if err := p.writePanelFiles(dir, def, spec.ServerType, spec.MCVersion, spec.AcceptEULA); err != nil {
+	if err := p.writePanelFiles(dir, def, spec.Variant, spec.GameVersion, spec.AcceptLicense); err != nil {
 		return "", err
 	}
 
 	p.chownRecursive(dir)
 	log.Printf("server provisioned: server=%s game=%s type=%s version=%s",
-		serverID, def.ID, spec.ServerType, spec.MCVersion)
+		serverID, def.ID, spec.Variant, spec.GameVersion)
 	return detail, nil
 }
 
@@ -153,14 +153,14 @@ func (p *Provisioner) provisionEnv(def *games.Definition, serverID, dir, variant
 	}
 }
 
-// writePanelFiles เขียนไฟล์ที่ panel เป็นเจ้าของ: seed config ของเกม (eula/config เริ่มต้น)
-// + .mcpanel/meta.json + .mcpanel/launch.sh
+// writePanelFiles เขียนไฟล์ที่ panel เป็นเจ้าของ: seed config ของเกม (license/config เริ่มต้น)
+// + .gamemanager/meta.json + .gamemanager/launch.sh
 // meta.json/launch.sh ถูกเขียนทับเสมอ (WriteFile truncate) — ตอน import จึงมั่นใจได้ว่า
-// panel คุม launch ไม่ว่า zip จะมี .mcpanel เดิมติดมาหรือไม่
-func (p *Provisioner) writePanelFiles(dir string, def *games.Definition, variant, version string, acceptEULA bool) error {
+// panel คุม launch ไม่ว่า zip จะมี .gamemanager เดิมติดมาหรือไม่
+func (p *Provisioner) writePanelFiles(dir string, def *games.Definition, variant, version string, acceptLicense bool) error {
 	// seed file ของเกม — path มาจาก definition (ค่าคงที่ในโค้ด) ยังผ่าน SafeJoin ไว้อีกชั้น
 	// เพื่อไม่ให้ definition ที่เขียนพลาดหลุดออกนอก jail ได้เลย
-	for _, f := range def.SeedFiles(variant, acceptEULA) {
+	for _, f := range def.SeedFiles(variant, acceptLicense) {
 		target, err := filemanager.SafeJoin(dir, f.Path)
 		if err != nil {
 			return fmt.Errorf("seed file %q: %w", f.Path, err)
@@ -187,8 +187,8 @@ func (p *Provisioner) writePanelFiles(dir string, def *games.Definition, variant
 
 	if err := games.WriteInstanceMeta(dir, games.InstanceMeta{
 		Game:        def.ID,
-		ServerType:  variant,
-		MCVersion:   version,
+		Variant:     variant,
+		GameVersion: version,
 		StopCommand: def.StopCommand(variant),
 	}); err != nil {
 		return fmt.Errorf("write %s: %w", games.MetaFileName, err)
@@ -200,10 +200,10 @@ func (p *Provisioner) writePanelFiles(dir string, def *games.Definition, variant
 }
 
 // ImportServer แตก zip ที่ถูก stage ไว้ใน jail ของ server แล้ว provision โดยไม่โหลด artifact
-// (artifact/world/config มาจาก zip ที่ user อัปโหลด) — ทุก path ที่แตะ filesystem ผ่าน SafeJoin,
+// (artifact/save/config มาจาก zip ที่ user อัปโหลด) — ทุก path ที่แตะ filesystem ผ่าน SafeJoin,
 // ไม่ materialize symlink, มี size cap กัน disk-fill/zip-bomb
 func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec ImportSpec) (detectedVersion string, err error) {
-	def, err := p.resolveGame(spec.Game, spec.ServerType)
+	def, err := p.resolveGame(spec.Game, spec.Variant)
 	if err != nil {
 		return "", err
 	}
@@ -276,9 +276,9 @@ func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec Im
 	}
 
 	// launch script รัน artifact ชื่อตายตัวตาม definition — zip ที่ user อัปโหลดมักตั้งชื่ออื่น
-	// (paper-1.21.1.jar ฯลฯ) ต้อง normalize ชื่อ ไม่งั้น start crash
+	// (เช่น paper-1.21.1.jar) ต้อง normalize ชื่อตาม Import.MainArtifact ไม่งั้น start crash
 	// originalName = ชื่อไฟล์เดิมของ artifact หลัก (ใช้ fallback เดา version)
-	renamedTo, originalName := normalizeMainArtifact(dir, def, spec.ServerType, serverID)
+	renamedTo, originalName := normalizeMainArtifact(dir, def, spec.Variant, serverID)
 
 	// เดาเวอร์ชัน best-effort เพื่อ pre-fill panel — สุดท้าย fallback ค่าที่ user กรอก
 	artifactPath := ""
@@ -287,22 +287,22 @@ func (p *Provisioner) ImportServer(ctx context.Context, serverID string, spec Im
 	}
 	detectedVersion = def.Import.DetectVersion(artifactPath, originalName)
 	if detectedVersion == "" {
-		detectedVersion = spec.MCVersion
+		detectedVersion = spec.GameVersion
 	}
 
 	// meta.json ต้องสะท้อน version จริงที่ detect ได้ (ไม่ใช่ค่าที่ user เดา)
-	if err := p.writePanelFiles(dir, def, spec.ServerType, detectedVersion, spec.AcceptEULA); err != nil {
+	if err := p.writePanelFiles(dir, def, spec.Variant, detectedVersion, spec.AcceptLicense); err != nil {
 		return "", err
 	}
 
 	p.chownRecursive(dir)
 	log.Printf("server imported: server=%s game=%s type=%s version=%s files=%d bytes=%d",
-		serverID, def.ID, spec.ServerType, detectedVersion, fileCount, totalIn)
+		serverID, def.ID, spec.Variant, detectedVersion, fileCount, totalIn)
 	return detectedVersion, nil
 }
 
 // normalizeMainArtifact เปลี่ยนชื่อ artifact หลักที่ root ให้ตรงกับที่ launch script คาดหวัง
-// variant ที่ definition บอกว่าไม่มี main artifact (เช่น forge ที่ใช้ run.sh) จะถูกข้าม
+// variant ที่ definition บอกว่าไม่มี main artifact (เช่น variant ที่ใช้ run script) จะถูกข้าม
 // คืน (ชื่อไฟล์ target ที่ใช้จริง, ชื่อไฟล์เดิม) เพื่อไปเดา version ต่อ
 func normalizeMainArtifact(dir string, def *games.Definition, variant, serverID string) (target, originalName string) {
 	target = def.Import.MainArtifact(variant)
@@ -317,7 +317,7 @@ func normalizeMainArtifact(dir string, def *games.Definition, variant, serverID 
 
 	candidates := rootFilesWithExt(dir, def.Import.Ext)
 	if len(candidates) == 0 {
-		// อาจเป็น setup ที่ไม่มี artifact ที่ root (velocity บาง config) — ไม่ fail ที่นี่
+		// อาจเป็น setup ที่ไม่มี artifact ที่ root — ไม่ fail ที่นี่
 		// ปล่อยให้ start เป็นคน surface error จริงทีหลัง
 		log.Printf("import: no root %s to rename to %s: server=%s", def.Import.Ext, target, serverID)
 		return "", ""

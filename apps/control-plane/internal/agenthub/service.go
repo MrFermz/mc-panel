@@ -13,12 +13,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/events"
-	"github.com/mc-panel/control-plane/internal/serverstats"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/events"
+	"github.com/game-manager/control-plane/internal/serverstats"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 type nodeCtxKey struct{}
@@ -273,7 +273,7 @@ func (h *Hub) handleServerStats(ctx context.Context, nodeID uuid.UUID, st *agent
 		StartedAt:     startedAt(st.StartedAtUnix),
 		OnlinePlayers: st.OnlinePlayers,
 		MaxPlayers:    int(st.MaxPlayers),
-		TPS:           st.Tps,
+		TickRate:      st.TickRate,
 		UpdatedAt:     time.Now(),
 	}
 	h.stats.Set(serverID, stat)
@@ -290,7 +290,7 @@ func (h *Hub) handleServerStats(ctx context.Context, nodeID uuid.UUID, st *agent
 			StartedAt:     nilIfZeroTime(stat.StartedAt),
 			OnlinePlayers: emptyIfNil(stat.OnlinePlayers),
 			MaxPlayers:    stat.MaxPlayers,
-			TPS:           stat.TPS,
+			TickRate:      stat.TickRate,
 			UpdatedAt:     stat.UpdatedAt,
 		})
 	} else {
@@ -368,6 +368,7 @@ func nilIfZeroTime(t time.Time) *time.Time {
 	}
 	return &t
 }
+
 // emptyIfNil ทำให้ online_players เป็น [] ใน JSON เสมอ ไม่ใช่ null —
 // contract ฝั่ง web คาดว่าเป็น array (ดู docs/api.md)
 func emptyIfNil(s []string) []string {
@@ -376,4 +377,3 @@ func emptyIfNil(s []string) []string {
 	}
 	return s
 }
-

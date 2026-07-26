@@ -27,10 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { gameProfile } from "@/lib/games";
+import { DEFAULT_GAME } from "@/lib/types";
 
 // ตัวเลือกไฟล์ต้นทาง — โผล่เฉพาะโหมด import
 function ImportSourcePicker({ source }: { source: ImportSource }) {
   const t = useT();
+  const game = gameProfile(DEFAULT_GAME);
   const zipInputRef = React.useRef<HTMLInputElement>(null);
   const folderInputRef = React.useRef<HTMLInputElement>(null);
   const { mode, setMode, detected, detecting } = source;
@@ -124,11 +127,12 @@ function ImportSourcePicker({ source }: { source: ImportSource }) {
           {t("wizard.detecting")}
         </p>
       )}
-      {!detecting && detected && (detected.serverType || detected.mcVersion) && (
+      {!detecting && detected && (detected.variant || detected.gameVersion) && (
         <p className="text-muted-foreground text-xs">
           {t("wizard.detectedHint", {
-            type: detected.serverType ?? "—",
-            version: detected.mcVersion ?? "—",
+            game: game.label,
+            type: detected.variant ?? "—",
+            version: detected.gameVersion ?? "—",
           })}
         </p>
       )}
@@ -150,6 +154,8 @@ export function StepGeneral({
 }) {
   const t = useT();
   const { budget } = meta;
+  // ชื่อ/ลิงก์ license ของเกม — ไม่ hardcode ใน wizard
+  const game = gameProfile(DEFAULT_GAME);
 
   return (
     <Card>
@@ -203,10 +209,10 @@ export function StepGeneral({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label>{t("new.serverType")}</Label>
+            <Label>{t("new.variant")}</Label>
             <Select
-              value={meta.serverType}
-              onValueChange={meta.setServerType}
+              value={meta.variant}
+              onValueChange={meta.setVariant}
             >
               <SelectTrigger>
                 <SelectValue
@@ -230,14 +236,14 @@ export function StepGeneral({
           <div className="grid gap-2">
             <Label>{t("new.version")}</Label>
             <Select
-              value={meta.mcVersion}
-              onValueChange={meta.setMcVersion}
-              disabled={meta.serverType === ""}
+              value={meta.gameVersion}
+              onValueChange={meta.setGameVersion}
+              disabled={meta.variant === ""}
             >
               <SelectTrigger>
                 <SelectValue
                   placeholder={
-                    meta.serverType === ""
+                    meta.variant === ""
                       ? t("new.pickTypeFirst")
                       : meta.versionsPending
                         ? t("new.loadingVersions")
@@ -311,23 +317,23 @@ export function StepGeneral({
           </div>
         </div>
 
-        {meta.needsEula && (
+        {meta.requiresLicense && (
           <div className="flex items-start gap-2">
             <Checkbox
               id="wz-eula"
-              checked={meta.acceptEula}
-              onCheckedChange={(v) => meta.setAcceptEula(v === true)}
+              checked={meta.acceptLicense}
+              onCheckedChange={(v) => meta.setAcceptLicense(v === true)}
             />
             <Label htmlFor="wz-eula" className="flex-wrap font-normal">
               <span>
-                {t("new.eulaAccept")}{" "}
+                {t("new.licenseAccept")}{" "}
                 <a
-                  href="https://www.minecraft.net/en-us/eula"
+                  href={game.licenseUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="underline underline-offset-2"
                 >
-                  {t("new.eulaLink")}
+                  {t("new.licenseLink", { license: game.licenseName })}
                 </a>
               </span>
             </Label>

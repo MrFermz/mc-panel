@@ -8,10 +8,10 @@
 package minecraft
 
 import (
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
-// ID ต้องตรงกับ id ฝั่ง control-plane — เดินทางมากับ job payload และเก็บใน .mcpanel/meta.json
+// ID ต้องตรงกับ id ฝั่ง control-plane — เดินทางมากับ job payload และเก็บใน .gamemanager/meta.json
 const ID = "minecraft"
 
 // containerPort = port ที่ MC server ฟังใน container เสมอ (host port map เข้ามาที่นี่)

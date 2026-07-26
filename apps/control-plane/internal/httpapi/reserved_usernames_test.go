@@ -30,14 +30,14 @@ func TestCanonicalUsername(t *testing.T) {
 
 func TestNormalizeUsername(t *testing.T) {
 	cases := map[string]string{
-		"admin":     "admin",
-		"ADMIN":     "admin",
-		"A.D.M.I.N": "admin",
-		"a-d-m-i-n": "admin",
-		"admin_":    "admin",
-		"mc-panel":  "mcpanel",
-		"___":       "",
-		"alice":     "alice",
+		"admin":        "admin",
+		"ADMIN":        "admin",
+		"A.D.M.I.N":    "admin",
+		"a-d-m-i-n":    "admin",
+		"admin_":       "admin",
+		"game-manager": "gamemanager",
+		"___":          "",
+		"alice":        "alice",
 	}
 	for in, want := range cases {
 		if got := normalizeUsername(in); got != want {
@@ -49,7 +49,7 @@ func TestNormalizeUsername(t *testing.T) {
 func TestIsReservedUsername(t *testing.T) {
 	reserved := []string{
 		"admin", "Admin", "ADMIN", "a.d.m.i.n", "a-d-m-i-n", "admin_",
-		"root", "system", "mcpanel", "mc-panel", "MC_PANEL",
+		"root", "system", "gamemanager", "GAME-MANAGER", "game_manager",
 		"support", "owner", "operator", "moderator",
 		"___", // เหลือแต่ separator — normalize แล้วว่าง
 	}

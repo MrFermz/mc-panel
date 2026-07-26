@@ -10,9 +10,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
-	"github.com/mc-panel/node-agent/internal/mcstate"
-	"github.com/mc-panel/node-agent/internal/runner"
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	"github.com/game-manager/node-agent/internal/gamestate"
+	"github.com/game-manager/node-agent/internal/runner"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 )
 
 const interval = 5 * time.Second
@@ -26,10 +26,10 @@ type Statter interface {
 	Stats(id string) (runner.ResourceStats, error)
 }
 
-// Snapshotter คือส่วนของ mcstate.Tracker ที่ reporter ต้องใช้ — สถานะในเกมที่อ่านจาก console
+// Snapshotter คือส่วนของ gamestate.Tracker ที่ reporter ต้องใช้ — สถานะในเกมที่อ่านจาก console
 // (nil ได้: ไม่มี tracker = ส่ง stats เฉพาะ resource เหมือนเดิม)
 type Snapshotter interface {
-	Snapshot(serverID string) mcstate.Snapshot
+	Snapshot(serverID string) gamestate.Snapshot
 }
 
 // ioSample เก็บ counter สะสมของรอบก่อน เพื่อคำนวณ rate/sec จาก delta ต่อ container
@@ -89,7 +89,7 @@ func report(ctx context.Context, cli *client.Client, statter Statter, sender Sen
 		}
 		prev[id] = cur
 		// สถานะในเกมมาจาก console (คนละแหล่งกับ container stats) — ไม่มี tracker ก็ส่งเป็นค่าว่าง
-		var snap mcstate.Snapshot
+		var snap gamestate.Snapshot
 		if state != nil {
 			snap = state.Snapshot(id)
 		}
@@ -107,8 +107,8 @@ func report(ctx context.Context, cli *client.Client, statter Statter, sender Sen
 			StartedAtUnix: c.Created,
 			OnlinePlayers: snap.Online,
 			MaxPlayers:    int32(snap.MaxPlayers),
-			// field `tps` ใน proto = metric ประจำเกมที่อ่านจาก console (minecraft = TPS)
-			Tps: snap.Metric,
+			// field `tick_rate` ใน proto = metric ประจำเกมที่อ่านจาก console (minecraft = TPS)
+			TickRate: snap.Metric,
 		}); err != nil {
 			// stream หลุด — ข้ามทั้งรอบ รอบถัดไปมาใหม่
 			return

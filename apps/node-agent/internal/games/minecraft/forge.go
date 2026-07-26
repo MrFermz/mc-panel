@@ -17,7 +17,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 const (
@@ -88,7 +88,7 @@ func forgeInstalled(dir string) bool {
 // กับที่จะใช้รันจริง) — agent เองไม่มี java และต้องการ isolation เท่า MC container
 //
 // bind mount ต้องใช้ path แบบไม่ resolve symlink เพราะ docker daemon มองจากฝั่ง host
-// (MC_DATA_DIR ถูก mount ด้วย path เดียวกันทั้งสองฝั่งตาม docker-compose)
+// (GM_DATA_DIR ถูก mount ด้วย path เดียวกันทั้งสองฝั่งตาม docker-compose)
 func runForgeInstaller(ctx context.Context, env games.ProvisionEnv, image string) error {
 	// installer ใช้ runtime image ตัวเดียวกับที่จะรัน server จริง — ensure ไว้ก่อน
 	// (reuse cache ถ้ามี, ไม่มีก็ pull+cache) เพื่อไม่ต้อง make runtime-images ล่วงหน้า
@@ -105,13 +105,13 @@ func runForgeInstaller(ctx context.Context, env games.ProvisionEnv, image string
 	config := &container.Config{
 		Image:      image,
 		User:       "1000:1000",
-		WorkingDir: "/mc",
+		WorkingDir: games.ContainerDataDir,
 		Cmd:        []string{"java", "-jar", forgeInstallerName, "--installServer"},
-		// ไม่ติด mc.managed_by — events watcher จะได้ไม่รายงาน container นี้เป็น server
-		Labels: map[string]string{"project": "mc-panel"},
+		// ไม่ติด gamemanager.managed_by — events watcher จะได้ไม่รายงาน container นี้เป็น server
+		Labels: map[string]string{"project": "game-manager"},
 	}
 	hostConfig := &container.HostConfig{
-		Binds: []string{env.Dir + ":/mc"},
+		Binds: []string{env.Dir + ":" + games.ContainerDataDir},
 		// forge installer ยุคใหม่ต้องโหลด vanilla server jar + libraries จาก maven ตอน
 		// --installServer จึงต้องมี egress — ใช้ default bridge (NAT ออก internet ได้)
 		// isolation อื่นคงเดิม: user 1000, bind เฉพาะ dir ของ server นี้, cap-drop ALL, no-new-privileges

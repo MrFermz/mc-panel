@@ -1,6 +1,6 @@
 -- +goose Up
 -- Soft delete ของ server: DELETE /api/servers/{id} เปลี่ยนจาก "ลบจริง" เป็น mark deleted_at
--- (ไฟล์ใน MC_DATA_DIR ยังอยู่ครบ → restore กลับมาใช้ได้ทันที) ส่วนการลบจริงย้ายไปเป็น
+-- (ไฟล์ใน GM_DATA_DIR ยังอยู่ครบ → restore กลับมาใช้ได้ทันที) ส่วนการลบจริงย้ายไปเป็น
 -- POST /api/servers/{id}/purge ที่ยิง job delete_server เหมือนเดิมแล้วลบ row ทิ้ง
 --
 -- deleted_at ยังนับใน UNIQUE (node_id, host_port) และใน SumServerMemoryMBOnNode โดยตั้งใจ —

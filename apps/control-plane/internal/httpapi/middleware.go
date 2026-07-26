@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/mc-panel/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/auth"
 )
 
 func (a *API) requireAuth(next http.Handler) http.Handler {

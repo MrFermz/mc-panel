@@ -38,7 +38,7 @@ export default function StandaloneLayout({
           <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-4 md:px-6">
             <Link href="/" className="flex shrink-0 items-center gap-2">
               <BoxIcon className="size-5 shrink-0" />
-              <span className="hidden font-semibold sm:inline">mc-panel</span>
+              <span className="hidden font-semibold sm:inline">game-manager</span>
             </Link>
             <span className="text-muted-foreground/50" aria-hidden>
               /

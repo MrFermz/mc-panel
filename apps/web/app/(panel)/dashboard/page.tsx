@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api";
 import { type Server } from "@/lib/types";
 import { formatMb, formatUptime } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { gameProfile } from "@/lib/games";
 import { useActiveServer } from "@/lib/use-active-server";
 import { useSetPageServer } from "@/components/layout/breadcrumb-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +74,8 @@ function ServerOverview({ server }: { server: Server }) {
 
   const online = running && stats ? stats.online_players : [];
   const maxPlayers = stats?.max_players ?? 0;
-  const tps = stats?.tps ?? 0;
+  const tickRate = stats?.tick_rate ?? 0;
+  const game = gameProfile(server.game);
 
   return (
     <div className="grid gap-4">
@@ -98,15 +100,15 @@ function ServerOverview({ server }: { server: Server }) {
             )
           }
         />
-        {/* TPS มีเฉพาะ paper/spigot — server type อื่นไม่มีคำสั่ง `tps` (stats.tps = 0) */}
+        {/* metric ประจำเกม — ชื่อ + คำอธิบายตอนไม่รองรับมาจาก game profile ไม่ใช่ hardcode */}
         <StatCard
           icon={ActivityIcon}
-          label={t("overview.tps")}
-          value={running && tps > 0 ? tps.toFixed(2) : "—"}
+          label={game.metricLabel}
+          value={running && tickRate > 0 ? tickRate.toFixed(2) : "—"}
         >
-          {running && tps === 0 && (
+          {running && tickRate === 0 && (
             <span className="text-muted-foreground text-xs">
-              {t("overview.tpsUnsupported")}
+              {game.metricUnsupportedHint}
             </span>
           )}
         </StatCard>
@@ -140,7 +142,7 @@ function ServerOverview({ server }: { server: Server }) {
           }
         >
           <span className="text-muted-foreground text-xs capitalize">
-            {server.server_type} {server.mc_version}
+            {server.variant} {server.game_version}
           </span>
         </StatCard>
       </div>

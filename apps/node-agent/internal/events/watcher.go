@@ -12,8 +12,8 @@ import (
 	dockerevents "github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
-	"github.com/mc-panel/node-agent/internal/runner"
-	agentv1 "github.com/mc-panel/proto/gen/go/mcpanel/agent/v1"
+	"github.com/game-manager/node-agent/internal/runner"
+	agentv1 "github.com/game-manager/proto/gen/go/gamemanager/agent/v1"
 )
 
 type StatusSender interface {
@@ -105,7 +105,7 @@ func handle(msg dockerevents.Message, tracker StopTracker, sender StatusSender, 
 				log.Printf("cleanup crashed container failed: server=%s err=%v", serverID, err)
 			}
 			// exit 137 = OOM kill พบบ่อยสุด — ข้อความ user-facing ภาษาอังกฤษ
-			notifier.PushSystemLine(serverID, fmt.Sprintf("[mc-panel] instance crashed (exit code %d) — removed the leftover container, your data is preserved. Press Start to run again.", exitCode))
+			notifier.PushSystemLine(serverID, fmt.Sprintf("[game-manager] instance crashed (exit code %d) — removed the leftover container, your data is preserved. Press Start to run again.", exitCode))
 		}
 		consoles.Detach(serverID)
 	}

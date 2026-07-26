@@ -1,4 +1,4 @@
-module github.com/mc-panel/proto
+module github.com/game-manager/proto
 
 go 1.24
 

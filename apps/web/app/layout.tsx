@@ -11,7 +11,7 @@ import { LANG_COOKIE, normalizeLocale } from "@/lib/i18n/config";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "mc-panel",
+  title: "game-manager",
   description: "Minecraft server management panel",
 };
 

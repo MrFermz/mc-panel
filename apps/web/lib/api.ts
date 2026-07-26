@@ -181,13 +181,13 @@ export function deleteFile(serverId: string, path: string): Promise<void> {
   );
 }
 
-// ---------- server.properties ----------
+// ---------- game config file ----------
 
 export function getServerProperties(
   serverId: string,
 ): Promise<ServerPropertiesResponse> {
   return apiGet(
-    `/api/servers/${serverId}/properties`,
+    `/api/servers/${serverId}/config`,
     serverPropertiesResponseSchema,
   );
 }
@@ -196,7 +196,7 @@ export function getServerProperties(
 // catalog เป็นของ game definition จึงต้องบอกว่าถามในนามเกมไหน
 export function getPropertiesCatalog(): Promise<ServerPropertiesResponse> {
   return apiGet(
-    `/api/meta/properties?game=${encodeURIComponent(DEFAULT_GAME)}`,
+    `/api/meta/config?game=${encodeURIComponent(DEFAULT_GAME)}`,
     serverPropertiesResponseSchema,
   );
 }
@@ -205,7 +205,7 @@ export function saveServerProperties(
   serverId: string,
   values: Record<string, string>,
 ): Promise<void> {
-  return apiSendVoid("PUT", `/api/servers/${serverId}/properties`, { values });
+  return apiSendVoid("PUT", `/api/servers/${serverId}/config`, { values });
 }
 
 // ---------- meta ----------

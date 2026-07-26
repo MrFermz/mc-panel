@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mc-panel/control-plane/internal/auth"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/auth"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 // loadServerAccess โหลด server + permission ของ user ปัจจุบัน
@@ -155,7 +155,7 @@ func (a *API) statsViewFor(s *store.Server) *serverStatsView {
 		StartedAt:     nilIfZero(st.StartedAt),
 		OnlinePlayers: emptyIfNil(st.OnlinePlayers),
 		MaxPlayers:    st.MaxPlayers,
-		TPS:           st.TPS,
+		TickRate:      st.TickRate,
 		UpdatedAt:     st.UpdatedAt,
 	}
 }
@@ -167,6 +167,7 @@ func nilIfZero(t time.Time) *time.Time {
 	}
 	return &t
 }
+
 // emptyIfNil ทำให้ online_players เป็น [] ใน JSON เสมอ ไม่ใช่ null —
 // contract ฝั่ง web คาดว่าเป็น array (ดู docs/api.md)
 func emptyIfNil(s []string) []string {
@@ -175,7 +176,6 @@ func emptyIfNil(s []string) []string {
 	}
 	return s
 }
-
 
 func isOwner(user *store.User, perm *store.Permission) bool {
 	if user.IsAdmin {
@@ -256,14 +256,14 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
 
 	var req struct {
-		Name       string `json:"name"`
-		NodeID     string `json:"node_id"`
-		Game       string `json:"game"`
-		ServerType string `json:"server_type"`
-		MCVersion  string `json:"mc_version"`
-		MemoryMB   int    `json:"memory_mb"`
-		HostPort   *int   `json:"host_port"`
-		AcceptEula bool   `json:"accept_eula"`
+		Name          string `json:"name"`
+		NodeID        string `json:"node_id"`
+		Game          string `json:"game"`
+		Variant       string `json:"variant"`
+		GameVersion   string `json:"game_version"`
+		MemoryMB      int    `json:"memory_mb"`
+		HostPort      *int   `json:"host_port"`
+		AcceptLicense bool   `json:"accept_license"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -272,7 +272,7 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.Game = strings.TrimSpace(req.Game)
-	req.MCVersion = strings.TrimSpace(req.MCVersion)
+	req.GameVersion = strings.TrimSpace(req.GameVersion)
 
 	// game ว่าง = เกม default (client เก่าที่ยังไม่ส่ง field นี้)
 	def, ok := a.games.Resolve(req.Game)
@@ -285,14 +285,14 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_name", "name is required (max 100 characters)")
 		return
 	}
-	if !def.HasVariant(req.ServerType) {
-		writeError(w, http.StatusBadRequest, "invalid_server_type",
-			"server_type must be one of: "+def.VariantList())
+	if !def.HasVariant(req.Variant) {
+		writeError(w, http.StatusBadRequest, "invalid_variant",
+			"variant must be one of: "+def.VariantList())
 		return
 	}
-	if req.MCVersion == "" || len(req.MCVersion) > def.Version.MaxLen {
-		writeError(w, http.StatusBadRequest, "invalid_mc_version",
-			"mc_version is required (max "+strconv.Itoa(def.Version.MaxLen)+" characters)")
+	if req.GameVersion == "" || len(req.GameVersion) > def.Version.MaxLen {
+		writeError(w, http.StatusBadRequest, "invalid_game_version",
+			"game_version is required (max "+strconv.Itoa(def.Version.MaxLen)+" characters)")
 		return
 	}
 	if req.MemoryMB < def.MinMemoryMB {
@@ -304,10 +304,10 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_host_port", "host_port must be between 1024 and 65535")
 		return
 	}
-	// variant ที่ไม่รัน jar ของเกม (เช่น velocity ที่เป็น proxy) ไม่มี EULA ให้ยอมรับ
-	if !req.AcceptEula && def.NeedsEULA(req.ServerType) {
-		writeError(w, http.StatusBadRequest, "eula_required",
-			"you must accept the "+def.Label+" EULA to create this server")
+	// variant ที่ไม่ได้รัน artifact ของเกมเอง (เช่น proxy) ไม่มี license ให้ยอมรับ
+	if !req.AcceptLicense && def.RequiresLicense(req.Variant) {
+		writeError(w, http.StatusBadRequest, "license_required",
+			"you must accept the "+def.LicenseName+" to create this server")
 		return
 	}
 
@@ -334,7 +334,7 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	srv, err := a.st.CreateServerWithOwner(r.Context(), nodeID, user.ID,
-		req.Name, def.ID, req.ServerType, req.MCVersion, req.MemoryMB, req.HostPort)
+		req.Name, def.ID, req.Variant, req.GameVersion, req.MemoryMB, req.HostPort)
 	if store.IsUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "host_port_taken", "host_port is already used on this node")
 		return
@@ -346,14 +346,14 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.audit(r, &user.ID, &srv.ID, "server_created", map[string]any{
-		"name": srv.Name, "game": srv.Game, "server_type": srv.ServerType,
-		"mc_version": srv.MCVersion, "node_id": srv.NodeID.String(),
+		"name": srv.Name, "game": srv.Game, "variant": srv.Variant,
+		"game_version": srv.GameVersion, "node_id": srv.NodeID.String(),
 	})
 
 	// row เกิดแล้ว → แจ้ง browser refetch server list (dashboard อัปเดตทันที)
 	a.events.ServerAdded(srv.ID)
 
-	job, err := a.disp.CreateServer(r.Context(), srv, req.AcceptEula, user.ID)
+	job, err := a.disp.CreateServer(r.Context(), srv, req.AcceptLicense, user.ID)
 	if err != nil {
 		// job ถูก mark failed แล้วใน dispatcher — server ที่ provision ไม่ได้ให้จบที่ errored
 		if serr := a.st.UpdateServerStatus(r.Context(), srv.ID, "errored"); serr != nil {

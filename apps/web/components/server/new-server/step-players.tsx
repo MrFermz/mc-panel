@@ -6,32 +6,34 @@ import { Trash2Icon } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { gameProfile } from "@/lib/games";
 
-// ชื่อผู้เล่น Minecraft — เช็คคร่าว ๆ ฝั่ง client เท่านั้น ตัวจริงถูก verify กับ Mojang
-// ตอน apply หลังสร้าง server (ชื่อที่ไม่มีอยู่จริงจะขึ้น toast ตอนนั้น)
-const MC_USERNAME = /^[A-Za-z0-9_]{3,16}$/;
-
-// step 4 — whitelist (ข้ามได้) และเป็น step ที่มีปุ่มสร้างจริง
-// server ยังไม่ถูกสร้าง จึงอ่านไฟล์ ops/banned/usercache ไม่ได้เลย เก็บได้แค่รายชื่อที่จะ
-// whitelist แล้ว apply หลังสร้างเสร็จ (ตัว live อยู่ที่ server-players.tsx)
+// step 4 — allowlist (ข้ามได้) และเป็น step ที่มีปุ่มสร้างจริง
+// server ยังไม่ถูกสร้าง จึงอ่านไฟล์ state ของเกมไม่ได้เลย เก็บได้แค่รายชื่อที่จะ
+// allowlist แล้ว apply หลังสร้างเสร็จ (ตัว live อยู่ที่ server-players.tsx)
+// กติกาชื่อผู้เล่นมาจาก game profile — ตัวจริงถูก verify กับ identity service ที่ backend
 export function StepPlayers({
   value,
   onChange,
-  whitelistEnabled,
-  onEnableWhitelist,
+  game,
+  allowlistEnabled,
+  onEnableAllowlist,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
-  // = properties draft key `white-list` — ไม่เปิดก็เพิ่มชื่อได้ แต่ MC จะไม่บังคับใช้
-  whitelistEnabled: boolean;
-  onEnableWhitelist: () => void;
+  game?: string;
+  // = config draft key ของ allowlist (game profile เป็นคนบอก key) — ไม่เปิดก็เพิ่มชื่อได้
+  // แต่เกมจะไม่บังคับใช้
+  allowlistEnabled: boolean;
+  onEnableAllowlist: () => void;
 }) {
   const t = useT();
+  const profile = gameProfile(game);
   const [username, setUsername] = React.useState("");
 
   const add = () => {
     const name = username.trim();
-    if (!MC_USERNAME.test(name)) {
+    if (!profile.isValidPlayerName(name)) {
       toast.error(t("players.errInvalid"));
       return;
     }
@@ -45,21 +47,21 @@ export function StepPlayers({
 
   return (
     <div className="grid gap-4">
-      {!whitelistEnabled ? (
+      {!allowlistEnabled ? (
         <div className="border-destructive/40 bg-destructive/5 grid gap-2 rounded-md border p-3 text-sm sm:flex sm:items-center sm:justify-between">
           <div className="grid gap-1">
-            <p className="font-medium">{t("players.whitelistOff")}</p>
+            <p className="font-medium">{t("players.allowlistOff")}</p>
             <p className="text-muted-foreground text-xs">
               {t("wizard.playersDraftHint")}
             </p>
           </div>
-          <Button size="sm" onClick={onEnableWhitelist}>
-            {t("players.enableWhitelist")}
+          <Button size="sm" onClick={onEnableAllowlist}>
+            {t("players.enableAllowlist")}
           </Button>
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
-          {t("players.whitelistOn")}{" "}
+          {t("players.allowlistOn")}{" "}
           <span className="text-xs">{t("wizard.playersDraftHint")}</span>
         </p>
       )}

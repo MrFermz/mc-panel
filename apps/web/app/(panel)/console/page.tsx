@@ -20,7 +20,11 @@ export default function ConsolePage() {
     >
       {({ server, canConsoleWrite }) => (
         <div className="grid gap-4">
-          <ServerConsole serverId={server.id} canWrite={canConsoleWrite} />
+          <ServerConsole
+            serverId={server.id}
+            game={server.game}
+            canWrite={canConsoleWrite}
+          />
           {/* live resources อยู่ล่างสุดของหน้า console */}
           <LiveResources server={server} />
         </div>

@@ -1,16 +1,16 @@
 # ============================================================
-# mc-panel full stack — ทุก service รันบน docker ทั้งหมด
+# game-manager full stack — ทุก service รันบน docker ทั้งหมด
 #
 # แยก 3 network ชัดเจน:
 #   edge            caddy <-> web/control-plane (+ egress ของ service ที่ต้องออก internet)
 #   core (internal) control-plane <-> postgres/redis/nats <-> node-agent — ไม่มีทางออก internet
-#   mcpanel-servers Minecraft containers ที่ node-agent สร้าง (แยกขาดจาก core,
+#   game-manager-servers container ของ game instance ที่ node-agent สร้าง (แยกขาดจาก core,
 #                   velocity คุยกับ backend servers ในวงนี้)
 #
 # ใช้งาน:  make env && make runtime-images && make up
 # secret ทั้งหมดมาจาก .env ที่ root (สร้างด้วย make env) — ห้าม hardcode ในไฟล์นี้
 # ============================================================
-name: mcpanel
+name: game-manager
 
 services:
   caddy:
@@ -72,16 +72,16 @@ services:
       AGENT_TOKEN: ${NODE_TOKEN}
       CONTROL_PLANE_GRPC: control-plane:9090
       NATS_URL: nats://${NATS_AGENT_USER}:${NATS_AGENT_PASSWORD}@nats:4222
-      MC_DATA_DIR: ${MC_DATA_DIR}
-      MC_NETWORK: mcpanel-servers
-      MC_RUNTIME_IMAGE_PREFIX: mcpanel/mc-runtime
+      GM_DATA_DIR: ${GM_DATA_DIR}
+      GM_NETWORK: game-manager-servers
+      GM_RUNTIME_IMAGE_PREFIX: game-manager/runtime-java
     volumes:
       # จำเป็น: agent สร้าง sibling container ผ่าน docker daemon ของ host
       # นี่คือ attack surface ที่ใหญ่ที่สุดของระบบ — ดู docs/architecture.md หัวข้อ security
       - /var/run/docker.sock:/var/run/docker.sock
       # ต้อง mount ด้วย path เดียวกันทั้งสองฝั่ง เพราะ agent ใช้ path นี้
-      # ทั้งเขียนไฟล์เองและสั่ง bind mount ให้ MC container (docker daemon มองจาก host)
-      - ${MC_DATA_DIR:?run 'make env' first}:${MC_DATA_DIR}
+      # ทั้งเขียนไฟล์เองและสั่ง bind mount ให้ container ของ instance (docker daemon มองจาก host)
+      - ${GM_DATA_DIR:?run 'make env' first}:${GM_DATA_DIR}
     networks: [edge, core]
     depends_on:
       control-plane:
@@ -123,7 +123,7 @@ services:
       - natsdata:/data
     networks: [core]
 
-# หมายเหตุ: วง mcpanel-servers ของ MC container ไม่ได้ประกาศที่นี่ —
+# หมายเหตุ: วง game-manager-servers ของ container ของ instance ไม่ได้ประกาศที่นี่ —
 # node-agent เป็นคน ensure ตอน boot เอง (compose สร้างเฉพาะ network ที่มี service ใช้)
 networks:
   edge:

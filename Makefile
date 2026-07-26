@@ -1,5 +1,5 @@
 # ============================================================
-# mc-panel — Makefile
+# game-manager — Makefile
 #   dev  = infra บน docker (postgres/redis/nats) + service รันนอก docker แบบ hot reload
 #   full = ทุกอย่างบน docker (make up) — ใกล้เคียง production
 # secret ทั้งหมดอยู่ใน .env (สร้างด้วย make env) ห้าม hardcode ในไฟล์นี้
@@ -32,18 +32,18 @@ doctor: ## Check environment (docker, compose v2, WSL2 drvfs) — recommended fo
 	./scripts/preflight.sh
 
 .PHONY: runtime-images
-runtime-images: ## Build mcpanel/mc-runtime:8/17/21/25 (base image for MC instances)
-	docker build -t mcpanel/mc-runtime:8  --build-arg JAVA_VERSION=8  infra/mc-runtime
-	docker build -t mcpanel/mc-runtime:17 --build-arg JAVA_VERSION=17 infra/mc-runtime
-	docker build -t mcpanel/mc-runtime:21 --build-arg JAVA_VERSION=21 infra/mc-runtime
-	docker build -t mcpanel/mc-runtime:25 --build-arg JAVA_VERSION=25 infra/mc-runtime
+runtime-images: ## Build game-manager/runtime-java:8/17/21/25 (base image for JVM-based game instances)
+	docker build -t game-manager/runtime-java:8  --build-arg JAVA_VERSION=8  infra/runtime-java
+	docker build -t game-manager/runtime-java:17 --build-arg JAVA_VERSION=17 infra/runtime-java
+	docker build -t game-manager/runtime-java:21 --build-arg JAVA_VERSION=21 infra/runtime-java
+	docker build -t game-manager/runtime-java:25 --build-arg JAVA_VERSION=25 infra/runtime-java
 
 .PHONY: agent-image
-agent-image: ## Build the official node-agent image (mcpanel/node-agent:local) for install-agent.sh
+agent-image: ## Build the official node-agent image (game-manager/node-agent:local) for install-agent.sh
 	# context = repo root เพราะ Dockerfile ต้องเห็น packages/proto (ดู apps/node-agent/Dockerfile)
-	# label project=mc-panel ให้ purge เก็บกวาดได้ (docker image prune --filter label=project=mc-panel)
-	docker build -t mcpanel/node-agent:local \
-		--label project=mc-panel \
+	# label project=game-manager ให้ purge เก็บกวาดได้ (docker image prune --filter label=project=game-manager)
+	docker build -t game-manager/node-agent:local \
+		--label project=game-manager \
 		-f apps/node-agent/Dockerfile .
 
 # ---------- full stack (ทุกอย่างบน docker) ----------
@@ -57,21 +57,21 @@ up: ## Start the full stack on docker (auto build)
 	@echo "(Windows/WSL2) if bind mounts look off, try 'make doctor'"
 
 .PHONY: down
-down: mc-stop ## Stop the full stack + all MC instances (data kept)
+down: game-stop ## Stop the full stack + all game instances (data kept)
 	$(FULL_COMPOSE) down
 
-# MC container ไม่ได้ถูกจัดการโดย compose (agent สร้างเอง) — compose down จึงไม่แตะ
+# container ของ instance ไม่ได้ถูกจัดการโดย compose (agent สร้างเอง) — compose down จึงไม่แตะ
 # ต้องหยุดด้วย label filter ชุดเดียวกับที่ agent ใช้ (ดู runner.LabelManagedBy)
 # หยุดอย่างเดียวไม่ลบ: world อยู่ใน bind mount อยู่แล้ว แต่เก็บ container ไว้ให้ start กลับได้เร็ว
 # -t 40 = ให้ JVM save world ทัน (agent เองรอ graceful 30 วิ ก่อน SIGTERM)
-.PHONY: mc-stop
-mc-stop: ## Stop all MC instances on this host (agent-managed containers)
-	@ids=$$(docker ps -q --filter "label=mc.managed_by=mc-panel-agent"); \
+.PHONY: game-stop
+game-stop: ## Stop all game instances on this host (agent-managed containers)
+	@ids=$$(docker ps -q --filter "label=gamemanager.managed_by=game-manager-agent"); \
 	if [ -n "$$ids" ]; then \
-		echo "Stopping MC instances: $$(echo $$ids | wc -w | tr -d ' ')"; \
+		echo "Stopping game instances: $$(echo $$ids | wc -w | tr -d ' ')"; \
 		docker stop -t 40 $$ids > /dev/null; \
 	else \
-		echo "No running MC instances"; \
+		echo "No running game instances"; \
 	fi
 
 .PHONY: logs
@@ -158,8 +158,8 @@ run-agent: ## Run node-agent (dev — requires docker on the host)
 	AGENT_TOKEN="$(NODE_TOKEN)" \
 	CONTROL_PLANE_GRPC=localhost:9090 \
 	NATS_URL="nats://$(NATS_AGENT_USER):$(NATS_AGENT_PASSWORD)@localhost:4222" \
-	MC_DATA_DIR="$(MC_DATA_DIR)" \
-	MC_NETWORK=mcpanel-servers \
+	GM_DATA_DIR="$(GM_DATA_DIR)" \
+	GM_NETWORK=game-manager-servers \
 	go run ./apps/node-agent/cmd/agent
 
 .PHONY: run-web
@@ -184,7 +184,7 @@ dev-logs: ## Tail combined dev container logs (air rebuild / next dev in real-ti
 	$(DEV_APP_COMPOSE) logs -f
 
 .PHONY: dev-down
-dev-down: mc-stop ## Stop dev containers + all MC instances (infra data kept)
+dev-down: game-stop ## Stop dev containers + all game instances (infra data kept)
 	$(DEV_APP_COMPOSE) down
 
 # ---------- test & lint ----------
@@ -215,7 +215,7 @@ purge: ## Wipe everything (data, volumes, binaries, node_modules) — requires t
 	@echo "This command will delete:"
 	@echo "  - all docker volumes for dev + full stack (DB/NATS data is lost)"
 	@echo "  - the bin/ folder and web's node_modules/.next"
-	@echo "  - all MC containers on this host (worlds in data/servers are kept)"
+	@echo "  - all game containers on this host (data in data/servers is kept)"
 	@echo "  - note: generated proto (must be committed) and data/servers are NOT deleted"
 	@read -p "Type 'yes' to confirm: " confirm; \
 	if [ "$$confirm" != "yes" ]; then \
@@ -223,11 +223,11 @@ purge: ## Wipe everything (data, volumes, binaries, node_modules) — requires t
 	fi
 	$(DEV_COMPOSE) down -v --remove-orphans || true
 	$(FULL_COMPOSE) down -v --remove-orphans || true
-	@ids=$$(docker ps -aq --filter "label=mc.managed_by=mc-panel-agent"); \
-	if [ -n "$$ids" ]; then docker rm -f $$ids > /dev/null; echo "Removed leftover MC containers"; fi
+	@ids=$$(docker ps -aq --filter "label=gamemanager.managed_by=game-manager-agent"); \
+	if [ -n "$$ids" ]; then docker rm -f $$ids > /dev/null; echo "Removed leftover game containers"; fi
 	rm -rf bin/
 	rm -rf apps/web/node_modules apps/web/.next
-	docker image prune -f --filter "label=project=mc-panel"
+	docker image prune -f --filter "label=project=game-manager"
 	@echo "purge complete — run 'make bootstrap' to start dev again, or 'make up' for the full stack"
 
 # ---------- bootstrap dev ----------

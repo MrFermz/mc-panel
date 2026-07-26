@@ -11,12 +11,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 
-	jobv1 "github.com/mc-panel/proto/gen/go/mcpanel/job/v1"
+	jobv1 "github.com/game-manager/proto/gen/go/gamemanager/job/v1"
 
-	"github.com/mc-panel/control-plane/internal/console"
-	"github.com/mc-panel/control-plane/internal/events"
-	"github.com/mc-panel/control-plane/internal/games"
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/console"
+	"github.com/game-manager/control-plane/internal/events"
+	"github.com/game-manager/control-plane/internal/games"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 const (
@@ -117,7 +117,7 @@ func (rc *ResultConsumer) handle(msg jetstream.Msg) {
 	rc.log.Info("job result applied", "job_id", jobID, "type", job.Type,
 		"success", res.Success, "error", res.Error)
 	if job.Type == "import_server" && res.Success && job.ServerID != nil {
-		rc.applyDetectedMCVersion(ctx, *job.ServerID, res.Detail)
+		rc.applyDetectedGameVersion(ctx, *job.ServerID, res.Detail)
 	}
 	rc.afterCommit(ctx, job, plan, changed, restartStart, deleted, res.Success, res.Error)
 	msg.Ack()
@@ -298,20 +298,20 @@ func reapPlan(job *store.Job) store.TransitionPlan {
 	return store.TransitionPlan{}
 }
 
-// applyDetectedMCVersion อ่านเวอร์ชันที่ agent detect (JobResult.Detail เป็น JSON
-// {"mc_version":"..."}) แล้ว update mc_version ของ server — ทำเฉพาะ import_server
+// applyDetectedGameVersion อ่านเวอร์ชันที่ agent detect (JobResult.Detail เป็น JSON
+// {"game_version":"..."}) แล้ว update game_version ของ server — ทำเฉพาะ import_server
 // สำเร็จ. detail ว่าง/parse ไม่ได้/เวอร์ชันไม่ผ่านกติกาของเกม → ข้ามเงียบ ๆ
-func (rc *ResultConsumer) applyDetectedMCVersion(ctx context.Context, serverID uuid.UUID, detail string) {
+func (rc *ResultConsumer) applyDetectedGameVersion(ctx context.Context, serverID uuid.UUID, detail string) {
 	if detail == "" {
 		return
 	}
 	var d struct {
-		MCVersion string `json:"mc_version"`
+		GameVersion string `json:"game_version"`
 	}
 	if err := json.Unmarshal([]byte(detail), &d); err != nil {
 		return
 	}
-	if d.MCVersion == "" {
+	if d.GameVersion == "" {
 		return
 	}
 	// เวอร์ชันนี้ถูกเขียนทับของเดิมโดยไม่มีคนยืนยัน — ต้องผ่านกติกาของเกมนั้นก่อนเสมอ
@@ -321,16 +321,16 @@ func (rc *ResultConsumer) applyDetectedMCVersion(ctx context.Context, serverID u
 		return
 	}
 	def, ok := rc.games.Resolve(srv.Game)
-	if !ok || def.Version.ValidDetected == nil || !def.Version.ValidDetected(d.MCVersion) {
+	if !ok || def.Version.ValidDetected == nil || !def.Version.ValidDetected(d.GameVersion) {
 		return
 	}
-	if err := rc.st.UpdateServerMCVersion(ctx, serverID, d.MCVersion); err != nil {
-		rc.log.Error("update server mc_version failed", "server_id", serverID,
-			"mc_version", d.MCVersion, "error", err)
+	if err := rc.st.UpdateServerGameVersion(ctx, serverID, d.GameVersion); err != nil {
+		rc.log.Error("update server game_version failed", "server_id", serverID,
+			"game_version", d.GameVersion, "error", err)
 		return
 	}
-	rc.log.Info("server mc_version updated from import detection",
-		"server_id", serverID, "mc_version", d.MCVersion)
+	rc.log.Info("server game_version updated from import detection",
+		"server_id", serverID, "game_version", d.GameVersion)
 }
 
 // jobStatusOf แปลงผล JobResult เป็นค่า status ของ jobs table (ให้ตรงกับที่ CompleteJobTx เขียน)

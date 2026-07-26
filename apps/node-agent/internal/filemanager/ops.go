@@ -16,7 +16,7 @@ const (
 	// read: เกิน limit อ่านแค่ต้นไฟล์แล้ว truncated=true / write: เกิน limit ปฏิเสธทันที
 	maxFileSize = 1 << 20 // 1 MiB
 
-	// uid/gid ที่ MC container รัน (User 1000:1000) — ไฟล์ที่ user เขียนผ่าน panel
+	// uid/gid ที่ container ของ instance รัน (User 1000:1000) — ไฟล์ที่ user เขียนผ่าน panel
 	// ต้องเป็นของ user นี้ ไม่งั้น process ใน container แก้ต่อไม่ได้
 	mcUID = 1000
 	mcGID = 1000

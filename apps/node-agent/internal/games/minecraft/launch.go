@@ -5,7 +5,7 @@ package minecraft
 import (
 	"fmt"
 
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 // stopCommand — velocity ใช้ `end`, ที่เหลือใช้ `stop`
@@ -19,8 +19,8 @@ func stopCommand(variant string) string {
 // launchScript — java ต้องเป็น process สุดท้ายผ่าน exec เสมอ เพื่อให้เป็น PID 1
 // (รับ stdin จาก docker attach และ SIGTERM ตรง ไม่ผ่าน shell)
 func launchScript(variant string) string {
-	const header = "#!/bin/sh\ncd /mc\n"
-	const mem = "${MC_MEMORY_MB:-1024}"
+	header := "#!/bin/sh\ncd " + games.ContainerDataDir + "\n"
+	const mem = "${GM_MEMORY_MB:-1024}"
 	switch variant {
 	case "velocity":
 		return header + "exec java -Xms" + mem + "M -Xmx" + mem + "M -jar velocity.jar\n"
@@ -38,9 +38,9 @@ func launchScript(variant string) string {
 	}
 }
 
-// launchEnv — launch script อ่าน heap ที่จะส่งให้ JVM จาก MC_MEMORY_MB
+// launchEnv — launch script อ่าน heap ที่จะส่งให้ JVM จาก GM_MEMORY_MB
 func launchEnv(memoryMB int) []string {
-	return []string{fmt.Sprintf("MC_MEMORY_MB=%d", HeapMB(memoryMB))}
+	return []string{fmt.Sprintf("GM_MEMORY_MB=%d", HeapMB(memoryMB))}
 }
 
 // HeapMB แปลง memory_mb ที่ user จัดสรร (= hard limit ของทั้ง container) เป็น -Xmx ของ JVM
@@ -65,9 +65,9 @@ func HeapMB(memoryMB int) int {
 // seedFiles — ไฟล์ที่ panel เขียนให้ตอน provision
 //   - eula.txt เขียนเฉพาะเมื่อ user ติ๊กยอมรับเอง (ระบบห้าม default eula ให้เด็ดขาด)
 //   - server.properties เขียนเฉพาะเมื่อยังไม่มี (ห้ามทับของเดิม) และไม่ใช่ velocity ที่เป็น proxy
-func seedFiles(variant string, acceptEULA bool) []games.SeedFile {
+func seedFiles(variant string, acceptLicense bool) []games.SeedFile {
 	var files []games.SeedFile
-	if acceptEULA {
+	if acceptLicense {
 		files = append(files, games.SeedFile{
 			Path: "eula.txt", Content: []byte("eula=true\n"), Mode: 0o644, Overwrite: true,
 		})

@@ -21,7 +21,7 @@ import (
 )
 
 // UserAgent ที่ agent ใช้ยิง upstream ทุกเส้น
-const UserAgent = "mc-panel-agent/0.1.0 (https://github.com/mc-panel)"
+const UserAgent = "game-manager-agent/0.1.0 (https://github.com/game-manager)"
 
 // ProvisionEnv = ทุกอย่างที่ Definition.Provision ต้องใช้เพื่อทำงานหนึ่งครั้ง
 // (dir ผ่าน SafeJoin มาจาก provisioner แล้ว — definition ไม่ต้อง validate path ซ้ำ
@@ -35,7 +35,7 @@ type ProvisionEnv struct {
 
 	HTTP   *http.Client
 	Docker *client.Client
-	// RuntimeImagePrefix มาจาก config ของ agent (MC_RUNTIME_IMAGE_PREFIX)
+	// RuntimeImagePrefix มาจาก config ของ agent (GM_RUNTIME_IMAGE_PREFIX)
 	RuntimeImagePrefix string
 	// Chown โอน ownership ของทั้ง dir ให้ user ที่ container รัน — เรียกหลังเขียนไฟล์
 	// ที่ tool ของเกม (เช่น installer ที่รันเป็น uid 1000) ต้องแตะต่อ

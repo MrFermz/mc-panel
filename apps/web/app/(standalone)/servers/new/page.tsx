@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type Permission, type Server } from "@/lib/types";
+import { DEFAULT_GAME, type Permission, type Server } from "@/lib/types";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
@@ -20,6 +20,7 @@ import {
 } from "@/components/server/new-server/step-properties";
 import { StepAccess } from "@/components/server/new-server/step-access";
 import { StepPlayers } from "@/components/server/new-server/step-players";
+import { gameProfile } from "@/lib/games";
 import { ImportServerPage } from "@/components/server/new-server/import-page";
 import { useServerMetadata } from "@/components/server/new-server/use-server-metadata";
 import { useCreateServer } from "@/components/server/new-server/use-create-server";
@@ -81,6 +82,9 @@ function NewServerWizard({
     setPropsDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 
+  // key ที่เปิด allowlist เป็นของเกม ไม่ใช่ค่าคงที่ของ wizard
+  const allowlistKey = gameProfile(DEFAULT_GAME).allowlistEnabledKey;
+
   const stepContent = () => {
     if (step === 0) {
       return <StepGeneral mode="new" meta={meta} />;
@@ -101,10 +105,12 @@ function NewServerWizard({
       <StepPlayers
         value={playersDraft}
         onChange={setPlayersDraft}
-        whitelistEnabled={
-          (propsDraft["white-list"] ?? defaults["white-list"]) === "true"
+        game={DEFAULT_GAME}
+        allowlistEnabled={
+          allowlistKey !== "" &&
+          (propsDraft[allowlistKey] ?? defaults[allowlistKey]) === "true"
         }
-        onEnableWhitelist={() => setProp("white-list", "true")}
+        onEnableAllowlist={() => setProp(allowlistKey, "true")}
       />
     );
   };

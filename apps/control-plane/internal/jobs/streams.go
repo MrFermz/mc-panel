@@ -13,12 +13,12 @@ import (
 const (
 	StreamJobs      = "JOBS"
 	StreamResults   = "RESULTS"
-	SubjectResults  = "mcpanel.results"
+	SubjectResults  = "gamemanager.results"
 	ResultsConsumer = "cp-results"
 )
 
 func JobSubject(nodeID string) string {
-	return "mcpanel.jobs." + nodeID
+	return "gamemanager.jobs." + nodeID
 }
 
 func NodeConsumerName(nodeID string) string {
@@ -30,7 +30,7 @@ func NodeConsumerName(nodeID string) string {
 func EnsureStreams(ctx context.Context, js jetstream.JetStream) error {
 	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:      StreamJobs,
-		Subjects:  []string{"mcpanel.jobs.>"},
+		Subjects:  []string{"gamemanager.jobs.>"},
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   jetstream.FileStorage,
 		// dedup ด้วย Nats-Msg-Id = job_id: ตอน publish timeout กำกวม (message อาจถึงแล้ว)
@@ -59,7 +59,7 @@ func EnsureNodeConsumer(ctx context.Context, js jetstream.JetStream, nodeID stri
 		Durable:       NodeConsumerName(nodeID),
 		FilterSubject: JobSubject(nodeID),
 		AckPolicy:     jetstream.AckExplicitPolicy,
-		// create_server ต้องโหลด jar ผ่าน internet — ให้เวลา ack นาน
+		// create_server ต้องโหลด artifact ผ่าน internet — ให้เวลา ack นาน
 		AckWait:    5 * time.Minute,
 		MaxDeliver: 5,
 	})

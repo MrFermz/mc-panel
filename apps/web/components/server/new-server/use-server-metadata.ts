@@ -5,13 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet, getNextPort } from "@/lib/api";
 import {
   metaNodesResponseSchema,
-  metaServerTypesResponseSchema,
+  metaVariantsResponseSchema,
   nodesResponseSchema,
   serversResponseSchema,
   versionsResponseSchema,
   DEFAULT_GAME,
   type MetaNode,
-  type MetaServerType,
+  type MetaVariant,
 } from "@/lib/types";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useMe } from "@/lib/use-me";
@@ -27,26 +27,26 @@ export interface RamBudget {
 export interface ServerMetadata {
   name: string;
   nodeId: string;
-  serverType: string;
-  mcVersion: string;
+  variant: string;
+  gameVersion: string;
   memoryMb: string;
   hostPort: string;
-  acceptEula: boolean;
+  acceptLicense: boolean;
 
   setName: (v: string) => void;
   setNodeId: (v: string) => void;
-  setServerType: (v: string) => void;
-  setMcVersion: (v: string) => void;
+  setVariant: (v: string) => void;
+  setGameVersion: (v: string) => void;
   setMemoryMb: (v: string) => void;
   setHostPort: (v: string) => void;
-  setAcceptEula: (v: boolean) => void;
+  setAcceptLicense: (v: boolean) => void;
 
-  needsEula: boolean;
+  requiresLicense: boolean;
   valid: boolean;
 
   nodes: MetaNode[];
   nodesPending: boolean;
-  types: MetaServerType[];
+  types: MetaVariant[];
   typesPending: boolean;
   versions: string[];
   versionsPending: boolean;
@@ -62,13 +62,13 @@ export function useServerMetadata(): ServerMetadata {
   const me = useMe().data?.user;
   const [name, setName] = React.useState("");
   const [nodeId, setNodeId] = React.useState("");
-  const [serverType, setServerType] = React.useState("");
-  const [mcVersion, setMcVersion] = React.useState("");
+  const [variant, setVariant] = React.useState("");
+  const [gameVersion, setGameVersion] = React.useState("");
   const [memoryMb, setMemoryMb] = React.useState("2048");
   const [hostPort, setHostPort] = React.useState("");
   // จำว่า user แตะช่อง port เองหรือยัง — ถ้าแตะแล้วห้าม auto-prefill ทับ
   const [portEdited, setPortEdited] = React.useState(false);
-  const [acceptEula, setAcceptEula] = React.useState(false);
+  const [acceptLicense, setAcceptLicense] = React.useState(false);
 
   const nodesQuery = useQuery({
     queryKey: ["meta", "nodes"],
@@ -106,9 +106,9 @@ export function useServerMetadata(): ServerMetadata {
 
   // เวอร์ชันที่เลือกไว้ผูกกับ type — เปลี่ยน type แล้วค่าเดิมอาจไม่มีในลิสต์ใหม่
   // (บังคับล้างที่นี่ ไม่ฝากไว้กับคนเรียก)
-  const onServerTypeChange = React.useCallback((v: string) => {
-    setServerType(v);
-    setMcVersion("");
+  const onVariantChange = React.useCallback((v: string) => {
+    setVariant(v);
+    setGameVersion("");
   }, []);
 
   // งบ RAM ต่อโหนด: total ของ node − ผลรวม memory_mb ของ server ที่มีอยู่บนโหนดนั้น
@@ -134,25 +134,25 @@ export function useServerMetadata(): ServerMetadata {
 
   // variant + รายการเวอร์ชันเป็นของ game definition — ทุก query ต้องบอกว่าถามในนามเกมไหน
   const typesQuery = useQuery({
-    queryKey: ["meta", "server-types", DEFAULT_GAME],
+    queryKey: ["meta", "variants", DEFAULT_GAME],
     queryFn: () =>
       apiGet(
-        `/api/meta/server-types?game=${encodeURIComponent(DEFAULT_GAME)}`,
-        metaServerTypesResponseSchema,
+        `/api/meta/variants?game=${encodeURIComponent(DEFAULT_GAME)}`,
+        metaVariantsResponseSchema,
       ),
   });
   const versionsQuery = useQuery({
-    queryKey: ["meta", "versions", DEFAULT_GAME, serverType],
+    queryKey: ["meta", "versions", DEFAULT_GAME, variant],
     queryFn: () =>
       apiGet(
-        `/api/meta/versions?game=${encodeURIComponent(DEFAULT_GAME)}&type=${encodeURIComponent(serverType)}`,
+        `/api/meta/versions?game=${encodeURIComponent(DEFAULT_GAME)}&type=${encodeURIComponent(variant)}`,
         versionsResponseSchema,
       ),
-    enabled: serverType !== "",
+    enabled: variant !== "",
   });
 
-  const selectedType = typesQuery.data?.types.find((x) => x.id === serverType);
-  const needsEula = selectedType?.needs_eula ?? serverType !== "velocity";
+  const selectedType = typesQuery.data?.types.find((x) => x.id === variant);
+  const requiresLicense = selectedType?.requires_license ?? variant !== "velocity";
 
   const memory = Number(memoryMb);
   const port = hostPort === "" ? null : Number(hostPort);
@@ -176,30 +176,30 @@ export function useServerMetadata(): ServerMetadata {
   const valid =
     name.trim().length > 0 &&
     nodeId !== "" &&
-    serverType !== "" &&
-    mcVersion !== "" &&
+    variant !== "" &&
+    gameVersion !== "" &&
     Number.isInteger(memory) &&
     memory >= 512 &&
     (port === null ||
       (Number.isInteger(port) && port >= 1024 && port <= 65535)) &&
-    (!needsEula || acceptEula);
+    (!requiresLicense || acceptLicense);
 
   return {
     name,
     nodeId,
-    serverType,
-    mcVersion,
+    variant,
+    gameVersion,
     memoryMb,
     hostPort,
-    acceptEula,
+    acceptLicense,
     setName,
     setNodeId,
-    setServerType: onServerTypeChange,
-    setMcVersion,
+    setVariant: onVariantChange,
+    setGameVersion,
     setMemoryMb,
     setHostPort: onHostPortChange,
-    setAcceptEula,
-    needsEula,
+    setAcceptLicense,
+    requiresLicense,
     valid,
     nodes,
     nodesPending: nodesQuery.isPending,

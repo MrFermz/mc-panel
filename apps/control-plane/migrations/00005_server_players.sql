@@ -1,7 +1,8 @@
 -- +goose Up
--- server_players: whitelist ต่อ server — mirror ของ whitelist.json ที่ agent เขียนลง disk
+-- server_players: allowlist ต่อ server — mirror ของไฟล์รายชื่อที่ agent เขียนลง disk
 -- (source of truth คือ DB, ไฟล์ rebuild จากตารางนี้ทุกครั้งที่ add/remove)
--- uuid คือ Mojang UUID (online-mode); username เก็บไว้แสดงผล + เขียนลง whitelist.json
+-- uuid มาจาก identity service ของเกม; username เก็บไว้แสดงผล + เขียนลงไฟล์ allowlist
+-- (ชื่อไฟล์/รูปแบบเป็นของ game definition — Minecraft = whitelist.json)
 CREATE TABLE server_players (
   server_id UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
   uuid UUID NOT NULL,

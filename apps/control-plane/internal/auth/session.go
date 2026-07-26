@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/mc-panel/control-plane/internal/store"
+	"github.com/game-manager/control-plane/internal/store"
 )
 
 const (
@@ -124,7 +124,7 @@ const (
 // AllowLogin จำกัด 10 ครั้ง/นาที/IP — redis ล่มให้ fail-open (เลือก availability
 // มากกว่า strict rate limit) พร้อม warn log
 func (m *Manager) AllowLogin(ctx context.Context, ip string) bool {
-	key := "mcpanel:login_rl:" + ip
+	key := "game-manager:login_rl:" + ip
 	n, err := m.rdb.Incr(ctx, key).Result()
 	if err != nil {
 		m.log.Warn("login rate limit check failed, failing open", "error", err, "ip", ip)

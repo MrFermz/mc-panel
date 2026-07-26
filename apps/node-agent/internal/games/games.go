@@ -3,7 +3,7 @@
 // ความรู้เฉพาะเกมทุกอย่างที่ agent ต้องใช้ — variant ที่ provision ได้, ที่มาของ artifact,
 // launch script, คำสั่งปิด, ไฟล์ config ที่ panel เขียนให้, การเดาเวอร์ชันจาก artifact,
 // และวิธีอ่านสถานะในเกมจาก console — อยู่ใน Definition ตัวเดียว ส่วนที่เหลือของ agent
-// (provision/runner/mcstate/jobs) ทำงานผ่าน Registry นี้เท่านั้น
+// (provision/runner/gamestate/jobs) ทำงานผ่าน Registry นี้เท่านั้น
 // **ห้าม switch ตามชื่อ variant กระจายอยู่ในโค้ดอื่นอีก**
 //
 // คู่ขนานกับ package ชื่อเดียวกันฝั่ง control-plane ซึ่งถือความรู้ฝั่ง API/validation —
@@ -24,26 +24,26 @@ const DefaultID = "minecraft"
 type Definition struct {
 	// ID ต้องตรงกับ id ฝั่ง control-plane
 	ID string
-	// Variants = variant ที่ provision/รันได้ (ชื่อเดียวกับ server_type ใน API)
+	// Variants = variant ที่ provision/รันได้ (ชื่อเดียวกับ variant ใน API)
 	Variants []string
 
 	// ContainerPort = port ที่ server ฟังอยู่ใน container (map ไป host port ตอน start)
 	ContainerPort int
 
-	// StopCommand = คำที่เขียนเข้า stdin เพื่อสั่งปิดอย่างสุภาพ (minecraft: stop / velocity: end)
+	// StopCommand = คำที่เขียนเข้า stdin เพื่อสั่งปิดอย่างสุภาพ (ต่าง variant ต่างคำได้)
 	StopCommand func(variant string) string
-	// LaunchScript = เนื้อของ .mcpanel/launch.sh ที่ container รัน
+	// LaunchScript = เนื้อของ .gamemanager/launch.sh ที่ container รัน
 	LaunchScript func(variant string) string
 	// LaunchEnv = env ที่ container ต้องมีให้ launch script ใช้ (เช่น heap size)
 	// คืนเป็น "KEY=VALUE" ตามรูปแบบของ docker
 	LaunchEnv func(memoryMB int) []string
-	// SeedFiles = ไฟล์ config ที่ panel เขียนให้ตอน provision (eula/ค่าเริ่มต้นของ config)
-	SeedFiles func(variant string, acceptEULA bool) []SeedFile
+	// SeedFiles = ไฟล์ config ที่ panel เขียนให้ตอน provision (license/ค่าเริ่มต้นของ config)
+	SeedFiles func(variant string, acceptLicense bool) []SeedFile
 
 	// Provision โหลด artifact ของ variant/version ลง dir ของ server (idempotent)
 	// คืน detail สั้น ๆ ที่จะเดินทางกลับไปกับ JobResult
 	Provision func(ctx context.Context, env ProvisionEnv) (detail string, err error)
-	// RuntimeImage = image ที่ tool ของเกมต้องใช้ (เช่น forge installer) — prefix มาจาก
+	// RuntimeImage = image ที่ tool ของเกมต้องใช้ (เช่น installer ของบาง variant) — prefix มาจาก
 	// config ของ agent เพื่อให้ override ได้ ต้องให้ผลตรงกับที่ control-plane เลือกไว้
 	RuntimeImage func(prefix, variant, version string) string
 
@@ -78,12 +78,12 @@ type SeedFile struct {
 
 // ImportSpec = สิ่งที่ต้องรู้เพื่อรับ server เดิมของ user เข้ามาให้ launch script รันได้
 type ImportSpec struct {
-	// Ext = นามสกุลของ artifact หลักที่อยู่ root ของ server dir (".jar")
+	// Ext = นามสกุลของ artifact หลักที่อยู่ root ของ server dir (minecraft = ".jar")
 	Ext string
 	// NameHints = ชื่อที่บอกใบ้ว่าไฟล์ไหนคือ artifact หลัก เรียงตามลำดับความมั่นใจ
 	NameHints []string
 	// MainArtifact = ชื่อไฟล์ที่ launch script คาดหวังสำหรับ variant นี้
-	// ("" = variant นี้ไม่ต้อง normalize เช่น forge ที่ใช้ run.sh)
+	// ("" = variant นี้ไม่ต้อง normalize เช่น variant ที่ใช้ run script)
 	MainArtifact func(variant string) string
 	// DetectVersion เดาเวอร์ชันจริงจาก artifact (artifactPath อาจว่างถ้าไม่มีไฟล์)
 	// originalName = ชื่อไฟล์เดิมใน zip ไว้ fallback. คืน "" เมื่อเดาไม่ได้
@@ -98,7 +98,7 @@ type ConsoleSpec struct {
 	// RosterCommand = คำสั่งขอรายชื่อผู้เล่น + max players (source of truth ของแต่ละรอบ)
 	// "" = เกมนี้ไม่มีวิธีถาม (tracker จะไม่ยิงอะไรเลย)
 	RosterCommand string
-	// MetricCommand = คำสั่งขอ metric ประจำเกม (minecraft = tps) — "" = ไม่มี
+	// MetricCommand = คำสั่งขอ metric ประจำเกม (minecraft = `tps`) — "" = ไม่มี
 	// รองรับการปิดถาวรเมื่อ server ตอบว่าไม่รู้จักคำสั่งนี้ (variant ที่ไม่รองรับ)
 	MetricCommand string
 	// Parse อ่าน 1 บรรทัดดิบจาก console แล้วบอกว่าเป็น event อะไร

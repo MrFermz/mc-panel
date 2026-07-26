@@ -15,6 +15,7 @@ import { serversResponseSchema, type Server } from "@/lib/types";
 import { formatUptime } from "@/lib/format";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useT } from "@/lib/i18n";
+import { gameProfile } from "@/lib/games";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import { useSettingsStore } from "@/lib/settings/store";
 import { EventsListener } from "@/components/layout/events-listener";
@@ -66,7 +67,8 @@ function ServerCard({ server }: { server: Server }) {
   const stats = server.stats;
   const online = running && stats ? stats.online_players.length : 0;
   const maxPlayers = stats?.max_players ?? 0;
-  const tps = stats?.tps ?? 0;
+  const tickRate = stats?.tick_rate ?? 0;
+  const game = gameProfile(server.game);
 
   // เข้า server = ตั้ง active server แล้วไป /dashboard (ไม่มี id ใน URL ตาม convention ของ panel)
   const enter = () => {
@@ -92,7 +94,7 @@ function ServerCard({ server }: { server: Server }) {
           <div className="grid min-w-0 gap-0.5">
             <h2 className="truncate text-lg font-semibold">{server.name}</h2>
             <p className="text-muted-foreground truncate font-mono text-xs capitalize">
-              {server.server_type} {server.mc_version}
+              {server.variant} {server.game_version}
             </p>
           </div>
           <StatusBadge status={server.status} className="shrink-0" />
@@ -113,9 +115,9 @@ function ServerCard({ server }: { server: Server }) {
               "—"
             )}
           </Stat>
-          {/* TPS มีเฉพาะ paper/spigot — type อื่น stats.tps = 0 (ไม่ใช่ "TPS เป็นศูนย์") */}
-          <Stat label={t("overview.tps")}>
-            {running && tps > 0 ? tps.toFixed(1) : "—"}
+          {/* metric ประจำเกม (ชื่อมาจาก game profile) — 0 = variant นี้ไม่รองรับ ไม่ใช่ "ค่าเป็นศูนย์" */}
+          <Stat label={game.metricLabel}>
+            {running && tickRate > 0 ? tickRate.toFixed(1) : "—"}
           </Stat>
           <Stat label={t("overview.uptime")}>
             {running ? <UptimeValue startedAt={stats?.started_at ?? null} /> : "—"}
@@ -163,7 +165,7 @@ export default function ServerListPage() {
         <header className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <BoxIcon className="size-6 shrink-0" />
-            <span className="text-lg font-semibold">mc-panel</span>
+            <span className="text-lg font-semibold">game-manager</span>
           </div>
           <UserMenu user={user} />
         </header>

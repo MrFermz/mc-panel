@@ -7,6 +7,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useServerConsole, type ConsoleEvent } from "@/lib/use-server-console";
+import { gameProfile, type GameProfile } from "@/lib/games";
 import { useConsoleHistoryStore } from "@/lib/console-history-store";
 import { useTheme, type ResolvedTheme } from "@/lib/settings/theme";
 import { useT } from "@/lib/i18n";
@@ -86,9 +87,10 @@ const SGR = {
   brightGreen: "\x1b[92m",
 } as const;
 
-// รองรับสอง format ของ MC log:
-//   A) Paper/vanilla:  [09:45:33 INFO]: message          (time + level ใน bracket เดียว)
+// timestamp/level parsing เป็นของกลาง — log ของ game server ส่วนใหญ่อยู่ในสองรูปนี้:
+//   A) [09:45:33 INFO]: message          (time + level ใน bracket เดียว)
 //   B) log4j2 2 bracket: [12:34:56] [Server thread/INFO]: message
+// ส่วนการลงสี "เนื้อความ" (join/leave/chat/ready) เป็นของเกม → GameProfile.highlightConsoleMessage
 // group: 1=time 2=level-in-bracket(A) 3=thread-bracket(B) 4=message
 const LOG_LINE_RE =
   /^\[(\d{1,2}:\d{2}:\d{2})(?:\s+([A-Za-z]+))?\]\s*(?:\[([^\]]+)\])?\s*:?\s?([\s\S]*)$/;
@@ -110,21 +112,9 @@ function levelSGR(level: string): string {
   }
 }
 
-// สีของ message เฉพาะบรรทัด INFO (WARN/ERROR ครอบทั้งบรรทัดไปแล้ว)
-function colorizeInfoMessage(msg: string): string {
-  if (/ (joined|joined the game)$/.test(msg))
-    return `${SGR.green}${msg}${SGR.reset}`;
-  if (/ left the game$/.test(msg)) return `${SGR.gray}${msg}${SGR.reset}`;
-  if (/^Done \(/.test(msg))
-    return `${SGR.brightGreen}${SGR.bold}${msg}${SGR.reset}`;
-  const chat = /^<([^>]+)>\s([\s\S]*)$/.exec(msg);
-  if (chat) return `${SGR.cyan}<${chat[1]}>${SGR.reset} ${chat[2]}`;
-  return msg;
-}
-
-function colorizeLine(raw: string): string {
+function colorizeLine(raw: string, game: GameProfile): string {
   // system line จาก agent (crash cleanup ฯลฯ) — เด่นแยกจาก log ของ server
-  if (raw.startsWith("[mc-panel]"))
+  if (raw.startsWith("[game-manager]"))
     return `${SGR.magenta}${SGR.bold}${raw}${SGR.reset}`;
 
   const m = LOG_LINE_RE.exec(raw);
@@ -149,21 +139,28 @@ function colorizeLine(raw: string): string {
   }
   const threadPart = thread ? ` ${SGR.dim}[${thread}]${SGR.reset}` : "";
   const sep = `${SGR.gray}:${SGR.reset}`;
-  const msgPart = lc ? `${lc}${msg}${SGR.reset}` : colorizeInfoMessage(msg);
+  // บรรทัด INFO ให้เกมลงสีเนื้อความเอง (join/leave/chat/ready) — null = ใช้สีปกติ
+  const msgPart = lc
+    ? `${lc}${msg}${SGR.reset}`
+    : (game.highlightConsoleMessage(msg) ?? msg);
   return `${prefix}${threadPart}${sep} ${msgPart}`;
 }
 
-function writeLine(term: Terminal, raw: string) {
-  term.writeln(colorizeLine(raw));
+function writeLine(term: Terminal, raw: string, game: GameProfile) {
+  term.writeln(colorizeLine(raw, game));
 }
 
 export default function ServerConsole({
   serverId,
+  game: gameId,
   canWrite,
 }: {
   serverId: string;
+  // เกมของ instance นี้ — ใช้เลือกวิธีลงสีบรรทัด console
+  game?: string;
   canWrite: boolean;
 }) {
+  const game = gameProfile(gameId);
   const queryClient = useQueryClient();
   const t = useT();
   const { resolvedTheme } = useTheme();
@@ -214,7 +211,7 @@ export default function ServerConsole({
     const raf = requestAnimationFrame(safeFit);
 
     if (pendingRef.current.length > 0) {
-      for (const line of pendingRef.current) writeLine(term, line);
+      for (const line of pendingRef.current) writeLine(term, line, game);
       pendingRef.current = [];
     }
 
@@ -249,7 +246,7 @@ export default function ServerConsole({
         case "lines": {
           const term = termRef.current;
           if (term) {
-            for (const line of event.lines) writeLine(term, line);
+            for (const line of event.lines) writeLine(term, line, game);
           } else {
             pendingRef.current.push(...event.lines);
           }
@@ -264,7 +261,7 @@ export default function ServerConsole({
           break;
       }
     },
-    [queryClient, serverId],
+    [queryClient, serverId, game],
   );
 
   const { connected, sendCommand } = useServerConsole(serverId, onEvent);

@@ -1,15 +1,15 @@
-module github.com/mc-panel/node-agent
+module github.com/game-manager/node-agent
 
 go 1.24.0
 
 // ตอนนี้ resolve ผ่าน go.work + replace ใน monorepo
 // เมื่อแยกเป็น repo จริง (git submodules) ให้ลบ replace แล้วใช้ version tag จริง
-replace github.com/mc-panel/proto => ../../packages/proto
+replace github.com/game-manager/proto => ../../packages/proto
 
 require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.7.0
-	github.com/mc-panel/proto v0.0.0-00010101000000-000000000000
+	github.com/game-manager/proto v0.0.0-00010101000000-000000000000
 	github.com/nats-io/nats.go v1.49.0
 	github.com/shirou/gopsutil/v4 v4.26.6
 	google.golang.org/grpc v1.80.0

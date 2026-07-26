@@ -21,18 +21,18 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/mc-panel/node-agent/internal/games"
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 const (
-	// grace period ตอน stop: รอ save world หลัง stop word ก่อน fallback SIGTERM
+	// grace period ตอน stop: รอเกม save state หลัง stop word ก่อน fallback SIGTERM
 	gracefulWait = 30 * time.Second
 	sigtermWait  = 10 // วินาที — ให้ docker ส่ง SIGKILL ต่อเองถ้า SIGTERM ไม่พอ
 )
 
 // DockerRunner คุม instance ผ่าน Docker Engine API ของ host (ผ่าน /var/run/docker.sock)
-// MC container ถูกสร้างเป็น sibling ของ agent container ไม่ใช่ลูก — path bind mount
-// จึงต้องเป็น path ฝั่ง host เสมอ (MC_DATA_DIR mount ด้วย path เดียวกันทั้งสองฝั่ง)
+// container ของ instance ถูกสร้างเป็น sibling ของ agent container ไม่ใช่ลูก — path bind mount
+// จึงต้องเป็น path ฝั่ง host เสมอ (GM_DATA_DIR mount ด้วย path เดียวกันทั้งสองฝั่ง)
 type DockerRunner struct {
 	cli     *client.Client
 	dataDir string
@@ -56,7 +56,9 @@ func NewDockerRunner(cli *client.Client, dataDir, network string, gl games.Insta
 	}
 }
 
-func containerName(id string) string { return "mc-" + id }
+// containerName — prefix ของ brand เพื่อให้ container ของ panel แยกออกจากของอื่นบน host
+// ชื่อนี้ถูกใช้เป็น network alias ด้วย (proxy variant อ้างถึง backend ด้วยชื่อคงที่)
+func containerName(id string) string { return "game-manager-" + id }
 
 func (r *DockerRunner) markStopRequested(id string) {
 	r.mu.Lock()
@@ -77,7 +79,7 @@ func (r *DockerRunner) ConsumeStopRequested(id string) bool {
 func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 	name := containerName(cfg.ID)
 
-	// instance บน disk บอกเองว่าเป็นเกมอะไร (.mcpanel/meta.json) — job start ไม่ได้พกมา
+	// instance บน disk บอกเองว่าเป็นเกมอะไร (.gamemanager/meta.json) — job start ไม่ได้พกมา
 	def, _, ok := r.games.DefinitionFor(cfg.ID)
 	if !ok {
 		return fmt.Errorf("server %s references a game this agent does not support", cfg.ID)
@@ -107,19 +109,19 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 
 	pidsLimit := int64(512)
 	memoryBytes := int64(cfg.MemoryMB) * 1024 * 1024
-	// HOME=/mc: image hardened ของเราตั้ง HOME ให้แล้ว แต่ base eclipse-temurin ที่ pull มา cache
-	// ไม่ได้ตั้ง — modded server บางตัวเขียน cache ลง $HOME ต้องชี้เข้า /mc ที่ write ได้
-	env := append(def.LaunchEnv(cfg.MemoryMB), "HOME=/mc")
+	// HOME ชี้เข้า data dir: image hardened ของเราตั้ง HOME ให้แล้ว แต่ base eclipse-temurin ที่ pull มา cache
+	// ไม่ได้ตั้ง — modded server บางตัวเขียน cache ลง $HOME ต้องชี้เข้า data dir ที่ write ได้
+	env := append(def.LaunchEnv(cfg.MemoryMB), "HOME="+games.ContainerDataDir)
 
 	config := &container.Config{
 		Image: cfg.Image,
 		// สั่ง launch.sh ตรง ๆ ไม่พึ่ง CMD ของ image — runtime image ที่ agent auto-pull
 		// (eclipse-temurin re-tag) ไม่มี CMD ของเรา entrypoint เลย exec ว่างแล้ว exit 0 ทันที
 		// (เฉพาะ image ที่ build ด้วย make runtime-images ถึงจะมี CMD launch.sh) ตั้งตรงนี้ครอบทั้งสองแบบ
-		Cmd:        []string{"/bin/sh", "/mc/" + games.PanelDir + "/" + games.LaunchScriptName},
+		Cmd:        []string{"/bin/sh", games.ContainerDataDir + "/" + games.PanelDir + "/" + games.LaunchScriptName},
 		Env:        env,
 		User:       "1000:1000",
-		WorkingDir: "/mc",
+		WorkingDir: games.ContainerDataDir,
 		OpenStdin:  true,
 		Tty:        false,
 		Labels: map[string]string{
@@ -129,20 +131,20 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		},
 	}
 	hostConfig := &container.HostConfig{
-		Binds:       []string{filepath.Join(r.dataDir, cfg.ID) + ":/mc"},
+		Binds:       []string{filepath.Join(r.dataDir, cfg.ID) + ":" + games.ContainerDataDir},
 		CapDrop:     strslice.StrSlice{"ALL"},
 		SecurityOpt: []string{"no-new-privileges"},
 		// agent เป็นเจ้าของ lifecycle เอง — docker restart เองจะทำ state ใน DB เพี้ยน
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
 		Resources: container.Resources{
 			Memory: memoryBytes,
-			// MemorySwap = Memory คือปิด swap — MC server ที่โดน swap อาการแย่กว่าโดน OOM kill
+			// MemorySwap = Memory คือปิด swap — game server ที่โดน swap อาการแย่กว่าโดน OOM kill
 			MemorySwap: memoryBytes,
 			PidsLimit:  &pidsLimit,
 		},
 	}
 	if cfg.Port > 0 {
-		// port ที่ server ฟังใน container มาจาก game definition (minecraft = 25565)
+		// port ที่ server ฟังใน container มาจาก game definition ของ instance นั้น
 		gamePort := nat.Port(strconv.Itoa(def.ContainerPort) + "/tcp")
 		config.ExposedPorts = nat.PortSet{gamePort: struct{}{}}
 		hostConfig.PortBindings = nat.PortMap{
@@ -151,7 +153,7 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 	}
 	netConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			// alias mc-{id} ให้ velocity อ้างถึง backend ด้วยชื่อคงที่ใน network เดียวกัน
+			// alias game-manager-{id} ให้ proxy instance อ้างถึง backend ด้วยชื่อคงที่ใน network เดียวกัน
 			r.network: {Aliases: []string{name}},
 		},
 	}
@@ -176,7 +178,7 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 }
 
 // classifyStartError แปลง error ดิบจาก ContainerStart เป็นข้อความที่ user อ่านรู้เรื่อง
-// เคสเจอบ่อยสุดคือ host port ถูกใช้อยู่แล้วโดยของนอก mc-panel — DB unique (node_id, host_port)
+// เคสเจอบ่อยสุดคือ host port ถูกใช้อยู่แล้วโดยของนอก game-manager — DB unique (node_id, host_port)
 // จับไม่ได้เพราะมันเช็คแค่ server ที่ panel จัดการ ไม่รู้จักโปรเซสอื่นบน host หรือ port ที่ OS จองไว้
 // (เช่น winnat/Hyper-V excluded range บน Windows/WSL ที่คืน 500 จาก /forwards/expose).
 // docker แต่ละ backend ขึ้นข้อความคนละแบบ (Linux: "port is already allocated" /
@@ -241,7 +243,7 @@ func (r *DockerRunner) Kill(id string) error {
 	return r.removeContainer(ctx, name)
 }
 
-// Cleanup ลบ container mc-{id} ทิ้งโดยไม่แตะ directory (data ยังอยู่)
+// Cleanup ลบ container game-manager-{id} ทิ้งโดยไม่แตะ directory (data ยังอยู่)
 // die handler เรียกตัวนี้เก็บกวาด container ที่ crash แล้วค้างเป็น Exited —
 // เฉพาะเคส crash (ERRORED) เท่านั้น; Stop()/Kill() ลบ container ให้เองอยู่แล้ว
 func (r *DockerRunner) Cleanup(id string) error {
@@ -337,7 +339,7 @@ func (r *DockerRunner) stopCommand(id string) string {
 	if def == nil {
 		return ""
 	}
-	return def.StopCommand(meta.ServerType)
+	return def.StopCommand(meta.Variant)
 }
 
 // writeStdin เปิด attach ชั่วคราวเฉพาะ stdin เพื่อส่งคำสั่งเดียว

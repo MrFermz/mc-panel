@@ -1,5 +1,6 @@
 // zod schemas ของ payload ทุกตัวตาม docs/api.md — แก้ที่นั่นก่อนแล้วค่อยแก้ที่นี่
 import { z } from "zod";
+import { DEFAULT_GAME_ID } from "@/lib/games";
 
 export const errorBodySchema = z.object({
   code: z.string(),
@@ -59,19 +60,13 @@ export const nodeSchema = z.object({
 });
 export type Node = z.infer<typeof nodeSchema>;
 
-// GAME คือ id ของ game definition ฝั่ง backend (internal/games) — เฟสนี้มีเกมเดียว
-// จึงเป็นค่าคงที่ ไม่มี UI ให้เลือก. เพิ่มเกมที่สองเมื่อไรค่านี้ต้องกลายเป็น state ของฟอร์ม
-// และดึงรายการจาก GET /api/meta/games
-export const DEFAULT_GAME = "minecraft";
+// DEFAULT_GAME re-export จาก registry ของ game profile (lib/games) — อย่านิยามซ้ำที่นี่
+export const DEFAULT_GAME = DEFAULT_GAME_ID;
 
-export const serverTypeIdSchema = z.enum([
-  "vanilla",
-  "paper",
-  "fabric",
-  "forge",
-  "velocity",
-]);
-export type ServerTypeId = z.infer<typeof serverTypeIdSchema>;
+// variant = ชนิดของ server ภายในเกม — **ไม่ enum** เพราะรายการเป็นของ game definition
+// ฝั่ง backend (GET /api/meta/variants) ไม่ใช่ค่าคงที่ของ web
+export const variantIdSchema = z.string();
+export type VariantId = z.infer<typeof variantIdSchema>;
 
 export const serverStatusSchema = z.enum([
   "provisioning",
@@ -99,9 +94,9 @@ export const serverStatsSchema = z.object({
   // online_players ว่าง = ยังไม่ได้ resync รอบแรก หรือไม่มีใครออนไลน์
   online_players: z.array(z.string()).default([]),
   max_players: z.number().default(0),
-  // tps = metric ประจำเกมที่อ่านจาก console; minecraft: 0 = server type ไม่มีคำสั่ง `tps`
-  // (vanilla/fabric/forge) — มีเฉพาะ paper/spigot
-  tps: z.number().default(0),
+  // tick_rate = metric ประจำเกมที่อ่านจาก console (ชื่อที่แสดงมาจาก game profile)
+  // 0 = variant นี้ไม่รองรับ metric ดังกล่าว ไม่ใช่ "ค่าเป็นศูนย์"
+  tick_rate: z.number().default(0),
   updated_at: z.string(),
 });
 export type ServerStats = z.infer<typeof serverStatsSchema>;
@@ -111,10 +106,10 @@ export const serverSchema = z.object({
   node_id: z.string(),
   owner_id: z.string().nullable().default(null),
   name: z.string(),
-  // game = เกมของ instance นี้, server_type = variant ภายในเกมนั้น
+  // game = เกมของ instance นี้, variant = ชนิดของ server ภายในเกมนั้น
   game: z.string().default(DEFAULT_GAME),
-  server_type: serverTypeIdSchema,
-  mc_version: z.string(),
+  variant: variantIdSchema,
+  game_version: z.string(),
   memory_mb: z.number(),
   host_port: z.number().nullable().default(null),
   status: serverStatusSchema,
@@ -244,36 +239,36 @@ export const metaNodeSchema = z.object({
 });
 export type MetaNode = z.infer<typeof metaNodeSchema>;
 
-export const metaServerTypeSchema = z.object({
-  id: serverTypeIdSchema,
+export const metaVariantSchema = z.object({
+  id: variantIdSchema,
   label: z.string(),
-  needs_eula: z.boolean(),
+  requires_license: z.boolean(),
 });
-export type MetaServerType = z.infer<typeof metaServerTypeSchema>;
+export type MetaVariant = z.infer<typeof metaVariantSchema>;
 
 // GET /api/meta/next-port — free host port ที่แนะนำสำหรับ node ที่เลือก
 export const nextPortResponseSchema = z.object({ port: z.number() });
 
-// ---------- players / whitelist (docs/api.md หัวข้อ Players) ----------
+// ---------- players / allowlist (docs/api.md หัวข้อ Players) ----------
 
-// unified player list — union ของ whitelist ∪ joined(usercache) ∪ ops ∪ banned
+// unified player list — union ของ allowlist ∪ ไฟล์ state ของเกม (seen/op/banned)
 // boolean flag ทั้งชุด default false เผื่อ response บางเส้น (เช่น add) ส่งมาไม่ครบ
 export const serverPlayerSchema = z.object({
   uuid: z.string().default(""),
   username: z.string(),
-  whitelisted: z.boolean().default(false),
+  allowlisted: z.boolean().default(false),
   seen: z.boolean().default(false),
   op: z.boolean().default(false),
   banned: z.boolean().default(false),
   // online มาจาก stats ที่ agent อ่านจาก console (ไม่ใช่ไฟล์) — false เมื่อ server ไม่ได้รัน
   online: z.boolean().default(false),
-  // 0 = ไม่รู้ (ยังไม่เคยเล่น / อ่าน world stats ไม่ได้ / เกิน cap ฝั่ง backend)
+  // 0 = ไม่รู้ (ยังไม่เคยเล่น / อ่านไฟล์สถิติไม่ได้ / เกิน cap ฝั่ง backend)
   playtime_seconds: z.number().default(0),
 });
 export type ServerPlayer = z.infer<typeof serverPlayerSchema>;
 
 export const playersResponseSchema = z.object({
-  whitelist_enabled: z.boolean().default(false),
+  allowlist_enabled: z.boolean().default(false),
   players: z.array(serverPlayerSchema),
 });
 export type PlayersResponse = z.infer<typeof playersResponseSchema>;
@@ -348,8 +343,8 @@ export type UserDirectoryResponse = z.infer<typeof userDirectoryResponseSchema>;
 export const metaNodesResponseSchema = z.object({
   nodes: z.array(metaNodeSchema),
 });
-export const metaServerTypesResponseSchema = z.object({
-  types: z.array(metaServerTypeSchema),
+export const metaVariantsResponseSchema = z.object({
+  types: z.array(metaVariantSchema),
 });
 export const versionsResponseSchema = z.object({
   versions: z.array(z.string()),

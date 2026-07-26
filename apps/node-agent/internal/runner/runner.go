@@ -8,25 +8,25 @@ import (
 // Label ที่ agent ติดให้ทุก container ที่ตัวเองจัดการ — events/reconcile/heartbeat
 // ใช้ filter ชุดเดียวกันนี้ ห้าม container อื่นบนเครื่องปนเข้ามา
 const (
-	LabelManagedBy      = "mc.managed_by"
-	LabelManagedByValue = "mc-panel-agent"
-	LabelServerID       = "mc.server_id"
+	LabelManagedBy      = "gamemanager.managed_by"
+	LabelManagedByValue = "game-manager-agent"
+	LabelServerID       = "gamemanager.server_id"
 	LabelProject        = "project"
-	LabelProjectValue   = "mc-panel"
+	LabelProjectValue   = "game-manager"
 )
 
 // ServerConfig คือค่าที่ใช้ start instance หนึ่งตัว
 //
-// ไม่มี field ที่ผูกกับเกม: runner หา game definition ของ instance เอาจาก .mcpanel/meta.json
+// ไม่มี field ที่ผูกกับเกม: runner หา game definition ของ instance เอาจาก .gamemanager/meta.json
 // (ดู DockerRunner.instanceGame) แล้วถาม definition เรื่อง port ใน container / env ของ
 // launch script / คำสั่ง stop
 type ServerConfig struct {
 	ID             string
 	StartupCommand string // ใช้เฉพาะ native mode (docker mode ใช้ CMD ใน image)
-	MemoryMB       int    // hard limit ของทั้ง container (definition เป็นคนแปลงเป็น heap)
+	MemoryMB       int    // hard limit ของทั้ง container (definition เป็นคนแปลงเป็น heap/หน่วยของ runtime)
 	WorkDir        string // เช่น /data/servers/{id}/ — ต้องเป็น dir เดียวกันไม่ว่าจะรัน native หรือ docker
 	Port           int    // host port; 0 = ไม่ expose (เข้าถึงผ่าน proxy ใน network เดียวกัน)
-	Image          string // docker image เช่น mcpanel/mc-runtime:21 — control plane เป็นคน map java version
+	Image          string // docker image เช่น game-manager/runtime-java:21 — control-plane เลือกจาก game definition
 }
 
 // ResourceStats คือ resource usage ที่ agent รายงานกลับ

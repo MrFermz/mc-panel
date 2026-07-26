@@ -35,10 +35,10 @@ function nodeStats(node: Node): ServerStats {
     disk_write_bps: 0,
     // uptime เป็นของ container ต่อ instance — node ไม่มีค่านี้
     started_at: null,
-    // ผู้เล่น/TPS เป็นของ instance (อ่านจาก console ของ server) — node ไม่มีค่านี้
+    // ผู้เล่น/tick rate เป็นของ instance (อ่านจาก console ของ server) — node ไม่มีค่านี้
     online_players: [],
     max_players: 0,
-    tps: 0,
+    tick_rate: 0,
     updated_at: node.last_heartbeat_at ?? "",
   };
 }

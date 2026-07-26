@@ -31,7 +31,7 @@ const PROVISION_TIMEOUT_MS = 10 * 60 * 1_000;
 
 // map error code จาก backend → ข้อความ toast ที่เป็นมิตร (import path)
 const IMPORT_ERROR_KEYS: Record<string, TranslationKey> = {
-  eula_required: "import.errEulaRequired",
+  license_required: "import.errLicenseRequired",
   empty_archive: "import.errEmptyArchive",
   host_port_taken: "import.errHostPortTaken",
   node_offline: "import.errNodeOffline",
@@ -115,14 +115,14 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
         form.set("name", meta.name.trim());
         form.set("node_id", meta.nodeId);
         form.set("game", DEFAULT_GAME);
-        form.set("server_type", meta.serverType);
-        form.set("mc_version", meta.mcVersion);
+        form.set("variant", meta.variant);
+        form.set("game_version", meta.gameVersion);
         form.set("memory_mb", String(Number(meta.memoryMb)));
         form.set(
           "host_port",
           meta.hostPort === "" ? "" : String(Number(meta.hostPort)),
         );
-        form.set("accept_eula", String(meta.needsEula ? meta.acceptEula : true));
+        form.set("accept_license", String(meta.requiresLicense ? meta.acceptLicense : true));
         form.set("archive", blob, filename);
         setUploadPct(0);
         created = await importServer(form, setUploadPct);
@@ -134,11 +134,11 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
             name: meta.name.trim(),
             node_id: meta.nodeId,
             game: DEFAULT_GAME,
-            server_type: meta.serverType,
-            mc_version: meta.mcVersion,
+            variant: meta.variant,
+            game_version: meta.gameVersion,
             memory_mb: Number(meta.memoryMb),
             host_port: meta.hostPort === "" ? null : Number(meta.hostPort),
-            accept_eula: meta.needsEula ? meta.acceptEula : true,
+            accept_license: meta.requiresLicense ? meta.acceptLicense : true,
           },
           createServerResponseSchema,
         );

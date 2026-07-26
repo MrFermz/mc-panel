@@ -1,5 +1,5 @@
 // Package jobs ดึงงานจาก NATS JetStream (stream JOBS) มาประมวลผล
-// แล้วรายงานผลกลับทาง mcpanel.results
+// แล้วรายงานผลกลับทาง gamemanager.results
 //
 // stream/consumer ทั้งหมดถูกสร้างโดย control-plane — agent มีสิทธิ์แค่ attach
 // (ดู ACL ใน infra/nats/nats-server.conf)
@@ -12,15 +12,15 @@ import (
 	"sync"
 	"time"
 
+	jobv1 "github.com/game-manager/proto/gen/go/gamemanager/job/v1"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	jobv1 "github.com/mc-panel/proto/gen/go/mcpanel/job/v1"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
 	streamName     = "JOBS"
-	resultsSubject = "mcpanel.results"
+	resultsSubject = "gamemanager.results"
 
 	// InProgress ต้องถี่กว่า AckWait ของ consumer (control-plane เป็นคนตั้ง)
 	// เพื่อกัน redelivery ระหว่างงานยาว (provision) หรือระหว่างรอคิวของ server เดียวกัน

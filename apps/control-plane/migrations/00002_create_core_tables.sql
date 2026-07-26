@@ -24,11 +24,14 @@ CREATE TABLE servers (
     node_id UUID NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
     owner_id UUID REFERENCES users(id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
-    server_type VARCHAR(30) NOT NULL
-        CHECK (server_type IN ('vanilla', 'paper', 'fabric', 'forge', 'velocity')),
-    mc_version VARCHAR(50) NOT NULL,
-    memory_mb INT NOT NULL CHECK (memory_mb >= 256),
-    -- NULL = ไม่ expose host port (เข้าถึงได้ผ่าน velocity ใน docker network mcpanel-servers)
+    -- variant = ชนิดของ server ภายในเกมนั้น. **ไม่มี CHECK รายชื่อโดยตั้งใจ** — รายการ
+    -- variant ที่ถูกต้องเป็นความรู้ของ game definition (internal/games) ไม่ใช่ของ schema
+    -- ไม่งั้นเพิ่มเกม/variant ใหม่ต้องเขียน migration ทุกครั้ง
+    variant VARCHAR(30) NOT NULL,
+    game_version VARCHAR(50) NOT NULL,
+    -- floor จริงของ memory เป็นของแต่ละเกม (Definition.MinMemoryMB) — schema กันแค่ค่าที่ไร้ความหมาย
+    memory_mb INT NOT NULL CHECK (memory_mb > 0),
+    -- NULL = ไม่ expose host port (เข้าถึงได้ผ่าน proxy instance ใน docker network game-manager-servers)
     host_port INT CHECK (host_port BETWEEN 1024 AND 65535),
     status VARCHAR(20) NOT NULL DEFAULT 'provisioning'
         CHECK (status IN ('provisioning', 'stopped', 'starting', 'running',
