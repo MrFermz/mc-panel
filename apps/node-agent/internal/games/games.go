@@ -27,8 +27,9 @@ type Definition struct {
 	// Variants = variant ที่ provision/รันได้ (ชื่อเดียวกับ variant ใน API)
 	Variants []string
 
-	// ContainerPort = port ที่ server ฟังอยู่ใน container (map ไป host port ตอน start)
-	ContainerPort int
+	// Ports = port ที่ server ฟังอยู่ใน container (map ไป host port ตอน start)
+	// เกมส่วนใหญ่มีตัวเดียว/tcp แต่บางเกมต้องเปิดหลาย port หรือเป็น udp
+	Ports []Port
 
 	// StopCommand = คำที่เขียนเข้า stdin เพื่อสั่งปิดอย่างสุภาพ (ต่าง variant ต่างคำได้)
 	StopCommand func(variant string) string
@@ -43,9 +44,12 @@ type Definition struct {
 	// Provision โหลด artifact ของ variant/version ลง dir ของ server (idempotent)
 	// คืน detail สั้น ๆ ที่จะเดินทางกลับไปกับ JobResult
 	Provision func(ctx context.Context, env ProvisionEnv) (detail string, err error)
-	// RuntimeImage = image ที่ tool ของเกมต้องใช้ (เช่น installer ของบาง variant) — prefix มาจาก
-	// config ของ agent เพื่อให้ override ได้ ต้องให้ผลตรงกับที่ control-plane เลือกไว้
-	RuntimeImage func(prefix, variant, version string) string
+	// RuntimeImage = image ที่ tool ของเกมต้องใช้ (เช่น installer/downloader ตอน provision) —
+	// namespace มาจาก config ของ agent เพื่อให้ override ได้ ต้องให้ผลตรงกับที่ control-plane เลือกไว้
+	RuntimeImage func(namespace, variant, version string) string
+	// ImageSource บอกว่าจะทำให้ runtime image ref หนึ่งมีอยู่บน node ได้ยังไง เมื่อยังไม่มีใน cache
+	// (nil = เตรียมให้ไม่ได้ ต้อง build มาก่อน) — ดู EnsureRuntimeImage
+	ImageSource func(imageRef string) ImageSource
 
 	// Console = วิธีอ่านสถานะในเกม (ผู้เล่นออนไลน์/metric) จาก console
 	Console ConsoleSpec
@@ -59,6 +63,38 @@ func (d *Definition) HasVariant(id string) bool {
 		}
 	}
 	return false
+}
+
+// Port = 1 port ที่ต้อง publish ออกไปนอก container
+type Port struct {
+	// Container = port ที่ server ฟังอยู่ใน container (ค่าคงที่ของเกม)
+	Container int
+	// Protocol = "tcp" หรือ "udp" (ว่าง = tcp)
+	Protocol string
+	// HostOffset = ระยะห่างจาก host_port ของ instance — port หลักเป็น 0 เสมอ
+	// เกมที่ต้องการ port ที่สองจอง host_port+1 (ผู้ตั้งค่าต้องเว้นช่วงให้ ดู DefaultHostPort
+	// + HostPortSpan ฝั่ง control-plane)
+	HostOffset int
+}
+
+// Proto คืน protocol ที่ normalize แล้ว (ว่าง = tcp)
+func (p Port) Proto() string {
+	if p.Protocol == "" {
+		return "tcp"
+	}
+	return p.Protocol
+}
+
+// ImageSource = วิธีทำให้ runtime image ref หนึ่งพร้อมใช้บน node เมื่อยังไม่มีใน cache
+// ใช้ได้ทีละอย่าง: pull image สำเร็จรูปจาก official registry แล้ว tag ซ้ำ (PullFrom)
+// หรือให้ agent build เองจาก Dockerfile ที่ definition ถือไว้ (Dockerfile)
+type ImageSource struct {
+	// PullFrom = image ของ official registry ที่ pull มาแล้ว tag เป็น ref ของเรา
+	// (tag ซ้ำเพื่อให้ instance อื่นบน node เดียวกัน reuse cache ก้อนเดียวกัน)
+	PullFrom string
+	// Dockerfile = เนื้อ Dockerfile ที่ agent build เป็น ref ของเราเอง — ใช้กับ runtime
+	// ที่ไม่มี image สำเร็จรูปจาก upstream ให้ pull (เช่น image ที่ต้องมี SteamCMD ในตัว)
+	Dockerfile string
 }
 
 // SeedFile = ไฟล์ที่ panel เขียนให้ตอน provision

@@ -119,7 +119,9 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// allowlist ที่ไม่มี EnabledKey = เกมนั้นบังคับใช้เสมอ
-	allowlistEnabled := def.Players.Allowlist.EnabledKey == ""
+	// เกมที่ panel เขียนไฟล์รายชื่อไม่ได้เลย = ไม่มีอะไรให้เปิด (web ซ่อน UI ส่วนนั้น)
+	allowlistSupported := def.Players.HasAllowlist()
+	allowlistEnabled := allowlistSupported && def.Players.Allowlist.EnabledKey == ""
 	offline := false
 	saveName := ""
 	if def.Players.Playtime != nil {
@@ -193,8 +195,9 @@ func (a *API) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"allowlist_enabled": allowlistEnabled,
-		"players":           players,
+		"allowlist_supported": allowlistSupported,
+		"allowlist_enabled":   allowlistEnabled,
+		"players":             players,
 	})
 }
 
@@ -306,6 +309,14 @@ func (a *API) handleAddPlayer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	// เกมที่ไม่มีไฟล์รายชื่อ/ไม่มี identity service ให้ verify ชื่อ = ทำ allowlist ไม่ได้เลย
+	// (ไม่ใช่สิทธิ์ไม่พอ จึงเป็น 409 ไม่ใช่ 403) — web ซ่อนปุ่มให้ตาม docs/api.md
+	if !def.Players.HasAllowlist() || !def.Players.HasIdentity() {
+		writeError(w, http.StatusConflict, "unsupported",
+			def.Label+" has no allowlist file that this panel can manage")
+		return
+	}
+
 	name := strings.TrimSpace(req.Username)
 	if !def.Players.ValidateUsername(name) {
 		writeError(w, http.StatusBadRequest, "invalid_username", def.Players.UsernameRule)
@@ -356,6 +367,12 @@ func (a *API) handleRemovePlayer(w http.ResponseWriter, r *http.Request) {
 	}
 	def, ok := a.gameOf(w, srv)
 	if !ok {
+		return
+	}
+
+	if !def.Players.HasAllowlist() {
+		writeError(w, http.StatusConflict, "unsupported",
+			def.Label+" has no allowlist file that this panel can manage")
 		return
 	}
 

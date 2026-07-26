@@ -31,11 +31,16 @@ doctor: ## Check environment (docker, compose v2, WSL2 drvfs) — recommended fo
 	./scripts/preflight.sh
 
 .PHONY: runtime-images
-runtime-images: ## Build game-manager/runtime-java:8/17/21/25 (base image for JVM-based game instances)
+runtime-images: ## Build runtime images ล่วงหน้า (ออปชัน — agent เตรียมเองได้ตอนใช้ครั้งแรก)
 	docker build -t game-manager/runtime-java:8  --build-arg JAVA_VERSION=8  infra/runtime-java
 	docker build -t game-manager/runtime-java:17 --build-arg JAVA_VERSION=17 infra/runtime-java
 	docker build -t game-manager/runtime-java:21 --build-arg JAVA_VERSION=21 infra/runtime-java
 	docker build -t game-manager/runtime-java:25 --build-arg JAVA_VERSION=25 infra/runtime-java
+	# runtime-steam: Dockerfile อยู่ใน game definition ของเกมที่ใช้ SteamCMD (agent embed
+	# ไฟล์เดียวกันนี้แล้ว build เองถ้ายังไม่มีบน node) — tag ต้องตรงกับ zomboid/runtime.go
+	docker build -t game-manager/runtime-steam:1 \
+		-f apps/node-agent/internal/games/zomboid/runtime.Dockerfile \
+		apps/node-agent/internal/games/zomboid
 
 .PHONY: agent-image
 agent-image: ## Build the official node-agent image (game-manager/node-agent:local) for install-agent.sh

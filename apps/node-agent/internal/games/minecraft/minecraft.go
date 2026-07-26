@@ -20,15 +20,16 @@ const containerPort = 25565
 // New สร้าง definition ของเกมนี้ (ไม่มี state — สร้างกี่ครั้งก็ได้ แต่ลงทะเบียนครั้งเดียวพอ)
 func New() *games.Definition {
 	return &games.Definition{
-		ID:            ID,
-		Variants:      []string{"vanilla", "paper", "fabric", "forge", "velocity"},
-		ContainerPort: containerPort,
-		StopCommand:   stopCommand,
-		LaunchScript:  launchScript,
-		LaunchEnv:     launchEnv,
-		SeedFiles:     seedFiles,
-		Provision:     provision,
-		RuntimeImage:  runtimeImage,
-		Console:       consoleSpec(),
+		ID:           ID,
+		Variants:     []string{"vanilla", "paper", "fabric", "forge", "velocity"},
+		Ports:        []games.Port{{Container: containerPort, Protocol: "tcp"}},
+		StopCommand:  stopCommand,
+		LaunchScript: launchScript,
+		LaunchEnv:    launchEnv,
+		SeedFiles:    seedFiles,
+		Provision:    provision,
+		RuntimeImage: runtimeImage,
+		ImageSource:  imageSource,
+		Console:      consoleSpec(),
 	}
 }

@@ -47,6 +47,10 @@ type Definition struct {
 
 	// DefaultHostPort = port เริ่มต้นที่ใช้ไล่หา host port ว่างให้ฟอร์มสร้าง server
 	DefaultHostPort int
+	// HostPortSpan = จำนวน host port ที่ instance ของเกมนี้กินติดกัน (0/1 = port เดียว)
+	// เกมที่ต้องเปิดหลาย port (agent map host_port+n) ต้องบอกไว้ เพื่อให้ port ที่ suggest
+	// ให้ฟอร์มสร้าง server เว้นช่วงพอ ไม่ไปทับ port รองของ instance ก่อนหน้า
+	HostPortSpan int
 	// MinMemoryMB = เพดานล่างของ memory_mb ที่ยอมให้ตั้ง
 	MinMemoryMB int
 
@@ -107,6 +111,10 @@ type VersionSpec struct {
 	// List ดึงรายการเวอร์ชันของ variant จาก upstream official (nil = เกมนี้ไม่มี catalog)
 	// คืน ErrUnknownVariant เมื่อ variant ไม่มีจริง
 	List func(ctx context.Context, variant string) ([]string, error)
+	// Valid = ด่านสุดท้ายก่อนรับค่าจาก user (nil = เช็คแค่ว่าไม่ว่างและไม่ยาวเกิน MaxLen)
+	// จำเป็นกับเกมที่ค่านี้เดินทางไปเป็น argument ของเครื่องมือภายนอกฝั่ง agent —
+	// ปล่อยผ่านแล้ว agent ต้องรับผิดชอบเองทั้งหมด (ห้ามพึ่งชั้นเดียว)
+	Valid func(variant, version string) bool
 	// RuntimeImage = image ที่ job start_server สั่งให้ agent ใช้กับ variant/version นี้
 	RuntimeImage func(variant, version string) string
 }
@@ -200,6 +208,10 @@ func (c ConfigSpec) Defaults() map[string]string {
 // ---------- ผู้เล่น ----------
 
 // PlayerSpec = กติกาผู้เล่นของเกม: identity, ไฟล์รายชื่อ, คำสั่ง moderation, สถิติเวลาเล่น
+//
+// เกมที่ไม่มีบางส่วนให้เว้นไว้เป็น zero value ได้ทั้งหมด (เกมที่ไม่มี identity service
+// สาธารณะ/ไม่มีไฟล์รายชื่อที่ panel เป็นเจ้าของ) — httpapi เช็คด้วย HasIdentity/HasAllowlist
+// แล้วตอบ endpoint ที่ทำไม่ได้เป็น 409 unsupported
 type PlayerSpec struct {
 	// IdentityService ชื่อบริการที่ใช้ verify ผู้เล่น (โผล่ในข้อความ error: "could not reach X")
 	IdentityService string
@@ -225,6 +237,15 @@ type PlayerSpec struct {
 	Actions map[string]string
 	// Playtime ที่อยู่ของสถิติเวลาเล่น (nil = เกมนี้ไม่มี)
 	Playtime *PlaytimeSpec
+}
+
+// HasIdentity = เกมนี้ verify ชื่อผู้เล่นกับบริการภายนอกได้ไหม (ไม่ได้ = ไม่มี uuid ให้ผูก)
+func (p PlayerSpec) HasIdentity() bool { return p.Lookup != nil }
+
+// HasAllowlist = panel เป็นเจ้าของไฟล์รายชื่อผู้เล่นของเกมนี้ไหม
+// (ไม่ใช่ = เกมเก็บรายชื่อไว้ในที่ที่ panel เขียนแทนไม่ได้ เช่น DB ภายในของตัวเกม)
+func (p PlayerSpec) HasAllowlist() bool {
+	return p.Allowlist.FileName != "" && p.Allowlist.Encode != nil
 }
 
 // AvatarFetcher คืน PNG รูปประจำตัวของผู้เล่นหนึ่งคน — คืน ErrNoAvatar เมื่อไม่มีรูป

@@ -23,15 +23,14 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { gameProfile } from "@/lib/games";
-import { DEFAULT_GAME } from "@/lib/types";
 
 // step 1 — ข้อมูลพื้นฐานของ server
 // เป็นด่านเดียวที่บังคับกรอกให้ครบ ที่เหลือข้ามได้
 export function StepGeneral({ meta }: { meta: ServerMetadata }) {
   const t = useT();
   const { budget } = meta;
-  // ชื่อ/ลิงก์ license ของเกม — ไม่ hardcode ใน wizard
-  const game = gameProfile(DEFAULT_GAME);
+  // ชื่อ/ลิงก์ license ของเกมที่เลือกไว้ — ไม่ hardcode ใน wizard
+  const game = gameProfile(meta.game);
 
   return (
     <Card>
@@ -51,6 +50,31 @@ export function StepGeneral({ meta }: { meta: ServerMetadata }) {
             onChange={(e) => meta.setName(e.target.value)}
           />
         </div>
+
+        {/* มีเกมเดียวก็ไม่มีอะไรให้เลือก — ซ่อนทิ้งแทนที่จะโชว์ dropdown ตัวเลือกเดียว */}
+        {meta.games.length > 1 && (
+          <div className="grid gap-2">
+            <Label>{t("new.game")}</Label>
+            <Select value={meta.game} onValueChange={meta.setGame}>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    meta.gamesPending
+                      ? t("new.loadingGames")
+                      : t("new.selectGame")
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {meta.games.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="grid gap-2">
           <Label>{t("new.node")}</Label>
@@ -141,7 +165,7 @@ export function StepGeneral({ meta }: { meta: ServerMetadata }) {
             <Input
               id="wz-memory"
               type="number"
-              min={512}
+              min={meta.minMemoryMb}
               required
               value={meta.memoryMb}
               onChange={(e) => meta.setMemoryMb(e.target.value)}
@@ -175,7 +199,6 @@ export function StepGeneral({ meta }: { meta: ServerMetadata }) {
               type="number"
               min={1024}
               max={65535}
-              placeholder="25565"
               value={meta.hostPort}
               onChange={(e) => meta.setHostPort(e.target.value)}
             />

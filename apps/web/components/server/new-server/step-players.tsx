@@ -16,12 +16,16 @@ export function StepPlayers({
   value,
   onChange,
   game,
+  supported,
   allowlistEnabled,
   onEnableAllowlist,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   game?: string;
+  // supported=false = เกมนี้ไม่มีไฟล์รายชื่อที่ panel เขียนได้ (POST /players ตอบ 409
+  // unsupported) — ไม่มีอะไรให้กรอกใน step นี้ บอกไปตรง ๆ ดีกว่าปล่อยให้กรอกแล้วพัง
+  supported: boolean;
   // = config draft key ของ allowlist (game profile เป็นคนบอก key) — ไม่เปิดก็เพิ่มชื่อได้
   // แต่เกมจะไม่บังคับใช้
   allowlistEnabled: boolean;
@@ -30,6 +34,14 @@ export function StepPlayers({
   const t = useT();
   const profile = gameProfile(game);
   const [username, setUsername] = React.useState("");
+
+  if (!supported) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        {t("players.unsupported", { game: profile.label })}
+      </p>
+    );
+  }
 
   const add = () => {
     const name = username.trim();

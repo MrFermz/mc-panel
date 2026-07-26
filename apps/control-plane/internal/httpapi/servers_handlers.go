@@ -295,6 +295,13 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			"game_version is required (max "+strconv.Itoa(def.Version.MaxLen)+" characters)")
 		return
 	}
+	// เกมที่ค่านี้เดินทางไปเป็น argument ของเครื่องมือฝั่ง agent (เช่น Steam branch)
+	// ต้องผ่าน allow-list ของ definition ด้วย
+	if def.Version.Valid != nil && !def.Version.Valid(req.Variant, req.GameVersion) {
+		writeError(w, http.StatusBadRequest, "invalid_game_version",
+			"game_version is not supported for this "+def.Label+" variant")
+		return
+	}
 	if req.MemoryMB < def.MinMemoryMB {
 		writeError(w, http.StatusBadRequest, "invalid_memory",
 			"memory_mb must be at least "+strconv.Itoa(def.MinMemoryMB))

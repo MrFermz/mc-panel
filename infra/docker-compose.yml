@@ -74,7 +74,7 @@ services:
       NATS_URL: nats://${NATS_AGENT_USER}:${NATS_AGENT_PASSWORD}@nats:4222
       GM_DATA_DIR: ${GM_DATA_DIR}
       GM_NETWORK: game-manager-servers
-      GM_RUNTIME_IMAGE_PREFIX: game-manager/runtime-java
+      GM_RUNTIME_IMAGE_NAMESPACE: game-manager
     volumes:
       # จำเป็น: agent สร้าง sibling container ผ่าน docker daemon ของ host
       # นี่คือ attack surface ที่ใหญ่ที่สุดของระบบ — ดู docs/architecture.md หัวข้อ security

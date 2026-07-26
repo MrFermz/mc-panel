@@ -16,10 +16,11 @@ import {
 
 // draft ของ server.properties เก็บเฉพาะ key ที่ต่างจาก default — ตอน apply จึงส่งไปเท่าที่
 // เปลี่ยนจริง (ตอนนั้นไฟล์ยังไม่มี MC จะเขียนที่เหลือเองตอน start แรก)
-export function useCatalogDefaults() {
+export function useCatalogDefaults(game: string) {
   const query = useQuery({
-    queryKey: ["meta", "properties"],
-    queryFn: () => getPropertiesCatalog(),
+    queryKey: ["meta", "properties", game],
+    queryFn: () => getPropertiesCatalog(game),
+    enabled: game !== "",
     staleTime: 300_000,
   });
   const defaults = React.useMemo(() => query.data?.values ?? {}, [query.data]);
@@ -40,14 +41,16 @@ export function changedFrom(
 
 // step 2 — server.properties (ข้ามได้)
 export function StepProperties({
+  game,
   draft,
   onChange,
 }: {
+  game: string;
   draft: Record<string, string>;
   onChange: (key: string, value: string) => void;
 }) {
   const t = useT();
-  const { query, defaults } = useCatalogDefaults();
+  const { query, defaults } = useCatalogDefaults(game);
 
   return (
     <Card>
@@ -56,7 +59,7 @@ export function StepProperties({
         <CardDescription>{t("wizard.propsDraftHint")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {query.isPending ? (
+        {query.isPending || !query.data ? (
           <Skeleton className="h-40 w-full" />
         ) : query.isError ? (
           <p className="text-destructive text-sm">{t("sset.failedSave")}</p>

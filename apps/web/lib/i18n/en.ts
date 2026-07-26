@@ -283,6 +283,9 @@ export const en = {
   "new.subtitle":
     "The server is provisioned on the node you pick and starts out stopped.",
   "new.name": "Server name",
+  "new.game": "Game",
+  "new.selectGame": "Select a game",
+  "new.loadingGames": "Loading games...",
   "new.node": "Node",
   "new.selectNode": "Select a node",
   "new.loadingNodes": "Loading nodes...",
@@ -396,6 +399,8 @@ export const en = {
   "players.removeTitle": "Remove player?",
   "players.removeDesc": "\"{name}\" will be removed from the allowlist.",
   "players.allowlistOn": "The allowlist is enforced.",
+  "players.unsupported":
+    "{game} keeps its player list inside the game itself, so this panel cannot manage an allowlist for it.",
   "players.allowlistOff":
     "The allowlist is not enforced — players added here have no effect until you enable it.",
   "players.allowlistApplyHint":

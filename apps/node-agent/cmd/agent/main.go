@@ -28,6 +28,7 @@ import (
 	"github.com/game-manager/node-agent/internal/filemanager"
 	"github.com/game-manager/node-agent/internal/games"
 	"github.com/game-manager/node-agent/internal/games/minecraft"
+	"github.com/game-manager/node-agent/internal/games/zomboid"
 	"github.com/game-manager/node-agent/internal/gamestate"
 	"github.com/game-manager/node-agent/internal/grpcclient"
 	"github.com/game-manager/node-agent/internal/heartbeat"
@@ -42,22 +43,22 @@ import (
 const agentVersion = "0.1.0"
 
 type config struct {
-	agentToken         string
-	controlPlaneGRPC   string
-	natsURL            string
-	mcDataDir          string
-	mcNetwork          string
-	runtimeImagePrefix string
+	agentToken            string
+	controlPlaneGRPC      string
+	natsURL               string
+	mcDataDir             string
+	mcNetwork             string
+	runtimeImageNamespace string
 }
 
 func loadConfig() (config, error) {
 	cfg := config{
-		agentToken:         os.Getenv("AGENT_TOKEN"),
-		controlPlaneGRPC:   os.Getenv("CONTROL_PLANE_GRPC"),
-		natsURL:            os.Getenv("NATS_URL"),
-		mcDataDir:          os.Getenv("GM_DATA_DIR"),
-		mcNetwork:          envOr("GM_NETWORK", "game-manager-servers"),
-		runtimeImagePrefix: envOr("GM_RUNTIME_IMAGE_PREFIX", "game-manager/runtime-java"),
+		agentToken:            os.Getenv("AGENT_TOKEN"),
+		controlPlaneGRPC:      os.Getenv("CONTROL_PLANE_GRPC"),
+		natsURL:               os.Getenv("NATS_URL"),
+		mcDataDir:             os.Getenv("GM_DATA_DIR"),
+		mcNetwork:             envOr("GM_NETWORK", "game-manager-servers"),
+		runtimeImageNamespace: envOr("GM_RUNTIME_IMAGE_NAMESPACE", "game-manager"),
 	}
 	if cfg.agentToken == "" {
 		return cfg, errors.New("AGENT_TOKEN is required")
@@ -124,8 +125,8 @@ func run() error {
 	}
 
 	// registry ของ game definition — เกมที่ agent นี้รันได้ ลงทะเบียนที่นี่ที่เดียว
-	// (เฟสนี้มี minecraft เกมเดียว) instance บน disk บอกเองว่าเป็นเกมอะไรผ่าน .gamemanager/meta.json
-	gameRegistry := games.NewRegistry(minecraft.New())
+	// instance บน disk บอกเองว่าเป็นเกมอะไรผ่าน .gamemanager/meta.json
+	gameRegistry := games.NewRegistry(minecraft.New(), zomboid.New())
 	layout := filemanager.Layout{DataDir: cfg.mcDataDir}
 	// instance ที่ provision ไว้ก่อนมีชั้นเกมยังอยู่ที่ {GM_DATA_DIR}/{server_id} — ย้ายให้
 	// ตอน boot เท่านั้น (container ที่รันอยู่ bind path เดิมค้างไว้จนกว่าจะถูกสร้างใหม่)
@@ -197,7 +198,7 @@ func run() error {
 	defer nc.Drain()
 	log.Printf("nats connected")
 
-	prov := provision.New(dockerCli, layout, cfg.runtimeImagePrefix, gameRegistry)
+	prov := provision.New(dockerCli, layout, cfg.runtimeImageNamespace, gameRegistry)
 	consumer, err := jobs.NewConsumer(nc, nodeID, jobs.NewHandler(dockerRunner, prov, layout))
 	if err != nil {
 		return fmt.Errorf("create jobs consumer: %w", err)

@@ -4,17 +4,19 @@
 // หรือ useGameProfile() เสมอ เพื่อให้เพิ่มเกมที่สองแล้วไม่ต้องไล่แก้ทีละหน้า
 
 import { minecraft } from "@/lib/games/minecraft";
+import { zomboid } from "@/lib/games/zomboid";
 import type { GameProfile } from "@/lib/games/types";
 
 export type { GameProfile } from "@/lib/games/types";
 
 const PROFILES: Record<string, GameProfile> = {
   [minecraft.id]: minecraft,
+  [zomboid.id]: zomboid,
 };
 
 // DEFAULT_GAME_ID = เกมที่ใช้เมื่อไม่รู้ว่า instance เป็นเกมอะไร (ต้องตรงกับ games.DefaultID
-// ของ control-plane). เฟสนี้มีเกมเดียว ฟอร์มสร้าง server จึงยังไม่มี UI ให้เลือกเกม —
-// มีเกมที่สองเมื่อไรต้องกลายเป็น state ของ wizard + ดึงรายการจาก GET /api/meta/games
+// ของ control-plane) — เป็น **fallback เท่านั้น** ไม่ใช่ "เกมที่ wizard สร้าง":
+// ฟอร์มสร้าง server ดึงรายการจริงจาก GET /api/meta/games แล้วให้ user เลือก
 export const DEFAULT_GAME_ID = minecraft.id;
 
 // gameProfile คืน profile ของเกมนั้น — id ที่ไม่รู้จัก (backend ใหม่กว่า web) ตกไปใช้ default

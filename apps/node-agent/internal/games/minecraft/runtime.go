@@ -6,14 +6,32 @@ package minecraft
 import (
 	"strconv"
 	"strings"
+
+	"github.com/game-manager/node-agent/internal/games"
 )
 
 // latestJavaTag = Java ใหม่สุดที่มี runtime image (ต้องตรงกับ control-plane)
 const latestJavaTag = "25"
 
-// runtimeImage = games.Definition.RuntimeImage — prefix มาจาก config ของ agent
-func runtimeImage(prefix, variant, version string) string {
-	return prefix + ":" + javaTagFor(variant, version)
+// imageName = ชื่อ image ของเกมนี้ใต้ namespace ของ agent (ต้องตรงกับ control-plane)
+const imageName = "runtime-java"
+
+// runtimeImage = games.Definition.RuntimeImage — namespace มาจาก config ของ agent
+func runtimeImage(namespace, variant, version string) string {
+	return namespace + "/" + imageName + ":" + javaTagFor(variant, version)
+}
+
+// imageSource = games.Definition.ImageSource — เกมนี้รันบน JVM ล้วน ไม่ต้อง build image เอง:
+// pull JRE ของ Adoptium ตาม java version ที่อยู่ใน tag ท้าย ':' แล้ว tag ซ้ำเป็นชื่อของเรา
+// (ผลลัพธ์เท่ากับ image ที่ build ด้วย make runtime-images เว้นแต่ HOME/CMD ที่ runner ตั้งเองอยู่แล้ว)
+func imageSource(imageRef string) games.ImageSource {
+	idx := strings.LastIndex(imageRef, ":")
+	if idx < 0 || idx == len(imageRef)-1 {
+		return games.ImageSource{}
+	}
+	return games.ImageSource{
+		PullFrom: "docker.io/library/eclipse-temurin:" + imageRef[idx+1:] + "-jre",
+	}
 }
 
 // javaTagFor — mapping เดียวกับ control-plane:

@@ -146,13 +146,20 @@ effective = `is_admin OR (hasGlobalCap(cap) AND (server_owner OR grant มี ca
 ### Game definition (เกม + variant)
 
 server ทุกตัวผูกกับ **เกม** หนึ่งเกม (`game`) แล้ว `variant` คือ **variant** ภายในเกมนั้น
-(minecraft: `vanilla`/`paper`/`fabric`/`forge`/`velocity`). ความรู้เฉพาะเกมทั้งหมด — รายการ variant,
+(minecraft: `vanilla`/`paper`/`fabric`/`forge`/`velocity`, zomboid: `vanilla`). ความรู้เฉพาะเกมทั้งหมด — รายการ variant,
 กติกาเวอร์ชัน, runtime image, catalog ของไฟล์ config, กติกาผู้เล่น/allowlist/คำสั่ง moderation —
 อยู่ใน game definition ฝั่ง backend (`internal/games` ของทั้ง control-plane และ node-agent)
 ไม่ใช่ในตัว endpoint
 
-ตอนนี้มีเกมเดียวคือ `minecraft` (ดู `GET /api/meta/games`) — field `game` จึง **optional ทุกที่**:
-ไม่ส่ง/ส่งค่าว่าง = `minecraft` เสมอ, ส่ง id ที่ไม่รู้จัก = 400 `invalid_game`
+เกมที่รองรับตอนนี้ (ดู `GET /api/meta/games` เป็น source of truth เสมอ):
+
+| game | artifact มาจาก | `game_version` คือ | หมายเหตุ |
+|---|---|---|---|
+| `minecraft` | HTTP ของ upstream แต่ละ variant (Mojang/PaperMC/FabricMC/Forge) | เวอร์ชันของเกม (`1.21.4`) | มี identity service + allowlist file |
+| `zomboid` | **SteamCMD** app `380870` (login anonymous — dedicated server เป็น app ฟรีแยกจากตัวเกม) | **ชื่อ Steam branch** (`public`/`unstable`) เพราะ Steam ให้แต่บิลด์ล่าสุดของ branch | ไม่มี identity service/allowlist/รูปผู้เล่น/playtime |
+
+field `game` **optional ทุกที่**: ไม่ส่ง/ส่งค่าว่าง = `minecraft` (ค่า default เดิม
+เพื่อไม่ break client เก่า), ส่ง id ที่ไม่รู้จัก = 400 `invalid_game`
 
 ชื่อ field ที่ยังเป็นศัพท์ Minecraft ด้วยเหตุผลเรื่อง contract (ห้ามเปลี่ยนโดยไม่แก้ฝั่ง web พร้อมกัน):
 `game_version` = เวอร์ชันของเกม, `variant` = variant, `allowlist_enabled` = allowlist ของเกมเปิดอยู่ไหม,
@@ -284,7 +291,7 @@ path ผ่าน `SafeJoin` ที่ agent). ถ้า server กำลัง 
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/servers/{id}/players` | → `{allowlist_enabled, players: [{uuid, username, allowlisted, seen, op, banned, online, playtime_seconds}]}` (unified, เรียงตาม username) |
+| GET | `/api/servers/{id}/players` | → `{allowlist_supported, allowlist_enabled, players: [{uuid, username, allowlisted, seen, op, banned, online, playtime_seconds}]}` (unified, เรียงตาม username) |
 | GET | `/api/servers/{id}/players/{uuid}/avatar` | → `image/png` (หน้า 128x128 crop จาก skin) — 404 `not_found` ถ้าไม่มี skin (offline-mode uuid/ไม่มี texture), 502 `identity_unavailable` ถ้าเข้า Mojang ไม่ได้ |
 | POST | `/api/servers/{id}/players` | `{username}` → 201 `{player: {uuid, username, added_at}}` |
 | DELETE | `/api/servers/{id}/players/{uuid}` | → 204 |
@@ -306,7 +313,10 @@ path ผ่าน `SafeJoin` ที่ agent). ถ้า server กำลัง 
   `allowlist_enabled` = ค่าของ key ที่ definition ระบุใน `Allowlist.EnabledKey` (minecraft = `white-list`). **Graceful degradation**: ไฟล์ไม่มี
   (server ยังไม่เคย start) = ถือว่าว่าง ไม่ error; **node offline** = ไม่ hard-fail — คืนเฉพาะ allowlist จาก DB
   (`allowlisted=true`, flag อื่น false) + `allowlist_enabled` best-effort (default false)
-- POST: `username` trim แล้ว validate 3-16 ตัว `[A-Za-z0-9_]` (ไม่งั้น 400 `invalid_username`) →
+- `allowlist_supported=false` = เกมนี้ไม่มีไฟล์รายชื่อที่ panel เขียนได้เลย (zomboid เก็บบัญชี
+  ผู้เล่นไว้ใน DB ของตัวเกม) — GET ยังใช้ได้ตามปกติ (แค่ไม่มีแถวจาก allowlist) แต่ POST/DELETE
+  ตอบ 409 `unsupported` และ `allowlist_enabled` เป็น `false` เสมอ
+- POST: ต้องเป็นเกมที่มี allowlist (ไม่งั้น 409 `unsupported`) — `username` trim แล้ว validate 3-16 ตัว `[A-Za-z0-9_]` (ไม่งั้น 400 `invalid_username`) →
   Mojang lookup (ไม่พบ → 404 `player_not_found`; upstream error/timeout → 502 `identity_unavailable`) →
   ถ้าซ้ำ 409 `player_exists`. `uuid`/`username` ที่เก็บเป็นค่า canonical จาก Mojang
 - DELETE: `{uuid}` ต้อง parse ได้ (ไม่งั้น 400 `invalid_request`); ไม่พบ → 404 `not_found`
@@ -347,11 +357,11 @@ web ประกอบเป็นชื่อที่แสดงเองด�
 | Method | Path | ใคร | Response |
 |---|---|---|---|
 | GET | `/api/jobs/{id}` | ผู้มีสิทธิ์เห็น server นั้น | → `{job}` — web ใช้ poll สถานะงาน |
-| GET | `/api/meta/games` | login แล้ว | → `{games: [{id, label}]}` — เกมที่ instance นี้รองรับ (ตอนนี้มีแค่ `minecraft`) — id ที่ใช้กับ `?game=` ของ endpoint meta อื่นและ field `game` ตอนสร้าง server |
+| GET | `/api/meta/games` | login แล้ว | → `{games: [{id, label, min_memory_mb, license_name}]}` — เกมที่ instance นี้รองรับ ตามลำดับที่อยากให้ UI แสดง — id ที่ใช้กับ `?game=` ของ endpoint meta อื่นและ field `game` ตอนสร้าง server (`license_name` ว่าง = เกมนี้ไม่มีอะไรให้ยอมรับ) |
 | GET | `/api/meta/variants?game=minecraft` | login แล้ว | → `{types: [{id, label, requires_license}]}` — variant ของเกมที่ระบุ (`game` ไม่ส่ง = `minecraft`, id ที่ไม่รู้จัก → 400 `invalid_game`) |
-| GET | `/api/meta/versions?type=paper&game=minecraft` | login แล้ว | → `{versions: [string]}` ใหม่→เก่า (proxy + cache 10 นาทีจาก upstream official ของเกม; minecraft: Mojang/PaperMC/Fabric API, forge ใช้ promoted builds); `type` ที่ไม่ใช่ variant ของเกมนั้น → 400 `invalid_variant` |
+| GET | `/api/meta/versions?type=paper&game=minecraft` | login แล้ว | → `{versions: [string]}` ใหม่→เก่า (proxy + cache 10 นาทีจาก upstream official ของเกม; minecraft: Mojang/PaperMC/Fabric API, forge ใช้ promoted builds); `type` ที่ไม่ใช่ variant ของเกมนั้น → 400 `invalid_variant`. เกมที่ไม่ได้ปักหมุดเวอร์ชัน (zomboid) คืนรายชื่อ Steam branch แทน |
 | GET | `/api/meta/nodes` | login แล้ว | → `{nodes: [{id, name, status}]}` — ข้อมูลขั้นต่ำสำหรับ dropdown ตอนสร้าง server (ตัวเต็มดูได้เฉพาะ admin ที่ `/api/nodes`) |
-| GET | `/api/meta/next-port?node_id={uuid}&game=minecraft` | login แล้ว | → `{port}` — host_port ว่างต่ำสุดบน node นับจาก port เริ่มต้นของเกมนั้น (minecraft = 25565) สำหรับ prefill ฟอร์มสร้าง server; suggestion เท่านั้นไม่ reserve (node ไม่พบ → 404 `node_not_found`) |
+| GET | `/api/meta/next-port?node_id={uuid}&game=minecraft` | login แล้ว | → `{port}` — host_port ว่างต่ำสุดบน node นับจาก port เริ่มต้นของเกมนั้น (minecraft = 25565, zomboid = 16261) สำหรับ prefill ฟอร์มสร้าง server; suggestion เท่านั้นไม่ reserve (node ไม่พบ → 404 `node_not_found`). เกมที่กิน host port ติดกันหลายตัว (zomboid = 2) จะได้ช่วงที่ว่างทั้งช่วง และ port ที่ถูกจองไว้ของเกมพวกนั้นก็ถูกกันให้เกมอื่นด้วย |
 | GET | `/api/meta/config?game=minecraft` | login แล้ว | → `{fields, values}` — catalog ไฟล์ config ของเกมที่ระบุ (เดียวกับ `/api/servers/{id}/config`) แต่ `values` เป็นค่า default ล้วน ไม่ผูก server ตัวไหน (wizard สร้าง server ใช้ render ฟอร์มตั้งแต่ก่อนมี instance) |
 
 ## WebSocket — console

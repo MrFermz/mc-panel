@@ -61,6 +61,11 @@ func (a *API) canSeeJob(r *http.Request, user *store.User, job *store.Job) bool 
 type gameMeta struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
+	// MinMemoryMB ให้ฟอร์มสร้าง server เตือนก่อนยิง (backend ยังเป็นคนปฏิเสธจริงอยู่ดี) —
+	// ค่านี้ต่างกันต่อเกม จึงเป็นค่าคงที่ของ web ไม่ได้
+	MinMemoryMB int `json:"min_memory_mb"`
+	// LicenseName = ข้อตกลงที่ต้องยอมรับก่อนสร้าง ("" = เกมนี้ไม่มี)
+	LicenseName string `json:"license_name"`
 }
 
 // handleGames: เกมทั้งหมดที่ instance นี้รองรับ (มาจาก registry) — endpoint meta
@@ -69,7 +74,12 @@ func (a *API) handleGames(w http.ResponseWriter, r *http.Request) {
 	defs := a.games.All()
 	views := make([]gameMeta, 0, len(defs))
 	for _, d := range defs {
-		views = append(views, gameMeta{ID: d.ID, Label: d.Label})
+		views = append(views, gameMeta{
+			ID:          d.ID,
+			Label:       d.Label,
+			MinMemoryMB: d.MinMemoryMB,
+			LicenseName: d.LicenseName,
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"games": views})
 }
@@ -119,6 +129,40 @@ func (a *API) handleVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"versions": list})
+}
+
+// nextFreeHostPort หาช่วง host port ว่างต่ำสุดบน node ให้เกมนั้น
+// เกมที่กินหลาย port ติดกัน (Definition.HostPortSpan) ต้องได้ช่วงที่ว่างทั้งช่วง และต้องไม่ไป
+// ทับ port รองของ instance เกมอื่นที่จองไว้แล้ว — จึงต้องขยาย port ที่ถูกใช้ตาม span
+// ของเกมของ server ตัวนั้น (DB เก็บแค่ port หลัก) ก่อนไล่หา
+func (a *API) nextFreeHostPort(def *games.Definition, usage []store.HostPortUsage) int {
+	taken := make(map[int]bool, len(usage))
+	for _, u := range usage {
+		span := 1
+		if d, ok := a.games.Resolve(u.Game); ok && d.HostPortSpan > span {
+			span = d.HostPortSpan
+		}
+		for i := range span {
+			taken[u.Port+i] = true
+		}
+	}
+
+	span := max(def.HostPortSpan, 1)
+
+	const maxPort = 65535
+	for p := def.DefaultHostPort; p+span-1 <= maxPort; p++ {
+		free := true
+		for i := range span {
+			if taken[p+i] {
+				free = false
+				break
+			}
+		}
+		if free {
+			return p
+		}
+	}
+	return maxPort
 }
 
 // handleCapabilities: catalog global capability คงที่สำหรับหน้า admin (login required)
@@ -172,11 +216,11 @@ func (a *API) handleMetaNextPort(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	port, err := a.st.NextFreeHostPort(r.Context(), nodeID, def.DefaultHostPort)
+	usage, err := a.st.ListHostPortUsage(r.Context(), nodeID)
 	if err != nil {
-		a.log.Error("next free host port failed", "node_id", nodeID, "error", err)
+		a.log.Error("list host port usage failed", "node_id", nodeID, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"port": port})
+	writeJSON(w, http.StatusOK, map[string]any{"port": a.nextFreeHostPort(def, usage)})
 }

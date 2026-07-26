@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { DEFAULT_GAME, type Permission, type Server } from "@/lib/types";
+import { type Permission, type Server } from "@/lib/types";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useMe } from "@/lib/use-me";
 import { useT } from "@/lib/i18n";
@@ -41,7 +41,7 @@ function NewServerWizard({
   const meta = useServerMetadata();
   // เรียกที่นี่ด้วยเพื่อคำนวณ changedProps ตอนกด create แม้ user ไม่เคยเปิด step 2
   // (react-query dedupe ด้วย key เดียวกันกับที่ StepProperties ใช้ — ไม่ได้ยิงซ้ำ)
-  const { defaults } = useCatalogDefaults();
+  const { defaults } = useCatalogDefaults(meta.game);
 
   // คนสร้างเป็น owner เสมอ — backend ทำให้เองที่ CreateServerWithOwner จึงโชว์ไว้ในลิสต์
   // ตั้งแต่แรกให้เห็นว่ามีอยู่แล้ว (แถวนี้ล็อกไว้ และตอน apply จะถูกข้าม ไม่ POST ซ้ำ)
@@ -78,15 +78,18 @@ function NewServerWizard({
     setPropsDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  // key ที่เปิด allowlist เป็นของเกม ไม่ใช่ค่าคงที่ของ wizard
-  const allowlistKey = gameProfile(DEFAULT_GAME).allowlistEnabledKey;
+  // key ที่เปิด allowlist เป็นของเกมที่เลือกไว้ ไม่ใช่ค่าคงที่ของ wizard
+  // ("" = เกมนี้ไม่มี allowlist ที่ panel จัดการได้ — step ผู้เล่นซ่อนส่วนนั้นเอง)
+  const allowlistKey = gameProfile(meta.game).allowlistEnabledKey;
 
   const stepContent = () => {
     if (step === 0) {
       return <StepGeneral meta={meta} />;
     }
     if (step === 1) {
-      return <StepProperties draft={propsDraft} onChange={setProp} />;
+      return (
+        <StepProperties game={meta.game} draft={propsDraft} onChange={setProp} />
+      );
     }
     if (step === 2) {
       return (
@@ -101,7 +104,8 @@ function NewServerWizard({
       <StepPlayers
         value={playersDraft}
         onChange={setPlayersDraft}
-        game={DEFAULT_GAME}
+        game={meta.game}
+        supported={allowlistKey !== ""}
         allowlistEnabled={
           allowlistKey !== "" &&
           (propsDraft[allowlistKey] ?? defaults[allowlistKey]) === "true"

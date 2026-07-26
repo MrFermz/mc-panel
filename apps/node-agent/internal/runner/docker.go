@@ -100,7 +100,13 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		return fmt.Errorf("server directory %s not found (server not provisioned?): %w", cfg.WorkDir, err)
 	}
 
-	if err := games.EnsureRuntimeImage(ctx, r.cli, cfg.Image); err != nil {
+	// วิธีเตรียม image เมื่อ node ยังไม่มีใน cache เป็นความรู้ของเกม (JVM = pull temurin,
+	// เกมที่ต้อง SteamCMD = build image ของเราเอง) — runner แค่ส่งต่อ
+	var src games.ImageSource
+	if def.ImageSource != nil {
+		src = def.ImageSource(cfg.Image)
+	}
+	if err := games.EnsureRuntimeImage(ctx, r.cli, cfg.Image, src); err != nil {
 		return err
 	}
 
@@ -141,11 +147,16 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		},
 	}
 	if cfg.Port > 0 {
-		// port ที่ server ฟังใน container มาจาก game definition ของ instance นั้น
-		gamePort := nat.Port(strconv.Itoa(def.ContainerPort) + "/tcp")
-		config.ExposedPorts = nat.PortSet{gamePort: struct{}{}}
-		hostConfig.PortBindings = nat.PortMap{
-			gamePort: []nat.PortBinding{{HostPort: strconv.Itoa(cfg.Port)}},
+		// port ที่ server ฟังใน container (เลข/protocol/จำนวน) มาจาก game definition
+		// ของ instance นั้น — host port ของ port รองคือ host_port + HostOffset
+		config.ExposedPorts = nat.PortSet{}
+		hostConfig.PortBindings = nat.PortMap{}
+		for _, p := range def.Ports {
+			cp := nat.Port(strconv.Itoa(p.Container) + "/" + p.Proto())
+			config.ExposedPorts[cp] = struct{}{}
+			hostConfig.PortBindings[cp] = []nat.PortBinding{
+				{HostPort: strconv.Itoa(cfg.Port + p.HostOffset)},
+			}
 		}
 	}
 	netConfig := &network.NetworkingConfig{

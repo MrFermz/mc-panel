@@ -11,7 +11,6 @@ import {
   userDirectoryResponseSchema,
   usernameCheckResponseSchema,
   userResponseSchema,
-  DEFAULT_GAME,
   type AddPlayerResponse,
   type FileContentResponse,
   type FileListResponse,
@@ -192,9 +191,11 @@ export function getServerProperties(
 
 // catalog + ค่า default ที่ยังไม่ผูก server — wizard ใช้ก่อนสร้าง instance
 // catalog เป็นของ game definition จึงต้องบอกว่าถามในนามเกมไหน
-export function getPropertiesCatalog(): Promise<ServerPropertiesResponse> {
+export function getPropertiesCatalog(
+  game: string,
+): Promise<ServerPropertiesResponse> {
   return apiGet(
-    `/api/meta/config?game=${encodeURIComponent(DEFAULT_GAME)}`,
+    `/api/meta/config?game=${encodeURIComponent(game)}`,
     serverPropertiesResponseSchema,
   );
 }
@@ -209,9 +210,10 @@ export function saveServerProperties(
 // ---------- meta ----------
 
 // port เริ่มต้นที่ไล่หามาจาก game definition — ต้องบอกเกมไปด้วย
-export function getNextPort(nodeId: string): Promise<number> {
+// port ที่แนะนำขึ้นกับเกม (port เริ่มต้นต่างกัน และบางเกมกินหลาย port ติดกัน)
+export function getNextPort(nodeId: string, game: string): Promise<number> {
   return apiGet(
-    `/api/meta/next-port?node_id=${encodeURIComponent(nodeId)}&game=${encodeURIComponent(DEFAULT_GAME)}`,
+    `/api/meta/next-port?node_id=${encodeURIComponent(nodeId)}&game=${encodeURIComponent(game)}`,
     nextPortResponseSchema,
   ).then((r) => r.port);
 }

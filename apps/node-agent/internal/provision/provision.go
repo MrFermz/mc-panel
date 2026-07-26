@@ -40,19 +40,19 @@ type Spec struct {
 }
 
 type Provisioner struct {
-	docker             *client.Client
-	layout             filemanager.Layout
-	runtimeImagePrefix string
-	games              *games.Registry
-	http               *http.Client
+	docker                *client.Client
+	layout                filemanager.Layout
+	runtimeImageNamespace string
+	games                 *games.Registry
+	http                  *http.Client
 }
 
-func New(docker *client.Client, layout filemanager.Layout, runtimeImagePrefix string, gr *games.Registry) *Provisioner {
+func New(docker *client.Client, layout filemanager.Layout, runtimeImageNamespace string, gr *games.Registry) *Provisioner {
 	return &Provisioner{
-		docker:             docker,
-		layout:             layout,
-		runtimeImagePrefix: runtimeImagePrefix,
-		games:              gr,
+		docker:                docker,
+		layout:                layout,
+		runtimeImageNamespace: runtimeImageNamespace,
+		games:                 gr,
 		http: &http.Client{
 			// artifact/installer ใหญ่ได้หลายร้อย MB บน connection ช้า — timeout รวมต้องยาว
 			// แต่ connect/header ต้องสั้นเพื่อ fail เร็วเมื่อ upstream ล่ม
@@ -115,14 +115,14 @@ func (p *Provisioner) CreateServer(ctx context.Context, serverID string, spec Sp
 
 func (p *Provisioner) provisionEnv(def *games.Definition, serverID, dir, variant, version string) games.ProvisionEnv {
 	return games.ProvisionEnv{
-		ServerID:           serverID,
-		Dir:                dir,
-		Variant:            variant,
-		Version:            version,
-		HTTP:               p.http,
-		Docker:             p.docker,
-		RuntimeImagePrefix: p.runtimeImagePrefix,
-		Chown:              func() { p.chownRecursive(dir) },
+		ServerID:              serverID,
+		Dir:                   dir,
+		Variant:               variant,
+		Version:               version,
+		HTTP:                  p.http,
+		Docker:                p.docker,
+		RuntimeImageNamespace: p.runtimeImageNamespace,
+		Chown:                 func() { p.chownRecursive(dir) },
 	}
 }
 

@@ -62,7 +62,7 @@ func provisionForge(ctx context.Context, env games.ProvisionEnv) (string, error)
 	// installer รันเป็น uid 1000 ต้องเขียน dir ได้
 	env.Chown()
 
-	image := runtimeImage(env.RuntimeImagePrefix, env.Variant, env.Version)
+	image := runtimeImage(env.RuntimeImageNamespace, env.Variant, env.Version)
 	if err := runForgeInstaller(ctx, env, image); err != nil {
 		return "", err
 	}
@@ -92,7 +92,7 @@ func forgeInstalled(dir string) bool {
 func runForgeInstaller(ctx context.Context, env games.ProvisionEnv, image string) error {
 	// installer ใช้ runtime image ตัวเดียวกับที่จะรัน server จริง — ensure ไว้ก่อน
 	// (reuse cache ถ้ามี, ไม่มีก็ pull+cache) เพื่อไม่ต้อง make runtime-images ล่วงหน้า
-	if err := games.EnsureRuntimeImage(ctx, env.Docker, image); err != nil {
+	if err := games.EnsureRuntimeImage(ctx, env.Docker, image, imageSource(image)); err != nil {
 		return err
 	}
 

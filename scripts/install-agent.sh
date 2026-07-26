@@ -4,7 +4,9 @@
 #
 # ขั้นตอนก่อนใช้:
 #   1. สร้าง node ผ่านหน้า /admin/nodes (หรือ POST /api/nodes) → ได้ token มา
-#   2. เครื่อง node ต้องมี Docker Engine + image game-manager/runtime-java:8/17/21 (make runtime-images)
+#   2. เครื่อง node ต้องมี Docker Engine — runtime image ของแต่ละเกม agent เตรียมเองครั้งแรก
+#      ที่ต้องใช้ (pull JRE จาก official / build image ที่มี SteamCMD เอง) หรือจะ build ล่วงหน้า
+#      ด้วย `make runtime-images` แล้ว load เข้าเครื่องก็ได้
 #   3. เครื่อง node ต้องมี image node-agent อยู่ในเครื่องเอง — build ด้วย `make agent-image`
 #      แล้ว load เข้าเครื่อง (docker save|load) หรือระบุ --image=<registry ส่วนตัวของคุณ> เอง
 #      สคริปต์นี้จงใจไม่ pull จาก Docker Hub namespace สาธารณะที่โปรเจกต์ไม่ได้ควบคุม

@@ -68,6 +68,7 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 | `apps/control-plane/internal/games/minecraft` | ค่าจริงของ Minecraft: variant + EULA, รายการเวอร์ชัน, Java image mapping, `server.properties`, `whitelist.json`, `op/kick/ban`, **Mojang identity (`identity.go`) และการ crop หน้าจาก skin (`avatar.go`)** |
 | `apps/node-agent/internal/games` | Registry + `Definition` ฝั่งรันจริง: ที่มาของ artifact, launch script, env, คำสั่ง stop, seed config, port ใน container, การอ่านสถานะในเกมจาก console + `.gamemanager/meta.json` (instance บน disk บอกเองว่าเป็นเกมอะไร) |
 | `apps/node-agent/internal/games/minecraft` | ค่าจริงของ Minecraft ฝั่ง agent (ที่มาของ jar, launch script/heap, forge installer, parser ของ console) |
+| `apps/*/internal/games/zomboid` | ค่าจริงของ Project Zomboid: ติดตั้งผ่าน **SteamCMD** (app 380870, login anonymous), `game_version` = Steam branch, ไฟล์ ini ใน cache dir ของเกม, **Dockerfile ของ runtime image ที่มี SteamCMD** (agent embed ไว้แล้ว build เอง) |
 | `apps/web/lib/games` | Registry + `GameProfile` ฝั่ง web: เดา variant/version จาก archive, กติกาชื่อผู้เล่นฝั่ง client, การลงสีบรรทัด console, ชื่อเกม/license/metric ที่โผล่ในข้อความ |
 
 - สอง app แยก module กันจึง **ไม่ import ข้ามกัน** — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
@@ -98,13 +99,25 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 - **1 container ต่อ 1 instance** — ชื่อ `game-manager-{server_id}`, label `gamemanager.managed_by=game-manager-agent`
 - **container ของ instance ทุกตัว**: `cap-drop=ALL`, `no-new-privileges`, user 1000:1000, memory limit,
   pids limit, ไม่มี restart policy (agent เป็นคนคุม lifecycle), stdin เปิดไว้สำหรับ console
-- **Runtime image ของเราเอง** (`game-manager/runtime-java:8|17|21|25`) — ไม่รู้จักเกมใดเป็นพิเศษ,
-  artifact โหลดจาก official source ของเกมเท่านั้น (ที่มาอยู่ใน game definition)
-  (Mojang/PaperMC/FabricMC/Forge maven) พร้อม verify checksum เมื่อ upstream ให้มา
+- **Runtime image ของเราเอง** (`game-manager/runtime-java:8|17|21|25`, `game-manager/runtime-steam:1`)
+  — ไม่รู้จักเกมใดเป็นพิเศษ, artifact โหลดจาก official source ของเกมเท่านั้น (ที่มาอยู่ใน game
+  definition: Mojang/PaperMC/FabricMC/Forge maven สำหรับ minecraft, Steam CDN ผ่าน SteamCMD
+  สำหรับ zomboid) พร้อม verify checksum เมื่อ upstream ให้มา
 - **Runtime image caching/reuse**: agent ensure image ก่อน start เสมอ — ถ้ามีในเครื่องแล้วใช้เลย
-  (reuse ไม่ pull ซ้ำ), ถ้าไม่มีให้ pull `eclipse-temurin:{ver}-jre` (official) แล้ว tag เป็น
-  `game-manager/runtime-java:{ver}` เก็บ cache ไว้ share กับทุก instance ที่ใช้ java version เดียวกันในอนาคต
-  (`make runtime-images` ยัง build ตัว hardened เต็มได้ ถ้ามีอยู่ agent จะ reuse ตัวนั้น ไม่ทับ)
+  (reuse ไม่ pull ซ้ำ) ถ้าไม่มีให้เตรียมตามที่ definition บอกผ่าน `games.ImageSource` ซึ่งมีสองทาง:
+  - **pull แล้ว tag ซ้ำ** — เกมที่มี base image official ให้ใช้ (minecraft:
+    `eclipse-temurin:{ver}-jre` → tag เป็น `game-manager/runtime-java:{ver}`)
+  - **build เองจาก Dockerfile ที่ definition ถือไว้** — เกมที่ไม่มี base สำเร็จรูป (zomboid ต้องมี
+    SteamCMD ในตัว และเราไม่ใช้ image ของ third-party) — agent embed Dockerfile ไว้ในตัว binary
+    แล้ว `docker build` เป็น `game-manager/runtime-steam:1` ครั้งแรกที่ต้องใช้
+  ทั้งสองทางตั้งชื่อ tag เดียวกันเสมอ จึง share cache ข้าม instance บน node เดียวกัน
+  (`make runtime-images` build ล่วงหน้าได้ทั้งสองแบบ ถ้ามีอยู่แล้ว agent reuse ตัวนั้น ไม่ทับ)
+  - namespace ของชื่อ image ตั้งได้ที่ agent ผ่าน `GM_RUNTIME_IMAGE_NAMESPACE` (default
+    `game-manager`) — ตั้งแล้วต้องตรงกับที่ control-plane เลือกไว้ใน definition ด้วย
+- **Port ของ instance มาจาก definition**: เกมบอกเองว่าฟัง port อะไร protocol ไหน และกี่ตัว
+  (minecraft = `25565/tcp`; zomboid = `16261/udp` + `16262/udp`) — host port ของ port รอง
+  คือ `host_port + n` ซึ่งแปลว่า instance ของเกมนั้นจอง host port ติดกันหลายตัว
+  (`Definition.HostPortSpan` ฝั่ง control-plane เป็นคนบอก `/api/meta/next-port` ให้เว้นช่วงพอ)
 - **Container cleanup**: container ที่ start ล้มกลางทาง หรือ crash (die exit≠0 ที่ไม่ได้สั่ง stop) —
   agent ลบทิ้งทันที + push console line แจ้ง user (ไม่ทิ้ง dead container ค้าง; directory ข้อมูลคงไว้เสมอ)
 - **Java mapping (ของ minecraft)**: calendar version (26.x+)/velocity/fallback→25, 1.20.5–1.21.x→21, 1.17–1.20.4→17,

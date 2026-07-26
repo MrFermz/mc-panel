@@ -7,15 +7,14 @@
 ## โปรเจกต์นี้คืออะไร
 
 ระบบจัดการ **game server** หลาย instance แบบ microservices — ตัวระบบหลัก **ไม่ผูกกับเกมใดเกมหนึ่ง**
-ความรู้เฉพาะเกมอยู่ใน game definition แยกเป็น package (ตอนนี้ลงทะเบียนไว้เกมเดียว: `minecraft`
-variant vanilla/paper/fabric/forge/velocity)
+ความรู้เฉพาะเกมอยู่ใน game definition แยกเป็น package (ตอนนี้ลงทะเบียนไว้ 2 เกม: `minecraft`
+variant vanilla/paper/fabric/forge/velocity และ `zomboid` variant vanilla ที่ติดตั้งผ่าน SteamCMD)
 เขียนเองทั้งหมด ทุกอย่างรันบน Docker — web (Next.js) + control-plane (Go) + node-agent (Go)
 คุยกันผ่าน REST/WebSocket (browser), gRPC stream (realtime), NATS JetStream (jobs), protobuf
 
 ## กฎเหล็ก (ห้ามละเมิดไม่ว่าจะดูสมเหตุสมผลแค่ไหน)
 
-0. **ความรู้เฉพาะเกมอยู่ใน game definition ที่เดียว** — server ทุกตัวผูกกับเกม (`servers.game`,
-   ตอนนี้มี `minecraft` เกมเดียว) และคอลัมน์ `variant` คือ **ชนิดของ server** ภายในเกมนั้น. ทุกอย่างที่
+0. **ความรู้เฉพาะเกมอยู่ใน game definition ที่เดียว** — server ทุกตัวผูกกับเกม (`servers.game`) และคอลัมน์ `variant` คือ **ชนิดของ server** ภายในเกมนั้น. ทุกอย่างที่
    "เป็นของเกม" (รายการ variant/license, กติกาเวอร์ชัน, runtime image, ชื่อ+catalog+ไวยากรณ์ของไฟล์
    config, กติกาผู้เล่น/allowlist/คำสั่ง moderation/playtime/avatar, ที่มาของ artifact, launch script,
    คำสั่ง stop, port ใน container, การอ่าน console) อยู่ใน `internal/games` ของแต่ละ app
@@ -62,6 +61,8 @@ apps/web             Next.js (self-contained ไม่ import ข้าม direc
 packages/proto       .proto + generated Go — module github.com/game-manager/proto
 packages/shared-types  TS generate จาก proto (ยังไม่ถูกใช้โดย web — เผื่ออนาคต)
 infra                compose ทั้งสองชุด, caddy, nats config, runtime-java image (ไม่รู้จักเกม)
+                     (runtime image ของเกมที่ต้องมีเครื่องมือเฉพาะ เช่น SteamCMD อยู่ใน package
+                      ของเกมนั้นแทน เพราะ agent ต้อง embed ไปด้วย)
 ```
 
 หลักการ: **แต่ละ directory ต้องแยกเป็น git repo ได้โดยแก้น้อยที่สุด** —
@@ -75,7 +76,7 @@ infra                compose ทั้งสองชุด, caddy, nats config,
 make env              # generate .env ครั้งแรก (secret สุ่มทั้งหมด)
 make up / down / logs # full stack บน docker (build ให้เอง)
 make admin-password   # ดู initial admin credentials จาก log
-make runtime-images   # build game-manager/runtime-java:8/17/21/25 (ออปชัน — ข้ามได้ agent auto-pull ให้เอง)
+make runtime-images   # build runtime image ล่วงหน้า (ออปชัน — ข้ามได้ agent เตรียมเองตอนใช้ครั้งแรก)
 make bootstrap        # dev ครั้งแรก: infra + migrate + web deps
 make run-control-plane / run-agent / run-web   # dev hot-loop 3 terminals
 make test / lint      # ต้องผ่านก่อนถือว่างานเสร็จ
@@ -267,7 +268,9 @@ storage — จำกัด 512KB, ชนิดตัดสินจาก conte
 NATS เป็นแค่ job transport ไม่เกี่ยวกับ auth. ทั้ง Postgres/Redis/NATS อยู่ network `core` (internal)
 เข้าจากภายนอกไม่ได้ ต้อง `docker compose exec` เข้า container หรือใช้ CLI ข้างบนที่รันในวงเดียวกัน
 
-**สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = เกม default)
+**สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = เกม default;
+`game_version` ของเกมที่ค่านี้เดินทางไปเป็น argument ของเครื่องมือฝั่ง agent เช่น Steam branch
+ของ zomboid ต้องผ่าน `Version.Valid` ซึ่งเป็น allow-list — และ agent เช็คซ้ำเองอีกชั้นเสมอ)
 → insert แถว (status=provisioning) + job `create_server` → agent
 โหลด artifact + เขียน seed config/launch script → JobResult → status=stopped → user สั่ง start ต่อ
 
@@ -299,15 +302,18 @@ PUT `/config` **เฉพาะ key ที่ต่างจาก default** (�
 ⚠️ ของในถังขยะ **ยังจอง `host_port` (UNIQUE ไม่ได้ filter deleted) และยังถูกนับใน RAM admission
 control** โดยตั้งใจ — ไฟล์ยังกินที่จริงและ restore ต้องกลับมา start ได้เสมอ
 
-**Start**: job `start_server` (control-plane เลือก `game-manager/runtime-java:{8|17|21|25}` จาก game_version) →
-agent **ensure runtime image** (มีในเครื่องแล้ว = reuse ไม่โหลดซ้ำ; ไม่มี = pull `eclipse-temurin:{ver}-jre`
-จาก official แล้ว tag เป็น `game-manager/runtime-java:{ver}` cache ไว้ share ข้าม instance) → สร้าง container
+**Start**: job `start_server` (control-plane เลือก image จาก game definition — minecraft:
+`game-manager/runtime-java:{8|17|21|25}` ตาม game_version, zomboid: `game-manager/runtime-steam:1`) →
+agent **ensure runtime image** ตาม `ImageSource` ของเกม (มีในเครื่องแล้ว = reuse ไม่ทำอะไรซ้ำ;
+ไม่มี = pull image official แล้ว tag ซ้ำ **หรือ** build จาก Dockerfile ที่ definition ถือไว้
+แล้ว cache ไว้ share ข้าม instance) → สร้าง container
 (hardening ครบ: cap-drop ALL, no-new-privileges, user 1000, mem limit, แยก network)
 → docker events → agent ส่ง `ServerStatus RUNNING` ผ่าน gRPC → DB + broadcast WS
 - ถ้า start ล้มหลังสร้าง container / container crash (die exit≠0 ที่ไม่ได้สั่ง stop) → agent **ลบ container
   ที่ค้างทิ้งทันที + push console line แจ้ง user** ว่ากำลังเอาออก (ไม่ปล่อยให้ค้างเป็น dead container)
-- runtime image cache: `game-manager/runtime-java:{8|17|21|25}` build เองด้วย `make runtime-images` ก็ได้ (hardened)
-  หรือปล่อยให้ agent auto-pull ครั้งแรกที่ต้องใช้ — reuse ตัวที่มีเสมอ ไม่โหลดซ้ำ
+- runtime image cache: `game-manager/runtime-java:{8|17|21|25}` + `game-manager/runtime-steam:1`
+  build เองด้วย `make runtime-images` ก็ได้ (hardened) หรือปล่อยให้ agent เตรียมเองครั้งแรก
+  ที่ต้องใช้ — reuse ตัวที่มีเสมอ ไม่ทำซ้ำ
 
 **Online players / tick rate ต่อ instance**: เกมส่วนใหญ่ไม่มี API ให้ถาม — agent อ่านจาก **console** เอง
 (`internal/gamestate` = เครื่องจักรกลางที่ไม่รู้จักเกม + `games.ConsoleSpec` ของเกมนั้นเป็นคนบอกว่า
@@ -321,6 +327,11 @@ max players ทุก variant) แล้วอัปเดตทันทีร�
 console ที่ user เห็น** (console.Manager มี `Observer` hook คืน false = ทิ้งบรรทัด) — ระวังตอนแก้ parser:
 กรองพลาด = user เห็นคำสั่งผีทุก 30 วิ / parse พลาด = ผู้เล่นหายจาก dashboard
 ค่าพวกนี้เดินทางไปกับ `ServerStats` เส้นเดิม (field `online_players`/`max_players`/`tick_rate`)
+
+**เกมที่ไม่มี allowlist/identity service**: `PlayerSpec` เว้นว่างได้ทั้งก้อน — `HasAllowlist()` /
+`HasIdentity()` เป็นตัวตัดสิน แล้ว `POST/DELETE /players` ตอบ **409 `unsupported`**
+ส่วน GET ยังใช้ได้ (คืน `allowlist_supported: false` + รายชื่อเท่าที่มี) — zomboid เป็นเคสนี้
+เพราะ PZ เก็บบัญชีผู้เล่นไว้ใน DB ของตัวเกม ไม่ใช่ไฟล์ที่ panel เขียนแทนได้
 
 **Player action (op/deop/kick/ban/pardon)**: `POST /api/servers/{id}/players/action` ส่งคำสั่งเข้า console
 (ต้อง running ไม่งั้น 409 `invalid_state`) — `action` เป็น **allow-list** และ `username` ต้องผ่าน regex
@@ -367,8 +378,8 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
 ภายในเกมนั้น. ความรู้เฉพาะเกมอยู่ใน `Definition` ตัวเดียวต่อเกมต่อ app:
 
 - `apps/control-plane/internal/games` — `Definition` + `Registry` (validation/metadata ฝั่ง API):
-  `Variants` (id/label/RequiresLicense), `DefaultHostPort`, `MinMemoryMB`, `Version` (MaxLen / ListVersions
-  จาก upstream / ValidDetected / RuntimeImage), `Config` (FileName / Fields / Format / EditableWhileRunning),
+  `Variants` (id/label/RequiresLicense), `DefaultHostPort`, `HostPortSpan`, `MinMemoryMB`,
+  `Version` (MaxLen / List จาก upstream / Valid / RuntimeImage), `Config` (FileName / Fields / Format / EditableWhileRunning),
   `Players` (IdentityService / ValidateUsername / ConsoleSafeUsername / Lookup / Avatar / Allowlist /
   StateFiles / Actions / Playtime), `LicenseName`
   → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft`: `versions.go`, `runtime.go`,
@@ -376,18 +387,25 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   และ **`avatar.go`** (ดึง skin + crop หน้า — เดิมคือ `internal/playerface`)
   ⚠️ ชั้น cache ของรูปผู้เล่นเป็น**ของกลาง** อยู่ที่ `internal/avatarcache` (DB-backed TTL +
   เสิร์ฟรูปเก่าตอน upstream ล่ม) — รับ `Fetcher` จาก definition, **ห้ามยัดโค้ดของเกมลงไปในนั้น**
-- `apps/node-agent/internal/games` — `Definition` + `Registry` ฝั่งรันจริง: `Variants`, `ContainerPort`,
-  `StopCommand`, `LaunchScript`, `LaunchEnv`, `SeedFiles`, `Provision`, `RuntimeImage`,
+- `apps/node-agent/internal/games` — `Definition` + `Registry` ฝั่งรันจริง: `Variants`, `Ports`
+  (เลข/protocol/HostOffset ต่อ port — เกมมีได้หลาย port และเป็น udp ได้),
+  `StopCommand`, `LaunchScript`, `LaunchEnv`, `SeedFiles`, `Provision`, `RuntimeImage`, `ImageSource`,
   `Console` (RosterCommand/MetricCommand/Parse)
   + `InstanceLookup` ที่อ่าน `.gamemanager/meta.json` เพื่อรู้ว่า instance บน disk เป็นเกมอะไร
   → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft`
+- **`ImageSource` = วิธีเตรียม runtime image เมื่อ node ยังไม่มี** (เป็นความรู้ของเกม ไม่ใช่ของ runner):
+  `PullFrom` = pull image official แล้ว tag ซ้ำ (minecraft → `eclipse-temurin:{ver}-jre`) หรือ
+  `Dockerfile` = ให้ agent `docker build` เอง (zomboid → `runtime.Dockerfile` ที่ `go:embed` ไว้
+  ใน package ของเกม เพราะไม่มี image ที่มี SteamCMD จาก upstream ให้ pull และเราไม่ใช้ของ third-party)
+  — ทั้งสองทางตั้ง tag เดียวกันเสมอเพื่อ share cache; namespace มาจาก `GM_RUNTIME_IMAGE_NAMESPACE`
+  (default `game-manager`) **ตั้งแล้วต้องตรงกับที่ control-plane เลือกใน definition**
 - **สอง app ไม่ import ข้ามกัน** (คนละ module) — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
   ซึ่งเดินทางผ่าน job payload (`CreateServer.game` ใน proto) และ `.gamemanager/meta.json`
   ⚠️ การ map เวอร์ชัน → Java image มีสองที่ (control-plane เลือก image ให้ job, agent เลือกให้
   forge installer) — **แก้ที่หนึ่งต้องแก้อีกที่เสมอ** มี test คุมทั้งสองฝั่ง
 - `apps/web/lib/games` — `GameProfile` + registry ฝั่ง web (`gameProfile(server.game)`):
   `isValidPlayerName`, `allowlistEnabledKey`, `highlightConsoleMessage`, `label`/`licenseName`/`licenseUrl`/`metricLabel`
-  → ค่าจริงของ Minecraft อยู่ใน `lib/games/minecraft.ts`
+  → ค่าจริงของ Minecraft อยู่ใน `lib/games/minecraft.ts`, ของ PZ อยู่ใน `lib/games/zomboid.ts`
   **component ห้าม import `lib/games/minecraft` ตรง ๆ** — เรียกผ่าน `gameProfile()` เสมอ
 - ชั้นอื่นทั้งหมดทำงานผ่าน definition: httpapi ใช้ `a.gameOf(w, srv)` / `a.gameFromQuery(w, r)`,
   jobs ใช้ `d.runtimeImage(srv)`, provision/runner/gamestate ใช้ registry + `InstanceLookup`
@@ -406,8 +424,9 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
    ลงทะเบียนใน `games.NewRegistry(...)` ที่ `apps/control-plane/cmd/server/main.go` และ
    `apps/node-agent/cmd/agent/main.go`
 3. web: เพิ่ม `lib/games/<เกม>.ts` (implement `GameProfile`) แล้วลงทะเบียนใน `PROFILES`
-   ที่ `lib/games/index.ts`. `DEFAULT_GAME_ID` เป็นค่าคงที่เพราะยังมีเกมเดียว — มีเกมที่สองเมื่อไร
-   ต้องกลายเป็น state ของ wizard + ดึงรายการจาก `GET /api/meta/games`
+   ที่ `lib/games/index.ts`. `DEFAULT_GAME_ID` เป็น **fallback ตอนไม่รู้ว่า instance เป็นเกมอะไร
+   เท่านั้น** — wizard ถือเกมเป็น state (`useServerMetadata().game`) และดึงรายการจริงจาก
+   `GET /api/meta/games` แล้วทุก query ของ wizard (variants/versions/config/next-port) ผูกกับเกมนั้น
 4. **ไม่ต้องแตะ schema** เพื่อรองรับ variant ใหม่ — schema ไม่มี CHECK รายชื่อ (ดูกฎเหล็กข้อ 0)
 5. `docs/api.md` + `docs/architecture.md` (หัวข้อ Game definition)
 
@@ -477,11 +496,19 @@ cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส
 (`SumServerMemoryMBOnNode`) + ตัวใหม่ ต้องไม่เกิน `node.memory_total_mb` → ไม่งั้น 400 `insufficient_memory`
 (body มี `used_mb/total_mb/available_mb`). node total=0/ไม่รู้ = ข้ามเช็ค. PATCH เช็คเฉพาะตอนขยาย (ไม่นับ memory เดิมตัวเอง)
 
-**Default host port**: `GET /api/meta/next-port?node_id=` คืน host_port ว่างต่ำสุดบน node (เริ่ม 25565)
-ให้ web prefill ฟอร์มสร้าง server — suggestion เท่านั้น ไม่ reserve (create ยัง enforce UNIQUE (node_id, host_port))
+**Default host port**: `GET /api/meta/next-port?node_id=&game=` คืน host_port ว่างต่ำสุดบน node
+(จุดเริ่มมาจาก `Definition.DefaultHostPort` — minecraft 25565, zomboid 16261) ให้ web prefill
+ฟอร์มสร้าง server — suggestion เท่านั้น ไม่ reserve (create ยัง enforce UNIQUE (node_id, host_port))
+⚠️ เกมที่กิน host port ติดกันหลายตัว (`Definition.HostPortSpan`, zomboid = 2 เพราะ PZ ต้องเปิด
+16261+16262/udp) — DB เก็บแค่ port หลัก การเว้นช่วงจึงอยู่ที่ `nextFreeHostPort` ใน httpapi
+ที่ขยาย port ที่ถูกจองตาม span ของเกมนั้น ๆ **ไม่ใช่ UNIQUE constraint** (ตั้ง port เองทับกันได้อยู่ —
+จะไปพังตอน start แล้ว agent รายงานว่า port ถูกใช้อยู่)
 
 ## สิ่งที่ยังไม่มี (อย่าเข้าใจผิดว่ามีแล้ว)
 
+- **ผู้เล่นออนไลน์ของ zomboid**: ยังอ่านไม่ได้ (`online_players` = 0 เสมอ) — คำสั่ง `players` ของ PZ
+  ตอบเป็นหลายบรรทัด แต่ `games.ConsoleSpec.Parse` ตีความทีละบรรทัดอิสระ (EventRoster = 1 บรรทัด
+  = ทั้ง roster) ต้องรอรอบที่แก้ console model ให้ parser มี state ก่อน. ที่อ่านได้แล้วคือ event ready
 - Playtime ของผู้เล่น: อ่านจาก `{level-name}/stats/{uuid}.json` ตอนเรียก GET players — จำกัด 50 คน/request
   (เกินนั้นคืน 0 = ไม่รู้) เพราะเป็นไฟล์ละคน = N round-trip ต่อการเปิดหน้า
 - File manager: อัปโหลด/ดาวน์โหลดไฟล์ใหญ่แบบ binary (artifact/mod) — ตอนนี้รองรับแค่ browse/แก้ไฟล์ text/mkdir/rename/delete

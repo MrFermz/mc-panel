@@ -35,8 +35,9 @@ type ProvisionEnv struct {
 
 	HTTP   *http.Client
 	Docker *client.Client
-	// RuntimeImagePrefix มาจาก config ของ agent (GM_RUNTIME_IMAGE_PREFIX)
-	RuntimeImagePrefix string
+	// RuntimeImageNamespace มาจาก config ของ agent (GM_RUNTIME_IMAGE_NAMESPACE) —
+	// ชื่อ image เต็มคือ {namespace}/{ชื่อ image ของเกม}:{tag} ซึ่ง definition เป็นคนประกอบ
+	RuntimeImageNamespace string
 	// Chown โอน ownership ของทั้ง dir ให้ user ที่ container รัน — เรียกหลังเขียนไฟล์
 	// ที่ tool ของเกม (เช่น installer ที่รันเป็น uid 1000) ต้องแตะต่อ
 	Chown func()

@@ -14,7 +14,6 @@ import {
 import {
   createServerResponseSchema,
   jobResponseSchema,
-  DEFAULT_GAME,
   type Permission,
   type Server,
 } from "@/lib/types";
@@ -90,7 +89,7 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
         {
           name: meta.name.trim(),
           node_id: meta.nodeId,
-          game: DEFAULT_GAME,
+          game: meta.game,
           variant: meta.variant,
           game_version: meta.gameVersion,
           memory_mb: Number(meta.memoryMb),

@@ -59,7 +59,7 @@ services:
       NATS_URL: nats://${NATS_AGENT_USER}:${NATS_AGENT_PASSWORD}@nats:4222
       GM_DATA_DIR: ${GM_DATA_DIR}
       GM_NETWORK: game-manager-servers
-      GM_RUNTIME_IMAGE_PREFIX: game-manager/runtime-java
+      GM_RUNTIME_IMAGE_NAMESPACE: game-manager
       GOWORK: "off"
       GOCACHE: /gocache
     volumes:

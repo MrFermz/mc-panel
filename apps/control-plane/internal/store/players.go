@@ -65,35 +65,31 @@ func (s *Store) RemoveServerPlayer(ctx context.Context, serverID, playerUUID uui
 	return nil
 }
 
-// NextFreeHostPort คืน host_port ว่างต่ำสุดบน node เริ่มจาก startPort (cap 65535)
-// สำหรับ prefill ฝั่ง web เท่านั้น — ไม่ได้ reserve จริง (create เป็นคน enforce UNIQUE)
-// startPort มาจาก game definition (Definition.DefaultHostPort) ไม่ใช่ค่าคงที่ของ store
-func (s *Store) NextFreeHostPort(ctx context.Context, nodeID uuid.UUID, startPort int) (int, error) {
+// HostPortUsage = host_port ที่ถูกใช้อยู่บน node หนึ่ง + เกมของ server ตัวนั้น
+// (เกมเป็นตัวบอกว่า instance นั้นกิน port ต่อจากนี้อีกกี่ตัว — store ไม่รู้เรื่องนั้นเอง)
+type HostPortUsage struct {
+	Port int
+	Game string
+}
+
+// ListHostPortUsage คืน host_port ทั้งหมดที่ถูกจองไว้บน node (รวมของที่อยู่ในถังขยะ —
+// ไฟล์ยังอยู่และ restore แล้วต้อง start ได้ จึงยังนับว่ากิน port อยู่)
+func (s *Store) ListHostPortUsage(ctx context.Context, nodeID uuid.UUID) ([]HostPortUsage, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT host_port FROM servers
+		SELECT host_port, game FROM servers
 		WHERE node_id = $1 AND host_port IS NOT NULL`, nodeID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer rows.Close()
 
-	taken := make(map[int]bool)
+	var out []HostPortUsage
 	for rows.Next() {
-		var p int
-		if err := rows.Scan(&p); err != nil {
-			return 0, err
+		var u HostPortUsage
+		if err := rows.Scan(&u.Port, &u.Game); err != nil {
+			return nil, err
 		}
-		taken[p] = true
+		out = append(out, u)
 	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
-	const maxPort = 65535
-	for p := startPort; p <= maxPort; p++ {
-		if !taken[p] {
-			return p, nil
-		}
-	}
-	return maxPort, nil
+	return out, rows.Err()
 }

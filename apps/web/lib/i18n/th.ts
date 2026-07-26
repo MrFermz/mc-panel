@@ -283,6 +283,9 @@ export const th: Dictionary = {
   "new.title": "สร้างเซิร์ฟเวอร์ใหม่",
   "new.subtitle": "เซิร์ฟเวอร์จะถูกจัดเตรียมบนโหนดที่เลือกและเริ่มต้นในสถานะหยุด",
   "new.name": "ชื่อเซิร์ฟเวอร์",
+  "new.game": "เกม",
+  "new.selectGame": "เลือกเกม",
+  "new.loadingGames": "กำลังโหลดรายการเกม...",
   "new.node": "โหนด",
   "new.selectNode": "เลือกโหนด",
   "new.loadingNodes": "กำลังโหลดโหนด...",
@@ -395,6 +398,8 @@ export const th: Dictionary = {
   "players.removeTitle": "นำผู้เล่นออก?",
   "players.removeDesc": "\"{name}\" จะถูกนำออกจาก allowlist",
   "players.allowlistOn": "เปิดใช้งาน allowlist อยู่",
+  "players.unsupported":
+    "{game} เก็บรายชื่อผู้เล่นไว้ในตัวเกมเอง panel จึงจัดการ allowlist ให้ไม่ได้",
   "players.allowlistOff":
     "allowlist ปิดอยู่ — ผู้เล่นที่เพิ่มที่นี่จะยังไม่ถูกบังคับใช้จนกว่าจะเปิด allowlist",
   "players.allowlistApplyHint":

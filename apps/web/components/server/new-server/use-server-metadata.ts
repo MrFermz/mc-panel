@@ -4,16 +4,18 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, getNextPort } from "@/lib/api";
 import {
+  metaGamesResponseSchema,
   metaNodesResponseSchema,
   metaVariantsResponseSchema,
   nodesResponseSchema,
   serversResponseSchema,
   versionsResponseSchema,
-  DEFAULT_GAME,
+  type MetaGame,
   type MetaNode,
   type MetaVariant,
 } from "@/lib/types";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
+import { gameProfile } from "@/lib/games";
 import { useMe } from "@/lib/use-me";
 
 // งบ RAM ของโหนดที่เลือก — advisory ล้วน (backend เป็นคนปฏิเสธจริงด้วย insufficient_memory)
@@ -26,6 +28,8 @@ export interface RamBudget {
 
 export interface ServerMetadata {
   name: string;
+  // game = เกมที่กำลังจะสร้าง — "" จนกว่ารายการเกมจะโหลดเสร็จ (ไม่มี default ตายตัวใน web)
+  game: string;
   nodeId: string;
   variant: string;
   gameVersion: string;
@@ -34,6 +38,7 @@ export interface ServerMetadata {
   acceptLicense: boolean;
 
   setName: (v: string) => void;
+  setGame: (v: string) => void;
   setNodeId: (v: string) => void;
   setVariant: (v: string) => void;
   setGameVersion: (v: string) => void;
@@ -42,8 +47,12 @@ export interface ServerMetadata {
   setAcceptLicense: (v: boolean) => void;
 
   requiresLicense: boolean;
+  // minMemoryMb ของเกมที่เลือก (ค่าจาก backend — ต่างกันต่อเกม)
+  minMemoryMb: number;
   valid: boolean;
 
+  games: MetaGame[];
+  gamesPending: boolean;
   nodes: MetaNode[];
   nodesPending: boolean;
   types: MetaVariant[];
@@ -61,6 +70,7 @@ export interface ServerMetadata {
 export function useServerMetadata(): ServerMetadata {
   const me = useMe().data?.user;
   const [name, setName] = React.useState("");
+  const [game, setGame] = React.useState("");
   const [nodeId, setNodeId] = React.useState("");
   const [variant, setVariant] = React.useState("");
   const [gameVersion, setGameVersion] = React.useState("");
@@ -69,6 +79,21 @@ export function useServerMetadata(): ServerMetadata {
   // จำว่า user แตะช่อง port เองหรือยัง — ถ้าแตะแล้วห้าม auto-prefill ทับ
   const [portEdited, setPortEdited] = React.useState(false);
   const [acceptLicense, setAcceptLicense] = React.useState(false);
+
+  // รายการเกมมาจาก backend เสมอ — web ไม่ได้ตัดสินใจเองว่ารองรับเกมอะไรบ้าง
+  const gamesQuery = useQuery({
+    queryKey: ["meta", "games"],
+    queryFn: () => apiGet("/api/meta/games", metaGamesResponseSchema),
+  });
+  const gamesList = React.useMemo(
+    () => gamesQuery.data?.games ?? [],
+    [gamesQuery.data],
+  );
+  // เลือกเกมแรกให้อัตโนมัติ (registry ฝั่ง backend เรียงตามลำดับที่อยากให้เห็น)
+  React.useEffect(() => {
+    const first = gamesList[0];
+    if (game === "" && first) setGame(first.id);
+  }, [game, gamesList]);
 
   const nodesQuery = useQuery({
     queryKey: ["meta", "nodes"],
@@ -87,9 +112,9 @@ export function useServerMetadata(): ServerMetadata {
 
   // แนะนำ host port ว่างของ node ที่เลือก — พังก็ปล่อยช่องว่างไว้เฉย ๆ (ไม่ crash)
   const nextPortQuery = useQuery({
-    queryKey: ["meta", "next-port", nodeId],
-    queryFn: () => getNextPort(nodeId),
-    enabled: nodeId !== "",
+    queryKey: ["meta", "next-port", nodeId, game],
+    queryFn: () => getNextPort(nodeId, game),
+    enabled: nodeId !== "" && game !== "",
     retry: false,
   });
   const suggestedPort = nextPortQuery.data;
@@ -108,6 +133,13 @@ export function useServerMetadata(): ServerMetadata {
   // (บังคับล้างที่นี่ ไม่ฝากไว้กับคนเรียก)
   const onVariantChange = React.useCallback((v: string) => {
     setVariant(v);
+    setGameVersion("");
+  }, []);
+
+  // เปลี่ยนเกม = variant/version ชุดเดิมใช้ไม่ได้อีกแล้ว ต้องล้างทั้งคู่
+  const onGameChange = React.useCallback((v: string) => {
+    setGame(v);
+    setVariant("");
     setGameVersion("");
   }, []);
 
@@ -134,25 +166,32 @@ export function useServerMetadata(): ServerMetadata {
 
   // variant + รายการเวอร์ชันเป็นของ game definition — ทุก query ต้องบอกว่าถามในนามเกมไหน
   const typesQuery = useQuery({
-    queryKey: ["meta", "variants", DEFAULT_GAME],
+    queryKey: ["meta", "variants", game],
     queryFn: () =>
       apiGet(
-        `/api/meta/variants?game=${encodeURIComponent(DEFAULT_GAME)}`,
+        `/api/meta/variants?game=${encodeURIComponent(game)}`,
         metaVariantsResponseSchema,
       ),
+    enabled: game !== "",
   });
   const versionsQuery = useQuery({
-    queryKey: ["meta", "versions", DEFAULT_GAME, variant],
+    queryKey: ["meta", "versions", game, variant],
     queryFn: () =>
       apiGet(
-        `/api/meta/versions?game=${encodeURIComponent(DEFAULT_GAME)}&type=${encodeURIComponent(variant)}`,
+        `/api/meta/versions?game=${encodeURIComponent(game)}&type=${encodeURIComponent(variant)}`,
         versionsResponseSchema,
       ),
-    enabled: variant !== "",
+    enabled: game !== "" && variant !== "",
   });
 
+  const selectedGame = gamesList.find((g) => g.id === game);
   const selectedType = typesQuery.data?.types.find((x) => x.id === variant);
-  const requiresLicense = selectedType?.requires_license ?? variant !== "velocity";
+  // ค่าจริงมาจาก backend — fallback ระหว่างโหลดใช้กติกาของ game profile ฝั่ง web
+  const requiresLicense =
+    selectedType?.requires_license ??
+    gameProfile(game).variantRequiresLicense(variant);
+  // เกมที่ยังโหลดรายการไม่เสร็จ = ใช้เพดานล่างที่ปลอดภัยที่สุดไปก่อน (backend เป็นคนปฏิเสธจริง)
+  const minMemoryMb = selectedGame?.min_memory_mb ?? 512;
 
   const memory = Number(memoryMb);
   const port = hostPort === "" ? null : Number(hostPort);
@@ -178,14 +217,16 @@ export function useServerMetadata(): ServerMetadata {
     nodeId !== "" &&
     variant !== "" &&
     gameVersion !== "" &&
+    game !== "" &&
     Number.isInteger(memory) &&
-    memory >= 512 &&
+    memory >= minMemoryMb &&
     (port === null ||
       (Number.isInteger(port) && port >= 1024 && port <= 65535)) &&
     (!requiresLicense || acceptLicense);
 
   return {
     name,
+    game,
     nodeId,
     variant,
     gameVersion,
@@ -193,6 +234,7 @@ export function useServerMetadata(): ServerMetadata {
     hostPort,
     acceptLicense,
     setName,
+    setGame: onGameChange,
     setNodeId,
     setVariant: onVariantChange,
     setGameVersion,
@@ -200,7 +242,10 @@ export function useServerMetadata(): ServerMetadata {
     setHostPort: onHostPortChange,
     setAcceptLicense,
     requiresLicense,
+    minMemoryMb,
     valid,
+    games: gamesList,
+    gamesPending: gamesQuery.isPending,
     nodes,
     nodesPending: nodesQuery.isPending,
     types: typesQuery.data?.types ?? [],

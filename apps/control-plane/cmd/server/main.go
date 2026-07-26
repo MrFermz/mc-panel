@@ -33,6 +33,7 @@ import (
 	"github.com/game-manager/control-plane/internal/events"
 	"github.com/game-manager/control-plane/internal/games"
 	"github.com/game-manager/control-plane/internal/games/minecraft"
+	"github.com/game-manager/control-plane/internal/games/zomboid"
 	"github.com/game-manager/control-plane/internal/httpapi"
 	"github.com/game-manager/control-plane/internal/jobs"
 	"github.com/game-manager/control-plane/internal/seed"
@@ -226,11 +227,12 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	am := auth.NewManager(st, rdb, cfg.JWTSecret, cfg.CookieSecure, log)
 	hub := agenthub.NewHub(st, rings, wsHub, statsCache, eventsHub, log)
 	// registry ของ game definition — เกมที่ instance นี้รองรับ ลงทะเบียนที่นี่ที่เดียว
-	// (เฟสนี้มี minecraft เกมเดียว) ทุก layer ที่ต้องรู้เรื่องเกมรับ registry ตัวนี้ไป
+	// ทุก layer ที่ต้องรู้เรื่องเกมรับ registry ตัวนี้ไป (ลำดับที่นี่ = ลำดับที่ UI เห็น)
 	gameRegistry := games.NewRegistry(
 		minecraft.New(minecraft.Deps{
 			Avatars: avatarcache.New(st, minecraft.FetchAvatar).Avatar,
 		}),
+		zomboid.New(),
 	)
 	disp := jobs.NewDispatcher(st, js, eventsHub, gameRegistry, log)
 

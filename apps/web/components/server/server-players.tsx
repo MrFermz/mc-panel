@@ -136,6 +136,9 @@ export default function ServerPlayers({
   });
 
   const allowlistEnabled = players.data?.allowlist_enabled ?? false;
+  // เกมที่ไม่มี allowlist ให้ panel จัดการ — ซ่อนแบนเนอร์/ฟอร์มเพิ่มชื่อทั้งหมด
+  // (backend ตอบ 409 unsupported อยู่แล้ว แต่ไม่ควรให้ user เจอทางตัน)
+  const allowlistSupported = players.data?.allowlist_supported ?? true;
 
   const invalidatePlayers = () =>
     queryClient.invalidateQueries({
@@ -307,7 +310,11 @@ export default function ServerPlayers({
 
   return (
     <div className="grid gap-4">
-      {!allowlistEnabled ? (
+      {!allowlistSupported ? (
+        <p className="text-muted-foreground text-sm">
+          {t("players.unsupported", { game: game.label })}
+        </p>
+      ) : !allowlistEnabled ? (
         <div className="border-destructive/40 bg-destructive/5 grid gap-2 rounded-md border p-3 text-sm sm:flex sm:items-center sm:justify-between">
           <div className="grid gap-1">
             <p className="font-medium">{t("players.allowlistOff")}</p>
@@ -334,7 +341,7 @@ export default function ServerPlayers({
         </p>
       )}
 
-      {canManage && (
+      {canManage && allowlistSupported && (
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(e) => {

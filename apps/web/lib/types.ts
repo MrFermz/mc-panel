@@ -238,6 +238,15 @@ export const metaNodeSchema = z.object({
 });
 export type MetaNode = z.infer<typeof metaNodeSchema>;
 
+// GET /api/meta/games — เกมที่ instance นี้รองรับ (source of truth ของ dropdown ในฟอร์มสร้าง)
+export const metaGameSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  min_memory_mb: z.number(),
+  license_name: z.string(),
+});
+export type MetaGame = z.infer<typeof metaGameSchema>;
+
 export const metaVariantSchema = z.object({
   id: variantIdSchema,
   label: z.string(),
@@ -267,6 +276,9 @@ export const serverPlayerSchema = z.object({
 export type ServerPlayer = z.infer<typeof serverPlayerSchema>;
 
 export const playersResponseSchema = z.object({
+  // allowlist_supported=false = เกมนี้ไม่มีไฟล์รายชื่อที่ panel เขียนได้เลย
+  // (แท็บยังใช้ดูผู้เล่น/สั่ง moderation ได้ แค่ไม่มี allowlist ให้จัดการ)
+  allowlist_supported: z.boolean().default(true),
   allowlist_enabled: z.boolean().default(false),
   players: z.array(serverPlayerSchema),
 });
@@ -341,6 +353,9 @@ export type UserDirectoryResponse = z.infer<typeof userDirectoryResponseSchema>;
 
 export const metaNodesResponseSchema = z.object({
   nodes: z.array(metaNodeSchema),
+});
+export const metaGamesResponseSchema = z.object({
+  games: z.array(metaGameSchema),
 });
 export const metaVariantsResponseSchema = z.object({
   types: z.array(metaVariantSchema),

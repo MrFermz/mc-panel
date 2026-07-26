@@ -2,8 +2,6 @@
 package minecraft
 
 import (
-	"strings"
-
 	"github.com/game-manager/control-plane/internal/games"
 )
 
@@ -20,7 +18,8 @@ func configSpec() games.ConfigSpec {
 		FileName: propertiesFileName,
 		// MC เขียนทับ server.properties ตอน shutdown — แก้ตอนรันอยู่จะถูก overwrite หายทันที
 		EditableWhileRunning: false,
-		Format:               propertiesFormat{},
+		// server.properties เป็น key=value ตรง ๆ — ใช้ format กลางของ games ได้เลย
+		Format: games.KeyValueFormat{},
 		Fields: []games.ConfigField{
 			{Key: "gamemode", Label: "Game Mode", Type: "enum", Options: []string{"survival", "creative", "adventure", "spectator"}, Default: "survival"},
 			{Key: "difficulty", Label: "Difficulty", Type: "enum", Options: []string{"peaceful", "easy", "normal", "hard"}, Default: "easy"},
@@ -49,70 +48,4 @@ func configSpec() games.ConfigSpec {
 			{Key: "max-world-size", Label: "Max World Size", Type: "int", Min: intPtr(1), Max: intPtr(29999984), Default: "29999984"},
 		},
 	}
-}
-
-// propertiesFormat = ไวยากรณ์ java .properties (key=value, comment ขึ้นต้นด้วย # หรือ !)
-type propertiesFormat struct{}
-
-// Parse แยก key=value จาก text (ข้าม comment/บรรทัดว่าง). split ตัว `=` แรกเท่านั้น
-func (propertiesFormat) Parse(text string) map[string]string {
-	out := make(map[string]string)
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "!") {
-			continue
-		}
-		i := strings.IndexByte(line, '=')
-		if i < 0 {
-			continue
-		}
-		key := strings.TrimSpace(line[:i])
-		if key == "" {
-			continue
-		}
-		out[key] = strings.TrimSpace(line[i+1:])
-	}
-	return out
-}
-
-// Merge รวมค่าที่จะเปลี่ยนกลับเข้าไฟล์ โดยรักษา comment/บรรทัดว่าง/ลำดับ key เดิม
-// (key ที่มีอยู่แล้ว → แทนค่าในบรรทัดนั้น; catalog key ที่ยังไม่มี → append ต่อท้าย)
-// ส่วนที่เหลือ byte-identical
-func (propertiesFormat) Merge(text string, values map[string]string, order []games.ConfigField) string {
-	lines := strings.Split(text, "\n")
-	seen := make(map[string]bool)
-
-	for idx, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "!") {
-			continue
-		}
-		i := strings.IndexByte(line, '=')
-		if i < 0 {
-			continue
-		}
-		key := strings.TrimSpace(line[:i])
-		if v, ok := values[key]; ok {
-			lines[idx] = key + "=" + v
-			seen[key] = true
-		}
-	}
-
-	// append catalog key ที่ยังไม่มีในไฟล์ ตามลำดับ catalog (deterministic)
-	var appended []string
-	for _, f := range order {
-		if v, ok := values[f.Key]; ok && !seen[f.Key] {
-			appended = append(appended, f.Key+"="+v)
-		}
-	}
-
-	if len(appended) > 0 {
-		// ตัด trailing empty line ที่เกิดจากไฟล์ลงท้ายด้วย "\n" ก่อน append เพื่อไม่ให้เกิดบรรทัดว่างคั่น
-		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-			lines = lines[:len(lines)-1]
-		}
-		lines = append(lines, appended...)
-	}
-
-	return strings.Join(lines, "\n")
 }
