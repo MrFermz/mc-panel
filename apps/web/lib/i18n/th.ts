@@ -44,7 +44,6 @@ export const th: Dictionary = {
   "userMenu.logout": "ออกจากระบบ",
 
   // ---------- login ----------
-  "login.title": "game-manager",
   "login.subtitle": "เข้าสู่ระบบเพื่อจัดการเซิร์ฟเวอร์ของคุณ",
   "login.username": "ชื่อผู้ใช้",
   "login.password": "รหัสผ่าน",

@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiSend, ApiError } from "@/lib/api";
 import { userResponseSchema } from "@/lib/types";
 import { useT } from "@/lib/i18n";
+import { APP_NAME } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,7 +67,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">{t("login.title")}</CardTitle>
+          <CardTitle className="text-xl">{APP_NAME}</CardTitle>
           <CardDescription>{t("login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>

@@ -8,10 +8,11 @@ import {
   normalizeTheme,
 } from "@/lib/settings/theme-shared";
 import { LANG_COOKIE, normalizeLocale } from "@/lib/i18n/config";
+import { APP_NAME } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "game-manager",
+  title: APP_NAME,
   description: "Minecraft server management panel",
 };
 

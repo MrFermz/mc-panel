@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,7 +34,6 @@ const (
 // จึงต้องเป็น path ฝั่ง host เสมอ (GM_DATA_DIR mount ด้วย path เดียวกันทั้งสองฝั่ง)
 type DockerRunner struct {
 	cli     *client.Client
-	dataDir string
 	network string
 	// games = ตัวหา game definition ของแต่ละ instance — runner ไม่รู้จักเกมใด ๆ เอง
 	// (container port, env ของ launch script, คำสั่ง stop มาจาก definition ของ instance นั้น)
@@ -46,10 +44,9 @@ type DockerRunner struct {
 	stopRequested map[string]struct{}
 }
 
-func NewDockerRunner(cli *client.Client, dataDir, network string, gl games.InstanceLookup) *DockerRunner {
+func NewDockerRunner(cli *client.Client, network string, gl games.InstanceLookup) *DockerRunner {
 	return &DockerRunner{
 		cli:           cli,
-		dataDir:       dataDir,
 		network:       network,
 		games:         gl,
 		stopRequested: make(map[string]struct{}),
@@ -131,7 +128,7 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 		},
 	}
 	hostConfig := &container.HostConfig{
-		Binds:       []string{filepath.Join(r.dataDir, cfg.ID) + ":" + games.ContainerDataDir},
+		Binds:       []string{cfg.WorkDir + ":" + games.ContainerDataDir},
 		CapDrop:     strslice.StrSlice{"ALL"},
 		SecurityOpt: []string{"no-new-privileges"},
 		// agent เป็นเจ้าของ lifecycle เอง — docker restart เองจะทำ state ใน DB เพี้ยน

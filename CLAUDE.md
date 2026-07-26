@@ -89,6 +89,10 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
 
 ## Conventions
 
+- **ชื่อที่แสดงให้ user เห็นคือ "Game manager"** มาจาก `APP_NAME` (`apps/web/lib/brand.ts`) ที่เดียว
+  (header/sidebar/tab title/หน้า login + prefix ของ system line ใน console) — ไม่ใช่ข้อความที่แปลตามภาษา
+  จึงไม่อยู่ใน i18n dictionary. `game-manager` ที่เหลือเป็น **identifier** (repo, go module,
+  ชื่อ container/label/image/network) — ห้ามเปลี่ยนตามชื่อที่แสดง
 - **Comment ภาษาไทย** เขียนเฉพาะจุดที่อธิบาย "ทำไม" หรือ constraint ที่โค้ดบอกเองไม่ได้ —
   ห้าม comment เล่าว่าบรรทัดถัดไปทำอะไร / **log message ภาษาอังกฤษ** (เพื่อ grep + log tooling)
 - Identifier/ชื่อไฟล์ภาษาอังกฤษทั้งหมด
@@ -173,7 +177,10 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   stream `JOBS` (WorkQueue) / `RESULTS`, consumer สร้างโดย control-plane เท่านั้น
   (NATS user ของ agent ไม่มีสิทธิ์สร้าง — ดู `infra/nats/nats-server.conf`)
 - Docker: container ของ instance ชื่อ `game-manager-{server_id}`, label `gamemanager.managed_by=game-manager-agent`,
-  ข้อมูลอยู่ `{GM_DATA_DIR}/{server_id}` bind mount เป็น `/data` (`games.ContainerDataDir`)
+  ข้อมูลอยู่ `{GM_DATA_DIR}/{game}/{server_id}` bind mount เป็น `/data` (`games.ContainerDataDir`)
+  — path ของ instance ประกอบที่ `filemanager.Layout` ที่เดียว (`Dir(game, id)` ตอน provision,
+  `Find(id)` สำหรับ layer ที่รู้แค่ server id) **ห้าม `filepath.Join(dataDir, serverID)` เอง**;
+  instance เก่าที่ยังอยู่ชั้นบนสุดถูกย้ายให้ตอน agent boot (`games.MigrateLegacyLayout`)
 - เวลาแก้ Makefile: จำไว้ว่า buf/goose เรียกผ่าน `go run` (ไม่ assume ว่าติดตั้งไว้)
 
 ## Flow สำคัญที่ต้องเข้าใจก่อนแก้

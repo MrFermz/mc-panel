@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { BoxIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { APP_NAME } from "@/lib/brand";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import { adminItems, visibleFor } from "@/components/layout/sidebar-nav";
 import { EventsListener } from "@/components/layout/events-listener";
@@ -38,7 +39,7 @@ export default function StandaloneLayout({
           <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-4 md:px-6">
             <Link href="/" className="flex shrink-0 items-center gap-2">
               <BoxIcon className="size-5 shrink-0" />
-              <span className="hidden font-semibold sm:inline">game-manager</span>
+              <span className="hidden font-semibold sm:inline">{APP_NAME}</span>
             </Link>
             <span className="text-muted-foreground/50" aria-hidden>
               /

@@ -24,7 +24,7 @@ type ServerConfig struct {
 	ID             string
 	StartupCommand string // ใช้เฉพาะ native mode (docker mode ใช้ CMD ใน image)
 	MemoryMB       int    // hard limit ของทั้ง container (definition เป็นคนแปลงเป็น heap/หน่วยของ runtime)
-	WorkDir        string // เช่น /data/servers/{id}/ — ต้องเป็น dir เดียวกันไม่ว่าจะรัน native หรือ docker
+	WorkDir        string // dir ของ instance บน host (จาก filemanager.Layout) — bind เป็น /data ใน container
 	Port           int    // host port; 0 = ไม่ expose (เข้าถึงผ่าน proxy ใน network เดียวกัน)
 	Image          string // docker image เช่น game-manager/runtime-java:21 — control-plane เลือกจาก game definition
 }

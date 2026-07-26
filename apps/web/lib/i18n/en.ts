@@ -42,7 +42,6 @@ export const en = {
   "userMenu.logout": "Log out",
 
   // ---------- login ----------
-  "login.title": "game-manager",
   "login.subtitle": "Sign in to manage your servers",
   "login.username": "Username",
   "login.password": "Password",

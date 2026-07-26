@@ -14,6 +14,7 @@ import { serversResponseSchema, type Server } from "@/lib/types";
 import { formatUptime } from "@/lib/format";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useT } from "@/lib/i18n";
+import { APP_NAME } from "@/lib/brand";
 import { gameProfile } from "@/lib/games";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import { useSettingsStore } from "@/lib/settings/store";
@@ -164,7 +165,7 @@ export default function ServerListPage() {
         <header className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <BoxIcon className="size-6 shrink-0" />
-            <span className="text-lg font-semibold">game-manager</span>
+            <span className="text-lg font-semibold">{APP_NAME}</span>
           </div>
           <UserMenu user={user} />
         </header>

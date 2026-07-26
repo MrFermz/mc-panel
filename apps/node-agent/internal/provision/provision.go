@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -42,16 +41,16 @@ type Spec struct {
 
 type Provisioner struct {
 	docker             *client.Client
-	dataDir            string
+	layout             filemanager.Layout
 	runtimeImagePrefix string
 	games              *games.Registry
 	http               *http.Client
 }
 
-func New(docker *client.Client, dataDir, runtimeImagePrefix string, gr *games.Registry) *Provisioner {
+func New(docker *client.Client, layout filemanager.Layout, runtimeImagePrefix string, gr *games.Registry) *Provisioner {
 	return &Provisioner{
 		docker:             docker,
-		dataDir:            dataDir,
+		layout:             layout,
 		runtimeImagePrefix: runtimeImagePrefix,
 		games:              gr,
 		http: &http.Client{
@@ -66,19 +65,6 @@ func New(docker *client.Client, dataDir, runtimeImagePrefix string, gr *games.Re
 			},
 		},
 	}
-}
-
-// serverDir validate server id แล้วคืน path จริงใต้ GM_DATA_DIR
-// id มาจาก NATS message — ห้ามเชื่อว่าเป็น UUID เสมอ ต้องผ่าน SafeJoin ก่อนแตะ filesystem
-func (p *Provisioner) serverDir(serverID string) (string, error) {
-	if serverID == "" || strings.ContainsAny(serverID, "/\\") || serverID == "." || serverID == ".." {
-		return "", fmt.Errorf("invalid server id %q", serverID)
-	}
-	dir, err := filemanager.SafeJoin(p.dataDir, serverID)
-	if err != nil {
-		return "", fmt.Errorf("server path validation failed: %w", err)
-	}
-	return dir, nil
 }
 
 // resolveGame หา definition + เช็คว่า variant ที่ขอมามีจริงในเกมนั้น
@@ -100,7 +86,9 @@ func (p *Provisioner) CreateServer(ctx context.Context, serverID string, spec Sp
 		return "", err
 	}
 
-	dir, err := p.serverDir(serverID)
+	// game id มาจาก definition ที่ resolve แล้ว (ไม่ใช่ค่าดิบใน payload) — dir ของ instance
+	// จึงอยู่ใต้ชั้นเกมที่ถูกต้องเสมอแม้ job เก่าจะไม่มี field `game` มาด้วย
+	dir, err := p.layout.Dir(def.ID, serverID)
 	if err != nil {
 		return "", err
 	}
@@ -186,13 +174,19 @@ func (p *Provisioner) writePanelFiles(dir string, def *games.Definition, variant
 
 // DeleteServer ลบ directory ทั้งหมดของ server — ผู้เรียกต้อง stop/remove container ก่อน
 func (p *Provisioner) DeleteServer(serverID string) error {
-	dir, err := p.serverDir(serverID)
+	dir, err := p.layout.Find(serverID)
+	if errors.Is(err, filemanager.ErrInstanceNotFound) {
+		// ลบไปแล้ว/ไม่เคยมี — job ต้อง idempotent (โดน redeliver ได้เสมอ)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	// กันพลาดชั้นสุดท้าย: ต้องไม่ใช่ตัว data dir เอง (SafeJoin คืน path ที่ resolve แล้ว)
-	if resolved, err := filepath.EvalSymlinks(p.dataDir); err == nil && dir == resolved {
-		return errors.New("refusing to delete data dir root")
+	// กันพลาดชั้นสุดท้าย: ต้องไม่ใช่ data dir เองหรือชั้นเกม (Find คืน path ที่ resolve แล้ว)
+	for _, root := range []string{p.layout.DataDir, filepath.Dir(dir)} {
+		if resolved, err := filepath.EvalSymlinks(root); err == nil && dir == resolved {
+			return errors.New("refusing to delete a directory above the instance")
+		}
 	}
 	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil

@@ -203,7 +203,7 @@ cap 2048MB, และไม่เกินครึ่งของ limit. เช
 ### Soft delete / restore / purge
 
 `DELETE /api/servers/{id}` ไม่ลบอะไรจริง — แค่ set `servers.deleted_at` (ต้องหยุด server ก่อน)
-row ยังอยู่ ไฟล์ใน `{GM_DATA_DIR}/{server_id}` ยังอยู่ครบ ไม่มี job ถูก dispatch เลย ผลคือ
+row ยังอยู่ ไฟล์ใน `{GM_DATA_DIR}/{game}/{server_id}` ยังอยู่ครบ ไม่มี job ถูก dispatch เลย ผลคือ
 server หายจากทุก view ทันที (ทุก endpoint ระดับ server ตอบ 404 เพราะ `GetServerByID` filter
 `deleted_at IS NULL`) แต่ยังโผล่ใน `?scope=all` ให้ restore ได้
 

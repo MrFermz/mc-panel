@@ -87,9 +87,14 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 
 ## Design decisions สำคัญ
 
-- **Storage**: bind mount เสมอ (ไม่ใช้ named volume) — 1 instance = 1 directory `{GM_DATA_DIR}/{server_id}`
+- **Storage**: bind mount เสมอ (ไม่ใช้ named volume) — 1 instance = 1 directory
+  `{GM_DATA_DIR}/{game}/{server_id}` (ชั้นเกมทำให้ข้อมูลของแต่ละเกมไม่ปนกัน)
   - `GM_DATA_DIR` ต้องเป็น absolute path ที่ **เหมือนกันทั้งใน agent container และบน host**
     (agent เขียนไฟล์เองผ่าน mount และสั่ง bind mount ให้ sibling container ที่ docker daemon มองจาก host)
+  - layer อื่นรู้แค่ `server_id` (job start/stop, file manager, console) — `filemanager.Layout`
+    เป็นคนแปลง id เป็น path เดียวในระบบ: `Dir(game, id)` ตอน provision (รู้เกมแน่นอน) และ
+    `Find(id)` ที่สแกนชั้นเกมให้ตอนอื่น ๆ. instance ที่สร้างไว้ก่อนมีชั้นเกมถูกย้ายให้อัตโนมัติ
+    ตอน agent boot (`games.MigrateLegacyLayout` — อ่าน `.gamemanager/meta.json` เพื่อรู้ว่าเป็นเกมอะไร)
 - **1 container ต่อ 1 instance** — ชื่อ `game-manager-{server_id}`, label `gamemanager.managed_by=game-manager-agent`
 - **container ของ instance ทุกตัว**: `cap-drop=ALL`, `no-new-privileges`, user 1000:1000, memory limit,
   pids limit, ไม่มี restart policy (agent เป็นคนคุม lifecycle), stdin เปิดไว้สำหรับ console

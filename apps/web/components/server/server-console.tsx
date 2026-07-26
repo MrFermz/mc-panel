@@ -11,6 +11,7 @@ import { gameProfile, type GameProfile } from "@/lib/games";
 import { useConsoleHistoryStore } from "@/lib/console-history-store";
 import { useTheme, type ResolvedTheme } from "@/lib/settings/theme";
 import { useT } from "@/lib/i18n";
+import { APP_NAME } from "@/lib/brand";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -114,7 +115,7 @@ function levelSGR(level: string): string {
 
 function colorizeLine(raw: string, game: GameProfile): string {
   // system line จาก agent (crash cleanup ฯลฯ) — เด่นแยกจาก log ของ server
-  if (raw.startsWith("[game-manager]"))
+  if (raw.startsWith(`[${APP_NAME}]`))
     return `${SGR.magenta}${SGR.bold}${raw}${SGR.reset}`;
 
   const m = LOG_LINE_RE.exec(raw);

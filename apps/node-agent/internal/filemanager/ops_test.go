@@ -8,17 +8,20 @@ import (
 	"testing"
 )
 
-const testServerID = "srv-1"
+const (
+	testServerID = "srv-1"
+	testGameID   = "testgame"
+)
 
-// newTestManager สร้าง mcDataDir ชั่วคราว + root ของ server ให้พร้อมใช้
+// newTestManager สร้าง data dir ชั่วคราว + root ของ server ตาม Layout ให้พร้อมใช้
 func newTestManager(t *testing.T) (*Manager, string) {
 	t.Helper()
 	dataDir := t.TempDir()
-	jail := filepath.Join(dataDir, testServerID)
+	jail := filepath.Join(dataDir, testGameID, testServerID)
 	if err := os.MkdirAll(jail, 0o755); err != nil {
 		t.Fatalf("mkdir jail: %v", err)
 	}
-	return NewManager(dataDir), jail
+	return NewManager(Layout{DataDir: dataDir}), jail
 }
 
 func TestListOrdersDirsFirstThenAlpha(t *testing.T) {

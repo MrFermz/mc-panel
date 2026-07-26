@@ -9,7 +9,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/game-manager/node-agent/internal/filemanager"
 )
 
 const (
@@ -48,17 +49,18 @@ func WriteInstanceMeta(dir string, meta InstanceMeta) error {
 // กับ meta.json ที่ provision เขียนไว้ ใช้โดย runner และ tracker ที่ได้มาแค่ server id
 type InstanceLookup struct {
 	Registry *Registry
-	DataDir  string
+	Layout   filemanager.Layout
 }
 
 // DefinitionFor คืน definition + meta ของ instance
 // meta อ่านไม่ได้ (instance เก่า/ไฟล์หาย) = เกม default; registry ไม่รู้จักเกมนั้น = ok=false
 func (l InstanceLookup) DefinitionFor(serverID string) (*Definition, InstanceMeta, bool) {
-	// serverID มาจาก job/label — ห้ามให้พาออกนอก DataDir
-	if serverID == "" || strings.ContainsAny(serverID, `/\`) || serverID == "." || serverID == ".." {
+	// serverID มาจาก job/label — Layout เป็นคน validate + SafeJoin ให้ก่อนแตะ filesystem
+	dir, err := l.Layout.Find(serverID)
+	if err != nil {
 		return nil, InstanceMeta{}, false
 	}
-	meta := ReadInstanceMeta(filepath.Join(l.DataDir, serverID))
+	meta := ReadInstanceMeta(dir)
 	def, ok := l.Registry.Resolve(meta.Game)
 	if !ok {
 		return nil, meta, false

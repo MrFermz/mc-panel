@@ -126,9 +126,15 @@ func run() error {
 	// registry ของ game definition — เกมที่ agent นี้รันได้ ลงทะเบียนที่นี่ที่เดียว
 	// (เฟสนี้มี minecraft เกมเดียว) instance บน disk บอกเองว่าเป็นเกมอะไรผ่าน .gamemanager/meta.json
 	gameRegistry := games.NewRegistry(minecraft.New())
-	gameLookup := games.InstanceLookup{Registry: gameRegistry, DataDir: cfg.mcDataDir}
+	layout := filemanager.Layout{DataDir: cfg.mcDataDir}
+	// instance ที่ provision ไว้ก่อนมีชั้นเกมยังอยู่ที่ {GM_DATA_DIR}/{server_id} — ย้ายให้
+	// ตอน boot เท่านั้น (container ที่รันอยู่ bind path เดิมค้างไว้จนกว่าจะถูกสร้างใหม่)
+	if err := games.MigrateLegacyLayout(layout, gameRegistry); err != nil {
+		return fmt.Errorf("migrate instance directories: %w", err)
+	}
+	gameLookup := games.InstanceLookup{Registry: gameRegistry, Layout: layout}
 
-	dockerRunner := runner.NewDockerRunner(dockerCli, cfg.mcDataDir, cfg.mcNetwork, gameLookup)
+	dockerRunner := runner.NewDockerRunner(dockerCli, cfg.mcNetwork, gameLookup)
 	grpcCli := grpcclient.New(cfg.controlPlaneGRPC, cfg.agentToken, buildHello(cfg.mcDataDir))
 	// tracker อ่านสถานะในเกมจาก console (ผู้เล่นออนไลน์/metric) แล้ว serverstats แนบไปกับ stats
 	// สองตัวอ้างถึงกัน: Manager ต้องมี observer ตั้งแต่สร้าง / tracker เขียน stdin ผ่าน Manager
@@ -144,7 +150,7 @@ func run() error {
 		}
 	})
 
-	files := filemanager.NewManager(cfg.mcDataDir)
+	files := filemanager.NewManager(layout)
 	grpcCli.OnFileRequest(func(req *agentv1.FileRequest) *agentv1.FileResponse {
 		return handleFileRequest(files, req)
 	})
@@ -191,8 +197,8 @@ func run() error {
 	defer nc.Drain()
 	log.Printf("nats connected")
 
-	prov := provision.New(dockerCli, cfg.mcDataDir, cfg.runtimeImagePrefix, gameRegistry)
-	consumer, err := jobs.NewConsumer(nc, nodeID, jobs.NewHandler(dockerRunner, prov, cfg.mcDataDir))
+	prov := provision.New(dockerCli, layout, cfg.runtimeImagePrefix, gameRegistry)
+	consumer, err := jobs.NewConsumer(nc, nodeID, jobs.NewHandler(dockerRunner, prov, layout))
 	if err != nil {
 		return fmt.Errorf("create jobs consumer: %w", err)
 	}

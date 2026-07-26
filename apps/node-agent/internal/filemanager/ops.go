@@ -22,19 +22,20 @@ const (
 	mcGID = 1000
 )
 
-// Manager ทำ file operation ต่อ server โดย jail = filepath.Join(mcDataDir, serverID)
+// Manager ทำ file operation ต่อ server โดย jail = dir ของ instance ตาม Layout
 // ทุก path จาก client ไม่เชื่อถือ — ต้องผ่าน SafeJoin ก่อนแตะ filesystem เสมอ
 type Manager struct {
-	mcDataDir string
+	layout Layout
 }
 
-func NewManager(mcDataDir string) *Manager {
-	return &Manager{mcDataDir: mcDataDir}
+func NewManager(layout Layout) *Manager {
+	return &Manager{layout: layout}
 }
 
 // jail คืน root ของ server นี้ — ทุก operation ต้อง SafeJoin(jail, userPath) ก่อนใช้จริง
-func (m *Manager) jail(serverID string) string {
-	return filepath.Join(m.mcDataDir, serverID)
+// (server id ไม่ได้บอกว่าเป็นเกมอะไร จึงต้องให้ Layout สแกนหาให้)
+func (m *Manager) jail(serverID string) (string, error) {
+	return m.layout.Find(serverID)
 }
 
 // FileInfo คือผลของ List ต่อ 1 entry — ตรงกับ field ของ agentv1.FileEntry
@@ -49,7 +50,11 @@ type FileInfo struct {
 // List อ่าน dir คืนรายการ entry — dir มาก่อนไฟล์ แล้วเรียงชื่อ a-z ในแต่ละกลุ่ม
 // path="" = root ของ server; ถ้า path ชี้ไปไฟล์ (ไม่ใช่ dir) → error
 func (m *Manager) List(serverID, path string) ([]FileInfo, error) {
-	full, err := SafeJoin(m.jail(serverID), path)
+	jail, err := m.jail(serverID)
+	if err != nil {
+		return nil, err
+	}
+	full, err := SafeJoin(jail, path)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +95,11 @@ func (m *Manager) List(serverID, path string) ([]FileInfo, error) {
 // Read อ่านไฟล์คืน content + truncated — เกิน maxFileSize อ่านแค่ต้นไฟล์แล้ว truncated=true
 // ถ้า path เป็น dir → error
 func (m *Manager) Read(serverID, path string) (content []byte, truncated bool, err error) {
-	full, err := SafeJoin(m.jail(serverID), path)
+	jail, err := m.jail(serverID)
+	if err != nil {
+		return nil, false, err
+	}
+	full, err := SafeJoin(jail, path)
 	if err != nil {
 		return nil, false, err
 	}
@@ -124,7 +133,11 @@ func (m *Manager) Write(serverID, path string, content []byte) error {
 	if len(content) > maxFileSize {
 		return fmt.Errorf("file too large: %d bytes exceeds limit of %d", len(content), maxFileSize)
 	}
-	full, err := SafeJoin(m.jail(serverID), path)
+	jail, err := m.jail(serverID)
+	if err != nil {
+		return err
+	}
+	full, err := SafeJoin(jail, path)
 	if err != nil {
 		return err
 	}
@@ -146,7 +159,11 @@ func (m *Manager) Write(serverID, path string, content []byte) error {
 
 // Mkdir สร้างโฟลเดอร์ (MkdirAll) แล้ว chown ให้ user 1000
 func (m *Manager) Mkdir(serverID, path string) error {
-	full, err := SafeJoin(m.jail(serverID), path)
+	jail, err := m.jail(serverID)
+	if err != nil {
+		return err
+	}
+	full, err := SafeJoin(jail, path)
 	if err != nil {
 		return err
 	}
@@ -164,16 +181,17 @@ func (m *Manager) Delete(serverID, path string) error {
 	if isRootPath(path) {
 		return errors.New("cannot delete server root")
 	}
-	full, err := SafeJoin(m.jail(serverID), path)
+	jail, err := m.jail(serverID)
+	if err != nil {
+		return err
+	}
+	full, err := SafeJoin(jail, path)
 	if err != nil {
 		return err
 	}
 	// กันเหนียวชั้นสอง: ถ้า resolve แล้วเท่ากับ jail (เช่น symlink ชี้กลับ root) ปฏิเสธ
-	jailResolved, err := SafeJoin(m.jail(serverID), "")
-	if err != nil {
-		return err
-	}
-	if full == jailResolved {
+	// (jail ผ่าน SafeJoin มาแล้วจึงเป็น path ที่ resolve symlink เรียบร้อย)
+	if full == jail {
 		return errors.New("cannot delete server root")
 	}
 	if _, err := os.Lstat(full); err != nil {
@@ -187,11 +205,15 @@ func (m *Manager) Rename(serverID, from, to string) error {
 	if isRootPath(from) || isRootPath(to) {
 		return errors.New("cannot rename server root")
 	}
-	fromFull, err := SafeJoin(m.jail(serverID), from)
+	jail, err := m.jail(serverID)
 	if err != nil {
 		return err
 	}
-	toFull, err := SafeJoin(m.jail(serverID), to)
+	fromFull, err := SafeJoin(jail, from)
+	if err != nil {
+		return err
+	}
+	toFull, err := SafeJoin(jail, to)
 	if err != nil {
 		return err
 	}
