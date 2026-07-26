@@ -15,6 +15,9 @@ option go_package = "github.com/game-manager/proto/gen/go/gamemanager/job/v1;job
 // เพราะฉะนั้นงานทุกชนิดต้องเขียนแบบ idempotent — โดน redeliver ซ้ำต้องไม่พัง
 
 message JobEnvelope {
+  // 15 = import_server ที่ถูกถอดออก — จองไว้กัน field number ถูกใช้ซ้ำถ้าฟีเจอร์กลับมา
+  reserved 15;
+
   string job_id = 1;    // UUID ของแถวใน jobs table
   string server_id = 2; // UUID ของ server ที่เกี่ยวข้อง
   oneof payload {
@@ -23,7 +26,6 @@ message JobEnvelope {
     StopServer stop_server = 12;
     KillServer kill_server = 13;
     DeleteServer delete_server = 14;
-    ImportServer import_server = 15;
   }
 }
 
@@ -38,17 +40,6 @@ message CreateServer {
   string game_version = 2;   // เวอร์ชันของเกม เช่น "1.21.4"
   bool accept_license = 3;   // user ต้องติ๊กยอมรับ license ของเกมเองตอนสร้าง ห้าม default true
   string game = 4;           // game definition id — ว่าง = game default
-}
-
-// ImportServer = เหมือน CreateServer แต่ไม่โหลด artifact — แตก zip ที่ upload มา (staged ไว้ที่
-// archive_path ใน jail ผ่าน chunked file write) เข้า server dir แล้ว provision (seed/meta/launch) ต่อ
-// ทุก entry ใน zip ต้องผ่าน SafeJoin ก่อนเขียน (กัน zip-slip) + chown 1000:1000
-message ImportServer {
-  string variant = 1;      // ชนิดของ server ภายในเกม เช่น vanilla | paper | proxy
-  string game_version = 2;
-  bool accept_license = 3;
-  string archive_path = 4; // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".gamemanager/import.zip"
-  string game = 5;         // game definition id — ว่าง = game default
 }
 
 message StartServer {

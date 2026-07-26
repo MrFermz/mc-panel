@@ -542,7 +542,7 @@ func (a *API) handleRestoreServer(w http.ResponseWriter, r *http.Request) {
 
 	a.audit(r, &user.ID, &srv.ID, "server_restored", map[string]any{"name": srv.Name})
 	a.log.Info("server restored", "server_id", srv.ID, "user_id", user.ID)
-	// กลับเข้า list ของคนที่มีสิทธิ์ — เส้นเดียวกับตอน create/import
+	// กลับเข้า list ของคนที่มีสิทธิ์ — เส้นเดียวกับตอน create
 	a.events.ServerAdded(srv.ID)
 
 	writeJSON(w, http.StatusOK, map[string]any{"server": toServerView(restored, nil)})

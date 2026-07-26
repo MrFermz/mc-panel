@@ -28,8 +28,11 @@ variant vanilla/paper/fabric/forge/velocity)
 1. **แก้ contract ก่อนแก้โค้ด** — interface ระหว่าง service มี source of truth 3 ที่:
    - REST/WS: `docs/api.md`
    - gRPC/NATS: `packages/proto/gamemanager/**/*.proto` (แก้แล้วรัน `make proto-gen` และ **commit generated code**)
-   - DB: `apps/control-plane/migrations/` (หลังมี release แล้วห้ามแก้ไฟล์เก่า — เพิ่มไฟล์ใหม่เท่านั้น
-     ตอนนี้ยัง pre-release แก้ในที่ได้)
+   - DB: `apps/control-plane/schema/schema.sql` — **ยังไม่มีระบบ migration** (ถอด goose ออกแล้ว
+     จะกลับมาทำใหม่ทีหลัง). control-plane รันไฟล์นี้ทั้งก้อนตอน boot ทุกครั้ง จึงต้อง
+     **idempotent เสมอ** (`IF NOT EXISTS` ทุกคำสั่ง) แต่ก็ **ไม่ migrate ข้อมูลเดิมให้**:
+     แก้คอลัมน์/constraint ของตารางที่ถูกสร้างไปแล้วจะไม่มีผลกับ DB เก่า — ต้อง `make reset`
+     (dev) หรือลบ volume ทิ้งเอง
 2. **Lifecycle command (create/start/stop/kill/delete) ต้องเป็น job ผ่าน NATS เสมอ** โดยมี `jobs` table
    เป็น source of truth — ห้ามยัดคำสั่งพวกนี้เข้า gRPC stream / ห้ามให้ agent เปิด port รับ connection เข้า
 3. **ทุก endpoint ต้องผูก permission ก่อน merge** (is_admin ข้ามได้ทุกด่าน):
@@ -136,8 +139,7 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
   ต้อง `useSetPageServer()` เอง (`ServerPageShell` ทำให้แล้ว) หน้าไหนไม่ผูก server ก็เหลือแค่ชื่อหน้า
 - **ไม่มีหน้า detail ต่อ server แล้ว** — `/servers/[id]` ถูกลบทิ้ง (ทุกแท็บย้ายไปเป็นหน้าใน general หมด)
   ที่ไหนอยากพา user ไปดู server ตัวหนึ่ง ให้ `setDashboardServerId(id)` แล้วไป `/dashboard` แทนการ push path
-  (ตัวอย่าง: ชื่อ server ในตาราง `/admin/servers`, ปุ่มจบ wizard). สร้าง/นำเข้า server อยู่ที่
-  `/servers/new` (`?mode=import` = โหมดนำเข้า)
+  (ตัวอย่าง: ชื่อ server ในตาราง `/admin/servers`, ปุ่มจบ wizard). สร้าง server อยู่ที่ `/servers/new`
 - **route group `(standalone)` = หน้าที่ไม่ผูก active server จึงไม่มี sidebar** — `/admin/*`,
   `/servers/new`, `/profile`, `/preferences` (`app/(standalone)/layout.tsx`: top bar + user menu
   + nav แนวนอนของ admin เมื่ออยู่ใต้ `/admin`, เนื้อหา `max-w-6xl`). sidebar เหลือเฉพาะ group
@@ -161,7 +163,7 @@ Verify web: `cd apps/web && pnpm build && pnpm lint`
     ที่ล้มบางเคสไม่มี `server_status` ตามมาเลย (planTransition ปล่อยให้ heartbeat reconcile) —
     ถ้าไม่มี event นี้ user จะไม่มีทางรู้ว่างานพังเพราะอะไร. `restart:true` = ขา stop ของ restart
     (สำเร็จแล้วยังไม่จบ ขา start ตามมาเป็น job ใหม่)
-  - **server list change**: `server_added` (emit ตอน create/import ใน httpapi) / `server_removed`
+  - **server list change**: `server_added` (emit ตอน create ใน httpapi) / `server_removed`
     (emit ตอน delete job สำเร็จใน jobs) broadcast แบบ unfiltered (payload มีแค่ server_id) →
     web invalidate `["servers"]` refetch (dashboard เพิ่ม/เอา instance ออกเองแบบ realtime)
 - Proto: package `gamemanager.<x>.v1` (ไม่มี hyphen — proto package เป็น identifier),
@@ -183,10 +185,10 @@ username ที่ใช้ login + password สุ่ม 20 ตัว พิม
 Admin สร้าง user ใหม่/reset password ก็ flow เดียวกัน — API ตอบ `initial_password` ครั้งเดียว
 
 **ระบบไม่มี email เลย** — `username` เป็น login identifier เดียว (`users.username` NOT NULL +
-unique บน `lower(username)` **ทั้งตาราง** (รวมแถวที่ถูก soft delete — migration `00017`
-เปลี่ยนจาก partial index เดิม: ชื่อถูกจองไว้ตลอด กู้คืนแล้วชนชื่อไม่ได้แน่นอน
+unique บน `lower(username)` **ทั้งตาราง** (รวมแถวที่ถูก soft delete — ไม่ใช่ partial index:
+ชื่อถูกจองไว้ตลอด กู้คืนแล้วชนชื่อไม่ได้แน่นอน
 แลกกับที่ชื่อของบัญชีในถังขยะเอาไปสร้างใหม่ไม่ได้), match `^[a-z0-9_.-]{3,64}$`
-(**ตัวพิมพ์เล็กล้วนเสมอ** — migration `00018` lower ของเดิมทั้งคอลัมน์ + มี CHECK
+(**ตัวพิมพ์เล็กล้วนเสมอ** — มี CHECK `users_username_lowercase`
 `username = lower(username)` เป็นด่านสุดท้าย; ทุกทางเข้าที่รับ username จากภายนอกต้องผ่าน
 `canonicalUsername()` ก่อน validate/เทียบ/บันทึก — create, check-username, login, grant
 permission ด้วย username, `ADMIN_USERNAME` ตอน load config, flag `-username` ของ CLI.
@@ -200,15 +202,14 @@ enforce ที่ **HTTP handler เท่านั้น** — seed ตอน b
 ตรง ๆ จึงตั้งชื่อ `admin` ได้ตามเดิม (**อย่าย้าย check ลงไปที่ store จะพัง seed**).
 ฟอร์มสร้าง user เช็คสดผ่าน `GET /api/users/check-username` (เกณฑ์ต้องตรงกับ handler เสมอ),
 login เทียบแบบ case-insensitive). ห้ามเพิ่มคอลัมน์/field email กลับมาโดยไม่ปรึกษาก่อน —
-ตอนนี้ไม่มีอะไรในระบบส่งเมล จึงเป็น PII ที่ต้องดูแลฟรี ๆ (migration `00014_drop_email.sql` ลบทิ้ง
-พร้อม backfill username จาก local-part ของ email เดิม)
+ตอนนี้ไม่มีอะไรในระบบส่งเมล จึงเป็น PII ที่ต้องดูแลฟรี ๆ
 
-**ลบ user = soft delete เสมอ** (`users.deleted_at` มีมาตั้งแต่ `00004`, capability `users.restore`
-เพิ่มใน `00016_user_restore.sql`): `DELETE /api/users/{id}` (cap `users.delete`) mark `deleted_at`
+**ลบ user = soft delete เสมอ** (`users.deleted_at`, capability
+`users.restore`): `DELETE /api/users/{id}` (cap `users.delete`) mark `deleted_at`
 + `is_active=false` + bump `token_version` (session เก่าตายทันที) แต่ **ไม่แตะ `server_permissions`
 เลย** — restore ต้องได้สิทธิ์ต่อ server กลับมาครบโดยไม่ต้อง assign ใหม่. กู้คืน =
 `POST /api/users/{id}/restore` (cap `users.restore`) → `deleted_at=NULL` + `is_active=true`
-(กู้คืนแล้วชนชื่อไม่ได้ — username ถูกจองไว้ตลอดตั้งแต่ `00017`; 409 `username_exists` เหลือไว้เป็น safety net).
+(กู้คืนแล้วชนชื่อไม่ได้ — username ถูกจองไว้ตลอด; 409 `username_exists` เหลือไว้เป็น safety net).
 ถังขยะอยู่ที่ `/admin/users` filter `status=deleted` (ที่เดียวที่ `ListUsers` โผล่แถวที่ถูกลบ)
 ⚠️ grant ที่ค้างไว้ต้องไม่รั่วออกมาทางไหน: `ListServerPermissions` + `CountServerOwners`
 join `users` แล้ว filter `deleted_at IS NULL` — **query ใหม่ที่อ่าน `server_permissions` ต้องทำแบบเดียวกัน**
@@ -262,14 +263,11 @@ NATS เป็นแค่ job transport ไม่เกี่ยวกับ au
 **สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = เกม default)
 → insert แถว (status=provisioning) + job `create_server` → agent
 โหลด artifact + เขียน seed config/launch script → JobResult → status=stopped → user สั่ง start ต่อ
-(import server: job `import_server` — agent อาจ detect เวอร์ชันจริงแล้วรายงานใน `JobResult.Detail` JSON
-`{"game_version":"..."}` → control-plane update `game_version` ของ server ให้ ถ้าเวอร์ชันผ่าน validate)
 
 **Wizard `/servers/new` สร้าง instance ที่ step สุดท้ายเท่านั้น** — **1 step = 1 component**
 ใน `components/server/new-server/` (`step-general` / `step-properties` / `step-access` / `step-players`,
-`step-indicator`, `steps.ts` = ลำดับ step, `detect.ts` = เดา type/version จาก archive) โดย state
-อยู่ในฮุก: `use-server-metadata` (ฟอร์มพื้นฐาน — คืนค่า+setter ไม่คืน JSX), `use-import-source`
-(ไฟล์ต้นทาง + detection), `use-create-server` (ลำดับการสร้างทั้งหมด) — `page.tsx` เหลือแค่ประกอบร่าง
+`step-indicator`, `steps.ts` = ลำดับ step) โดย state อยู่ในฮุก: `use-server-metadata`
+(ฟอร์มพื้นฐาน — คืนค่า+setter ไม่คืน JSX), `use-create-server` (ลำดับการสร้างทั้งหมด) — `page.tsx` เหลือแค่ประกอบร่าง
 + ถือ draft state. เพิ่ม step ใหม่ = เพิ่มไฟล์ `step-*.tsx` + แถวใน `WIZARD_STEPS`:
 4 step — general / properties / access / players — สาม step แรกเป็น **draft ในหน้าเว็บล้วน ยังไม่ยิง API
 สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step 2–3 ข้ามได้ (step 1 บังคับกรอกให้ครบ),
@@ -283,19 +281,7 @@ PUT `/config` **เฉพาะ key ที่ต่างจาก default** (�
 (`draft`/`onDraftChange` — เลือก user จาก directory เท่านั้น) กับ `PlayersDraft` (คนละตัวกับ
 `ServerPlayers` ที่อ่านไฟล์ ops/banned/usercache จริง)
 
-**โหมด import (`/servers/new?mode=import`) ไม่ผ่าน stepper — เป็นฟอร์มหน้าเดียว**
-(`components/server/new-server/import-page.tsx`): ไฟล์ต้นทาง (`use-import-source`) + ฟอร์ม metadata
-ชุดเดียวกับ step 1 (`StepGeneral` ที่รับ `importSource` เฉพาะโหมดนี้ — โหมดสร้างใหม่ไม่ส่งมา) แล้วกด
-`Import server` ยิง `POST /api/servers/import` ทันที → `setDashboardServerId` + ไป `/dashboard`
-(properties/access/players ไปตั้งที่หน้าของ server หลังนำเข้าเสร็จ — เส้นทาง import จึงมีชิ้นส่วนน้อยที่สุด
-เวลาไล่หาสาเหตุที่นำเข้าไม่สำเร็จ). ใช้ `use-create-server` ตัวเดิม (`mode: "import"`, draft ว่างทั้งหมด)
-จึงได้ overlay + progress ของการอัปโหลดเหมือนกัน. toast error ของ import โชว์ข้อความจริงจาก backend
-เป็นบรรทัดรองเสมอ — **อย่าตัดทิ้ง** โค้ดอย่าง `import_failed` พาเหตุผลของ agent มาด้วย.
-ทางเข้า: ปุ่ม `Import server` คู่กับ `New server` ทั้งที่หน้า `/` (server list) และ `/admin/servers`
-(gate ด้วย `servers.create` — คนที่ไม่มี `servers.view_all` เข้า `/admin/servers` ไม่ได้เลย
-ปุ่มที่หน้า `/` จึงเป็นทางเข้าเดียวของคนกลุ่มนั้น **ห้ามเอาออก**)
-
-**ลบ server = soft delete เสมอ** (`servers.deleted_at`, migration `00015_server_soft_delete.sql`):
+**ลบ server = soft delete เสมอ** (`servers.deleted_at`):
 `DELETE /api/servers/{id}` (cap `servers.delete`, ต้อง stopped/errored) **ไม่ dispatch job และไม่แตะ
 ไฟล์เลย** — แค่ set `deleted_at` แล้ว emit `server_removed`. ทุก query filter `deleted_at IS NULL`
 (`GetServerByID` ด้วย → endpoint ระดับ server ตอบ 404 ให้ของในถังขยะเอง) ยกเว้น `GetServerByIDAny`
@@ -315,15 +301,6 @@ agent **ensure runtime image** (มีในเครื่องแล้ว = 
   ที่ค้างทิ้งทันที + push console line แจ้ง user** ว่ากำลังเอาออก (ไม่ปล่อยให้ค้างเป็น dead container)
 - runtime image cache: `game-manager/runtime-java:{8|17|21|25}` build เองด้วย `make runtime-images` ก็ได้ (hardened)
   หรือปล่อยให้ agent auto-pull ครั้งแรกที่ต้องใช้ — reuse ตัวที่มีเสมอ ไม่โหลดซ้ำ
-
-**Import server**: POST /api/servers/import (`multipart/form-data`, ต้องมี cap `servers.create`) →
-control-plane อ่าน `.zip` แบบ streaming (ไม่ buffer ทั้งก้อน — อ่านทีละ ~768KiB look-ahead หนึ่งก้อน)
-แล้ว stream เข้า agent เป็น chunked `FileWriteChunk` ไปไว้ `.gamemanager/import.zip` ใน jail ของ server
-(bytes-over-gRPC = file I/O ปกติ เหมือน file manager ไม่ใช่ lifecycle) → insert แถว (status=provisioning)
-+ dispatch NATS job `import_server` (lifecycle command เป็น job ตามกฎ #2) → agent แตก zip ด้วย
-`SafeJoin`/กัน zip-slip **โดยไม่โหลด artifact** → JobResult success → status=stopped (semantics เดียวกับ
-`create_server`, มี handling ใน `planTransition`/`reapPlan`). staging ล้ม = ลบ row ที่เพิ่งสร้างทิ้ง,
-dispatch ล้ม = mark errored. audit `server_import`
 
 **Online players / tick rate ต่อ instance**: เกมส่วนใหญ่ไม่มี API ให้ถาม — agent อ่านจาก **console** เอง
 (`internal/gamestate` = เครื่องจักรกลางที่ไม่รู้จักเกม + `games.ConsoleSpec` ของเกมนั้นเป็นคนบอกว่า
@@ -374,12 +351,12 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   (`components/user/permission-fields.tsx`) เป็น **read-only ล้วน** = หน้าต่างส่องว่า preset ที่เลือกให้
   อะไรบ้าง ไม่ใช่ที่ติ๊กทีละข้อ — **อย่าเติม prop `onToggle`/`onToggleGroup` กลับเข้าไป**.
   key `custom` ใน `RoleKey`/`ServerRoleKey` เหลือไว้เป็น fallback ของ **ข้อมูลเก่า** ที่เคยติ๊กรายข้อ
-  ไว้ตอน UI ยังให้แก้ได้ (จงใจไม่ล้างใน migration — เขียนทับสิทธิ์ user เงียบ ๆ อันตรายกว่า)
+  ไว้ตอน UI ยังให้แก้ได้ (จงใจไม่ล้างข้อมูลให้ — เขียนทับสิทธิ์ user เงียบ ๆ อันตรายกว่า)
   เลือก preset ทับเมื่อไหร่ก็หายไปเอง; เพิ่ม preset ใหม่ = แก้ที่ `ROLE_PRESETS`/`SERVER_ROLE_PRESETS`
 
 **Game definition (abstraction ของ "เกม") — อ่านก่อนแตะอะไรที่เป็นของเกมใดเกมหนึ่ง**
 
-`servers.game` (migration `00019`) ผูก server กับเกมหนึ่งเกม, `servers.variant` = variant
+`servers.game` ผูก server กับเกมหนึ่งเกม, `servers.variant` = variant
 ภายในเกมนั้น. ความรู้เฉพาะเกมอยู่ใน `Definition` ตัวเดียวต่อเกมต่อ app:
 
 - `apps/control-plane/internal/games` — `Definition` + `Registry` (validation/metadata ฝั่ง API):
@@ -393,17 +370,16 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   ⚠️ ชั้น cache ของรูปผู้เล่นเป็น**ของกลาง** อยู่ที่ `internal/avatarcache` (DB-backed TTL +
   เสิร์ฟรูปเก่าตอน upstream ล่ม) — รับ `Fetcher` จาก definition, **ห้ามยัดโค้ดของเกมลงไปในนั้น**
 - `apps/node-agent/internal/games` — `Definition` + `Registry` ฝั่งรันจริง: `Variants`, `ContainerPort`,
-  `StopCommand`, `LaunchScript`, `LaunchEnv`, `SeedFiles`, `Provision`, `RuntimeImage`, `Import`
-  (Ext/NameHints/MainArtifact/DetectVersion), `Console` (RosterCommand/MetricCommand/Parse)
+  `StopCommand`, `LaunchScript`, `LaunchEnv`, `SeedFiles`, `Provision`, `RuntimeImage`,
+  `Console` (RosterCommand/MetricCommand/Parse)
   + `InstanceLookup` ที่อ่าน `.gamemanager/meta.json` เพื่อรู้ว่า instance บน disk เป็นเกมอะไร
   → ค่าจริงของ Minecraft อยู่ใน `internal/games/minecraft`
 - **สอง app ไม่ import ข้ามกัน** (คนละ module) — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
-  ซึ่งเดินทางผ่าน job payload (`CreateServer.game`/`ImportServer.game` ใน proto) และ `.gamemanager/meta.json`
+  ซึ่งเดินทางผ่าน job payload (`CreateServer.game` ใน proto) และ `.gamemanager/meta.json`
   ⚠️ การ map เวอร์ชัน → Java image มีสองที่ (control-plane เลือก image ให้ job, agent เลือกให้
   forge installer) — **แก้ที่หนึ่งต้องแก้อีกที่เสมอ** มี test คุมทั้งสองฝั่ง
 - `apps/web/lib/games` — `GameProfile` + registry ฝั่ง web (`gameProfile(server.game)`):
-  เดา variant/version จาก archive ตอน import, `isValidPlayerName`, `allowlistEnabledKey`,
-  `highlightConsoleMessage`, `label`/`licenseName`/`licenseUrl`/`metricLabel`
+  `isValidPlayerName`, `allowlistEnabledKey`, `highlightConsoleMessage`, `label`/`licenseName`/`licenseUrl`/`metricLabel`
   → ค่าจริงของ Minecraft อยู่ใน `lib/games/minecraft.ts`
   **component ห้าม import `lib/games/minecraft` ตรง ๆ** — เรียกผ่าน `gameProfile()` เสมอ
 - ชั้นอื่นทั้งหมดทำงานผ่าน definition: httpapi ใช้ `a.gameOf(w, srv)` / `a.gameFromQuery(w, r)`,
@@ -425,16 +401,17 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
 3. web: เพิ่ม `lib/games/<เกม>.ts` (implement `GameProfile`) แล้วลงทะเบียนใน `PROFILES`
    ที่ `lib/games/index.ts`. `DEFAULT_GAME_ID` เป็นค่าคงที่เพราะยังมีเกมเดียว — มีเกมที่สองเมื่อไร
    ต้องกลายเป็น state ของ wizard + ดึงรายการจาก `GET /api/meta/games`
-4. **ไม่ต้องเขียน migration** เพื่อรองรับ variant ใหม่ — schema ไม่มี CHECK รายชื่อ (ดูกฎเหล็กข้อ 0)
+4. **ไม่ต้องแตะ schema** เพื่อรองรับ variant ใหม่ — schema ไม่มี CHECK รายชื่อ (ดูกฎเหล็กข้อ 0)
 5. `docs/api.md` + `docs/architecture.md` (หัวข้อ Game definition)
 
 **เพิ่ม feature ใหม่ → ต้องแตะ permission (เช็คลิสต์บังคับ)**
 1. `internal/httpapi/capabilities.go` — เพิ่ม const + entry ใน `capabilityCatalog`
    (`{key, group, action, label, description}`, key ต้องเป็น `{group}.{action}`)
-   ฟีเจอร์ที่ถูกลบ = **ลบ key ออกจาก catalog** แล้วเขียน migration ล้าง key นั้นออกจาก `users.capabilities`
+   ฟีเจอร์ที่ถูกลบ = **ลบ key ออกจาก catalog** (key ที่ค้างอยู่ใน `users.capabilities` ของ DB เดิม
+   ไม่มีใครล้างให้ — ยังไม่มีระบบ migration; dev ล้างด้วย `make reset`)
 2. `internal/httpapi/api.go` — ผูก `requireCap(...)` กับ route ใหม่ทุกเส้น (ทั้ง read และ write)
-3. migration ใหม่ใน `migrations/` — backfill capability ให้ user เดิมถ้าไม่อยากให้ใครเสียสิทธิ์
-   ที่เคยมี (ดู `00009_capability_crud.sql` เป็นตัวอย่าง)
+3. capability ใหม่ **ไม่ถูก backfill ให้ user เดิม** ด้วยเหตุผลเดียวกัน — ต้องไปติ๊ก preset ให้ใหม่
+   ที่ `/admin/users/{id}/permissions` เอง (หรือ reset DB ตอน dev)
 4. `docs/api.md` — เพิ่มแถวในตาราง Capabilities + คอลัมน์สิทธิ์ของ endpoint นั้น
 5. web: `lib/capabilities.ts` (key), `lib/user-roles.ts` (ควรอยู่ใน preset ไหน),
    `lib/i18n/en.ts` + `th.ts` (`permGroup.<group>` ถ้าเป็นกลุ่มใหม่, `permAction.<action>`,
@@ -489,7 +466,7 @@ definition เพราะเป็นเรื่องของ JVM ที่�
 cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส่งเข้า container เป็น env `GM_MEMORY_MB` ให้ launch.sh ใช้ —
 **อย่ากลับไปตีความ `memory_mb` เป็น heap** เพราะจะทำให้ admission control ข้างล่างนับต่ำกว่าจริง 1.5x
 
-**RAM admission control**: create/import/ขยาย `memory_mb` เช็คผลรวม `memory_mb` ทุก server บน node
+**RAM admission control**: create/ขยาย `memory_mb` เช็คผลรวม `memory_mb` ทุก server บน node
 (`SumServerMemoryMBOnNode`) + ตัวใหม่ ต้องไม่เกิน `node.memory_total_mb` → ไม่งั้น 400 `insufficient_memory`
 (body มี `used_mb/total_mb/available_mb`). node total=0/ไม่รู้ = ข้ามเช็ค. PATCH เช็คเฉพาะตอนขยาย (ไม่นับ memory เดิมตัวเอง)
 
@@ -500,8 +477,11 @@ cap 2048MB, ไม่เกินครึ่งของ limit) แล้วส
 
 - Playtime ของผู้เล่น: อ่านจาก `{level-name}/stats/{uuid}.json` ตอนเรียก GET players — จำกัด 50 คน/request
   (เกินนั้นคืน 0 = ไม่รู้) เพราะเป็นไฟล์ละคน = N round-trip ต่อการเปิดหน้า
-- File manager: อัปโหลด/ดาวน์โหลดไฟล์ใหญ่แบบ binary (artifact/mod) ใน UI ทั่วไป — ตอนนี้รองรับ browse/แก้ไฟล์ text/mkdir/rename/delete
-  (binary upload มีเฉพาะ flow import server: zip ผ่าน chunked `FileWriteChunk` เข้า `.gamemanager/import.zip` เท่านั้น)
+- File manager: อัปโหลด/ดาวน์โหลดไฟล์ใหญ่แบบ binary (artifact/mod) — ตอนนี้รองรับแค่ browse/แก้ไฟล์ text/mkdir/rename/delete
+  (ไม่มี binary upload ทางไหนเลย ตั้งแต่ถอดฟีเจอร์ import server ออก)
+- **นำเข้า server เดิมจาก .zip (import server)** — ถูกถอดออกทั้งระบบแล้ว (endpoint, job
+  `import_server`, `FileWriteChunk`, หน้าเว็บ). field number ที่เคยใช้ถูก
+  `reserved` ไว้ใน proto (`JobEnvelope` 15, `FileRequest` 16) เผื่อกลับมาทำใหม่
 - Backup/restore, scheduler, mod/plugin browser (online-player list + player action มีแล้ว ดูหัวข้อข้างบน)
 - OIDC (Discord/Google), quota ต่อ user, multi-node TLS
 - Metrics/alerting ระยะยาว (มี resource monitoring ต่อ instance แบบ realtime แล้ว แต่ไม่เก็บ history/ไม่มี alert)

@@ -2,7 +2,7 @@ package httpapi
 
 import "testing"
 
-// username ที่เก็บลง DB ต้องเป็น lowercase เสมอ (CHECK constraint ใน migration 00018)
+// username ที่เก็บลง DB ต้องเป็น lowercase เสมอ (CHECK constraint `users_username_lowercase`)
 // — canonicalUsername ต้อง lower + trim และผลลัพธ์ต้องผ่าน usernameRe ที่ไม่รับตัวพิมพ์ใหญ่แล้ว
 func TestCanonicalUsername(t *testing.T) {
 	cases := map[string]string{

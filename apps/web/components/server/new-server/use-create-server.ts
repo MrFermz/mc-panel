@@ -8,7 +8,6 @@ import {
   apiSend,
   apiSendVoid,
   addPlayer,
-  importServer,
   saveServerProperties,
   ApiError,
 } from "@/lib/api";
@@ -22,28 +21,13 @@ import {
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { LOCAL_OVERLAY_KEY } from "@/components/global-loading";
 import type { ServerMetadata } from "@/components/server/new-server/use-server-metadata";
-import type { ImportSource } from "@/components/server/new-server/use-import-source";
-import type { WizardMode } from "@/components/server/new-server/steps";
 
 const POLL_INTERVAL_MS = 1_500;
 // กันค้างถ้า job ไม่จบสักที — เลิกรอแล้วปล่อยให้ user ไปดูสถานะจริงที่ dashboard
 const PROVISION_TIMEOUT_MS = 10 * 60 * 1_000;
 
-// map error code จาก backend → ข้อความ toast ที่เป็นมิตร (import path)
-const IMPORT_ERROR_KEYS: Record<string, TranslationKey> = {
-  license_required: "import.errLicenseRequired",
-  empty_archive: "import.errEmptyArchive",
-  host_port_taken: "import.errHostPortTaken",
-  node_offline: "import.errNodeOffline",
-  agent_timeout: "import.errAgentTimeout",
-  import_failed: "import.errImportFailed",
-};
-
 export interface CreateServerInput {
-  mode: WizardMode;
   meta: ServerMetadata;
-  // บังคับเมื่อ mode = "import" เท่านั้น
-  importSource?: ImportSource;
   // key ที่ต่างจาก default เท่านั้น — ไฟล์ยังไม่มีตอน apply, merge ฝั่ง backend จะ append ให้
   changedProps: Record<string, string>;
   accessDraft: Permission[];
@@ -58,8 +42,6 @@ export interface CreateServerState {
   pending: boolean;
   // key ของ phase ที่กำลังทำ (null = ยังไม่เริ่ม) — ให้ overlay เอาไปแสดง
   phaseKey: TranslationKey | null;
-  // % ของการอัปโหลด archive (null = ไม่ได้อยู่ในช่วงอัปโหลด)
-  uploadPct: number | null;
 }
 
 // ลำดับการสร้างจริง — เป็น mutation เดียวที่ยิงหลาย request ต่อกันในทั้งแอป
@@ -69,12 +51,9 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
   const t = useT();
   const queryClient = useQueryClient();
   const [phaseKey, setPhaseKey] = React.useState<TranslationKey | null>(null);
-  const [uploadPct, setUploadPct] = React.useState<number | null>(null);
 
   const {
-    mode,
     meta,
-    importSource,
     changedProps,
     accessDraft,
     playersDraft,
@@ -103,49 +82,25 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
     // มี overlay ของตัวเองที่บอก phase อยู่แล้ว — กันไม่ให้ GlobalLoading ซ้อนทับ
     mutationKey: [LOCAL_OVERLAY_KEY, "create-server"],
     mutationFn: async (): Promise<{ server: Server; warned: boolean }> => {
-      setUploadPct(null);
-      setPhaseKey(
-        mode === "import" ? "wizard.phaseUploading" : "wizard.phaseCreating",
+      setPhaseKey("wizard.phaseCreating");
+
+      const created = await apiSend(
+        "POST",
+        "/api/servers",
+        {
+          name: meta.name.trim(),
+          node_id: meta.nodeId,
+          game: DEFAULT_GAME,
+          variant: meta.variant,
+          game_version: meta.gameVersion,
+          memory_mb: Number(meta.memoryMb),
+          host_port: meta.hostPort === "" ? null : Number(meta.hostPort),
+          accept_license: meta.requiresLicense ? meta.acceptLicense : true,
+        },
+        createServerResponseSchema,
       );
 
-      let created: { server: Server; job: { id: string } };
-      if (mode === "import" && importSource) {
-        const { blob, filename } = await importSource.buildArchive();
-        const form = new FormData();
-        form.set("name", meta.name.trim());
-        form.set("node_id", meta.nodeId);
-        form.set("game", DEFAULT_GAME);
-        form.set("variant", meta.variant);
-        form.set("game_version", meta.gameVersion);
-        form.set("memory_mb", String(Number(meta.memoryMb)));
-        form.set(
-          "host_port",
-          meta.hostPort === "" ? "" : String(Number(meta.hostPort)),
-        );
-        form.set("accept_license", String(meta.requiresLicense ? meta.acceptLicense : true));
-        form.set("archive", blob, filename);
-        setUploadPct(0);
-        created = await importServer(form, setUploadPct);
-      } else {
-        created = await apiSend(
-          "POST",
-          "/api/servers",
-          {
-            name: meta.name.trim(),
-            node_id: meta.nodeId,
-            game: DEFAULT_GAME,
-            variant: meta.variant,
-            game_version: meta.gameVersion,
-            memory_mb: Number(meta.memoryMb),
-            host_port: meta.hostPort === "" ? null : Number(meta.hostPort),
-            accept_license: meta.requiresLicense ? meta.acceptLicense : true,
-          },
-          createServerResponseSchema,
-        );
-      }
-
       const serverId = created.server.id;
-      setUploadPct(null);
       queryClient.invalidateQueries({ queryKey: ["servers"] });
 
       // access เป็นแถวใน DB ล้วน — ไม่ต้องรอไฟล์บนโหนด apply ได้ทันที
@@ -203,47 +158,26 @@ export function useCreateServer(input: CreateServerInput): CreateServerState {
     },
     onSuccess: ({ server, warned }) => {
       if (!warned) {
-        toast.success(
-          mode === "import"
-            ? t("import.imported", { name: server.name })
-            : t("wizard.createdToast", { name: server.name }),
-        );
+        toast.success(t("wizard.createdToast", { name: server.name }));
       }
       onCreated(server);
     },
     onError: (err) => {
-      const key =
-        err instanceof ApiError ? IMPORT_ERROR_KEYS[err.code] : undefined;
-      if (key) {
-        // ข้อความจริงจาก backend ไว้บรรทัดรอง — โค้ดอย่าง import_failed พาเหตุผลของ agent
-        // มาด้วย (เช่น "node agent rejected archive chunk: ...") ถ้าทิ้งไปจะไล่เหตุไม่ได้เลย
-        toast.error(t(key), {
-          description: err instanceof ApiError ? err.message : undefined,
-        });
-      } else if (err instanceof ApiError && err.code === "insufficient_memory") {
+      if (err instanceof ApiError && err.code === "insufficient_memory") {
         // message มีตัวเลข used/total มาแล้ว — โชว์ตรง ๆ
         toast.error(err.message || t("new.errInsufficientMemory"));
-      } else {
-        toast.error(
-          err instanceof ApiError
-            ? err.message
-            : mode === "import"
-              ? t("import.errGeneric")
-              : t("new.failedCreate"),
-        );
+        return;
       }
+      toast.error(
+        err instanceof ApiError ? err.message : t("new.failedCreate"),
+      );
     },
-    onSettled: () => {
-      setPhaseKey(null);
-      setUploadPct(null);
-    },
+    onSettled: () => setPhaseKey(null),
   });
 
   return {
     run: () => mutation.mutate(),
-    // zipping เกิดก่อน request แรก — นับเป็นช่วง busy ด้วย ไม่งั้นจอค้างโดยไม่มี overlay
-    pending: mutation.isPending || (importSource?.zipping ?? false),
+    pending: mutation.isPending,
     phaseKey,
-    uploadPct,
   };
 }

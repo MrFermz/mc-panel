@@ -38,7 +38,7 @@ docs/              architecture + api contract
 นี่คือวิธีเอาระบบขึ้นเครื่องใหม่ (staging/production หรือ dev ที่ไม่ต้องแก้โค้ด)
 
 **ต้องมีบนเครื่อง:** Docker Engine + Docker Compose v2, `make`, `git` — **ไม่ต้องมี Go/Node**
-(compile Go และรัน migration ทำใน container ให้หมด)
+(compile Go และสร้าง schema ของ DB ทำใน container ให้หมด)
 
 ```bash
 git clone <repo-url> game-manager && cd game-manager
@@ -92,7 +92,7 @@ container เป็น Linux ทั้งหมด Docker Desktop รันผ�
 
 ```bash
 git clone <repo-url> game-manager && cd game-manager
-make bootstrap           # .env + dev infra (postgres/redis/nats) + migrate + ลง web deps ให้
+make bootstrap           # .env + dev infra (postgres/redis/nats) + ลง web deps ให้
 make run-control-plane   # terminal 1
 make run-agent           # terminal 2 (ต้องมี docker บนเครื่อง)
 make run-web             # terminal 3 → http://localhost:3000
@@ -109,7 +109,7 @@ make admin-password      # (ครั้งแรก) ดู credentials ขอ�
 |---|---|
 | `make logs` | ดู log full stack แบบ real-time |
 | `make down` / `make infra-down` | ปิด (data ยังอยู่) |
-| `make reset` | ล้าง DB dev แล้ว migrate ใหม่ |
+| `make reset` | ล้าง DB dev (schema ถูกสร้างใหม่ตอน control-plane boot) |
 | `make purge` | ล้างทุกอย่างจนหมด (ต้องพิมพ์ยืนยัน) |
 | `make proto-gen` | แก้ .proto แล้ว generate ใหม่ (ต้อง commit generated code) |
 | `make test` / `make lint` | ก่อนถือว่างานเสร็จ |

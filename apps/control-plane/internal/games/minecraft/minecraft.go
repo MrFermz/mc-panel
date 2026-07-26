@@ -9,8 +9,6 @@
 package minecraft
 
 import (
-	"regexp"
-
 	"github.com/game-manager/control-plane/internal/games"
 )
 
@@ -25,11 +23,6 @@ const minMemoryMB = 256
 
 // maxVersionLen = ความยาวสูงสุดของ game_version ที่รับจาก user
 const maxVersionLen = 50
-
-// detectedVersionRe กัน garbage/injection ก่อนเขียน game_version ที่ agent detect มาจาก jar จริง —
-// เผื่อ release (1.20.1), snapshot (23w13a), pre/rc (1.20-pre1) แต่ปฏิเสธค่าเพี้ยนยาว ๆ /
-// มีอักขระแปลก (ค่านี้ถูกเขียนทับของเดิมโดยไม่มีคนยืนยัน จึงเข้มกว่าค่าที่ user กรอกเอง)
-var detectedVersionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z._-]{0,31}$`)
 
 // Deps = บริการภายนอกที่ definition ต้องใช้ — inject จาก cmd/server เพื่อไม่ให้ package นี้
 // ผูกกับ store โดยตรง (ชั้น cache ของรูปผู้เล่นเป็นของกลางที่ internal/avatarcache
@@ -58,10 +51,9 @@ func New(deps Deps) *games.Definition {
 		DefaultHostPort: defaultHostPort,
 		MinMemoryMB:     minMemoryMB,
 		Version: games.VersionSpec{
-			MaxLen:        maxVersionLen,
-			List:          vs.list,
-			ValidDetected: detectedVersionRe.MatchString,
-			RuntimeImage:  RuntimeImage,
+			MaxLen:       maxVersionLen,
+			List:         vs.list,
+			RuntimeImage: RuntimeImage,
 		},
 		Config:  configSpec(),
 		Players: playerSpec(deps.Avatars),

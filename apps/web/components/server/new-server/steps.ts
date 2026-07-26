@@ -10,5 +10,3 @@ export const WIZARD_STEPS = [
 ] as const satisfies ReadonlyArray<{ key: string; titleKey: TranslationKey }>;
 
 export const LAST_STEP = WIZARD_STEPS.length - 1;
-
-export type WizardMode = "new" | "import";

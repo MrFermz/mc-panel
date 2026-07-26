@@ -74,7 +74,7 @@ var capabilityCatalog = []capabilityMeta{
 	{capNodesDelete, "nodes", "delete", "Remove nodes", "Remove a node from the panel"},
 
 	{capServersViewAll, "servers", "view_all", "View all servers", "See every server, not only the shared ones"},
-	{capServersCreate, "servers", "create", "Create servers", "Create and import server instances"},
+	{capServersCreate, "servers", "create", "Create servers", "Create new server instances"},
 	{capServersEdit, "servers", "edit", "Edit servers", "Rename a server and change memory or host port"},
 	{capServersDelete, "servers", "delete", "Delete servers", "Move a server to the trash, keeping its data and files"},
 	{capServersRestore, "servers", "restore", "Restore servers", "Bring a deleted server back from the trash"},

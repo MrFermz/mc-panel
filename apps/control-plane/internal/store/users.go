@@ -59,7 +59,7 @@ func (s *Store) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*User, error)
 }
 
 // UsernameExists เทียบ **ทุกแถวรวมที่อยู่ในถังขยะ** ให้ตรงกับ unique index
-// `idx_users_username_lower` (unique ทั้งตารางตั้งแต่ 00017) — ถ้าเช็คแค่แถวที่ยังไม่ลบ
+// `idx_users_username_lower` (unique ทั้งตาราง) — ถ้าเช็คแค่แถวที่ยังไม่ลบ
 // หน้าเว็บจะบอกว่าชื่อว่างแล้ว insert จริงค่อยเด้ง 409
 func (s *Store) UsernameExists(ctx context.Context, username string) (bool, error) {
 	var exists bool
@@ -269,7 +269,7 @@ func (s *Store) SoftDeleteUser(ctx context.Context, id uuid.UUID) error {
 // RestoreUser: เอาออกจากถังขยะ + เปิด active กลับ. server_permissions ไม่เคยถูกลบ
 // จึงกลับมาเองทั้งชุด. is_active=true เสมอเพราะ soft delete ปิดไปด้วย — ไม่มีทางรู้ว่า
 // ก่อนลบเคย suspend อยู่หรือเปล่า (admin ปรับต่อเองได้ที่หน้า users)
-// username ถูกจองไว้ตลอดตั้งแต่ 00017 (unique ทั้งตาราง ไม่ใช่แค่แถวที่ยังไม่ลบ)
+// username ถูกจองไว้ตลอด (unique ทั้งตาราง ไม่ใช่แค่แถวที่ยังไม่ลบ)
 // การกู้คืนจึงชนชื่อไม่ได้อีกแล้ว — caller ยังดัก unique violation ไว้เป็น safety net เผื่อ
 // constraint เปลี่ยนในอนาคต
 func (s *Store) RestoreUser(ctx context.Context, id uuid.UUID) (*User, error) {

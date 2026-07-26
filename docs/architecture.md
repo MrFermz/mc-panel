@@ -66,12 +66,12 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 |---|---|
 | `apps/control-plane/internal/games` | Registry + `Definition`: variant + license, กติกาเวอร์ชัน, runtime image, catalog/ไวยากรณ์ของไฟล์ config, กติกาผู้เล่น (identity service, allowlist, ไฟล์ state, action, playtime, avatar), port เริ่มต้น, memory ขั้นต่ำ |
 | `apps/control-plane/internal/games/minecraft` | ค่าจริงของ Minecraft: variant + EULA, รายการเวอร์ชัน, Java image mapping, `server.properties`, `whitelist.json`, `op/kick/ban`, **Mojang identity (`identity.go`) และการ crop หน้าจาก skin (`avatar.go`)** |
-| `apps/node-agent/internal/games` | Registry + `Definition` ฝั่งรันจริง: ที่มาของ artifact, launch script, env, คำสั่ง stop, seed config, port ใน container, กติกา import, การอ่านสถานะในเกมจาก console + `.gamemanager/meta.json` (instance บน disk บอกเองว่าเป็นเกมอะไร) |
+| `apps/node-agent/internal/games` | Registry + `Definition` ฝั่งรันจริง: ที่มาของ artifact, launch script, env, คำสั่ง stop, seed config, port ใน container, การอ่านสถานะในเกมจาก console + `.gamemanager/meta.json` (instance บน disk บอกเองว่าเป็นเกมอะไร) |
 | `apps/node-agent/internal/games/minecraft` | ค่าจริงของ Minecraft ฝั่ง agent (ที่มาของ jar, launch script/heap, forge installer, parser ของ console) |
 | `apps/web/lib/games` | Registry + `GameProfile` ฝั่ง web: เดา variant/version จาก archive, กติกาชื่อผู้เล่นฝั่ง client, การลงสีบรรทัด console, ชื่อเกม/license/metric ที่โผล่ในข้อความ |
 
 - สอง app แยก module กันจึง **ไม่ import ข้ามกัน** — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
-  ซึ่งเดินทางผ่าน job payload (`CreateServer.game` / `ImportServer.game`) และ `.gamemanager/meta.json`
+  ซึ่งเดินทางผ่าน job payload (`CreateServer.game`) และ `.gamemanager/meta.json`
 - ชั้นอื่น ๆ (httpapi, jobs, store, provision, runner, gamestate, component ฝั่ง web) **ห้ามมี switch
   ตามชื่อเกม/variant** — ทุกอย่างถามผ่าน definition/profile. เพิ่มเกมใหม่ = เพิ่ม package `games/<เกม>`
   ทั้งสามที่ แล้วลงทะเบียนใน registry ที่ `cmd/server` / `cmd/agent` / `lib/games/index.ts`
@@ -79,7 +79,7 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
   `internal/avatarcache` (cache รูปผู้เล่นลง Postgres + เสิร์ฟรูปเก่าตอน upstream ล่ม — รับ
   "วิธีได้รูปมา" จาก definition), `internal/gamestate` ฝั่ง agent (เดิมชื่อ `mcstate`)
 - schema ก็ไม่ถือความรู้ของเกม: คอลัมน์ `variant` **ไม่มี CHECK รายชื่อ** และ `memory_mb` เช็คแค่ `> 0`
-  (floor จริงมาจาก `Definition.MinMemoryMB`) — เพิ่มเกม/variant ใหม่จึงไม่ต้องเขียน migration
+  (floor จริงมาจาก `Definition.MinMemoryMB`) — เพิ่มเกม/variant ใหม่จึงไม่ต้องแตะ schema
 - field/route ที่เคยใช้ศัพท์ Minecraft ถูกเปลี่ยนเป็นคำกลางหมดแล้ว: `mc_version`→`game_version`,
   `server_type`→`variant`, `whitelist*`→`allowlist*`, `tps`→`tick_rate`, `accept_eula`→`accept_license`,
   `/properties`→`/config`, `/players/{uuid}/face`→`/avatar`, `mojang_unavailable`→`identity_unavailable`
@@ -140,7 +140,8 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 ## Bootstrap
 
 Full stack: `make env` → `make runtime-images` → `make up`
-→ control-plane รัน migration อัตโนมัติ, สร้าง admin คนแรกด้วย **password สุ่มที่พิมพ์ลง log ครั้งเดียว**
+→ control-plane รัน `schema/schema.sql` (idempotent, ยังไม่มีระบบ migration) อัตโนมัติ,
+สร้าง admin คนแรกด้วย **password สุ่มที่พิมพ์ลง log ครั้งเดียว**
 (`make admin-password`), สร้าง node "local" จาก `NODE_TOKEN` ใน .env
 → login ครั้งแรกถูกบังคับตั้ง password ใหม่ก่อนใช้งาน (must_change_password)
 → user ใหม่ทุกคนก็ flow เดียวกัน: admin สร้าง → ได้ password สุ่มแสดงครั้งเดียว → คนนั้น login แล้วตั้งใหม่

@@ -160,13 +160,6 @@ func (s *Store) UpdateServerConfig(ctx context.Context, id uuid.UUID, name *stri
 		id, name, memoryMB, hostPort, clearHostPort))
 }
 
-// UpdateServerGameVersion set game_version จากเวอร์ชันที่ agent detect ได้หลัง import สำเร็จ
-func (s *Store) UpdateServerGameVersion(ctx context.Context, id uuid.UUID, gameVersion string) error {
-	_, err := s.pool.Exec(ctx,
-		`UPDATE servers SET game_version = $2, updated_at = now() WHERE id = $1`, id, gameVersion)
-	return err
-}
-
 func (s *Store) UpdateServerStatus(ctx context.Context, id uuid.UUID, status string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE servers SET status = $2, updated_at = now() WHERE id = $1`, id, status)
@@ -183,11 +176,6 @@ func (s *Store) UpdateServerStatusIfNotDeleting(ctx context.Context, id uuid.UUI
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
-}
-
-func (s *Store) DeleteServerRow(ctx context.Context, id uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM servers WHERE id = $1`, id)
-	return err
 }
 
 // SoftDeleteServer ย้าย server เข้าถังขยะ — ไม่แตะไฟล์/container บน node เลย
@@ -209,7 +197,7 @@ func (s *Store) RestoreServer(ctx context.Context, id uuid.UUID) (*Server, error
 
 // SumServerMemoryMBOnNode คืนผลรวม memory_mb ของทุก server บน node — **นับ server ที่ถูก
 // soft delete ด้วย** เพราะไฟล์ยังกินที่จริงและ restore ต้องกลับมาสตาร์ทได้เสมอ (RAM หลุดจอง
-// ตอน purge เท่านั้น) — ใช้กัน RAM overcommit ตอน create/import/grow
+// ตอน purge เท่านั้น) — ใช้กัน RAM overcommit ตอน create/grow
 func (s *Store) SumServerMemoryMBOnNode(ctx context.Context, nodeID uuid.UUID) (int, error) {
 	var sum int
 	err := s.pool.QueryRow(ctx,

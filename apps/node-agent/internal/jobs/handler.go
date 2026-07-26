@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 
@@ -32,28 +31,6 @@ func (h *Handler) Process(ctx context.Context, env *jobv1.JobEnvelope) (detail s
 			GameVersion:   p.CreateServer.GameVersion,
 			AcceptLicense: p.CreateServer.AcceptLicense,
 		})
-	case *jobv1.JobEnvelope_ImportServer:
-		detectedVersion, ierr := h.prov.ImportServer(ctx, env.ServerId, provision.ImportSpec{
-			Game:          p.ImportServer.Game,
-			Variant:       p.ImportServer.Variant,
-			GameVersion:   p.ImportServer.GameVersion,
-			AcceptLicense: p.ImportServer.AcceptLicense,
-			ArchivePath:   p.ImportServer.ArchivePath,
-		})
-		if ierr != nil {
-			return "", ierr
-		}
-		// control-plane อ่าน Detail ตอน job สำเร็จเพื่อ sync game_version ของ server ให้ตรงจริง
-		if detectedVersion != "" {
-			b, merr := json.Marshal(struct {
-				GameVersion string `json:"game_version"`
-			}{detectedVersion})
-			if merr != nil {
-				return "", merr
-			}
-			return string(b), nil
-		}
-		return "", nil
 	case *jobv1.JobEnvelope_StartServer:
 		return "", h.runner.Start(ctx, runner.ServerConfig{
 			ID:       env.ServerId,

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { DEFAULT_GAME, type Permission, type Server } from "@/lib/types";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { useMe } from "@/lib/use-me";
@@ -9,7 +9,6 @@ import { useT } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings/store";
 import { useSetBreadcrumbs } from "@/components/layout/breadcrumb-context";
 import { LoadingOverlay } from "@/components/loading-overlay";
-import { PageLoader } from "@/components/page-loader";
 import { LAST_STEP } from "@/components/server/new-server/steps";
 import { StepIndicator } from "@/components/server/new-server/step-indicator";
 import { StepGeneral } from "@/components/server/new-server/step-general";
@@ -21,12 +20,10 @@ import {
 import { StepAccess } from "@/components/server/new-server/step-access";
 import { StepPlayers } from "@/components/server/new-server/step-players";
 import { gameProfile } from "@/lib/games";
-import { ImportServerPage } from "@/components/server/new-server/import-page";
 import { useServerMetadata } from "@/components/server/new-server/use-server-metadata";
 import { useCreateServer } from "@/components/server/new-server/use-create-server";
 import { Button } from "@/components/ui/button";
 
-// wizard ใช้กับการสร้างใหม่เท่านั้น — โหมด import เป็นฟอร์มหน้าเดียว (import-page.tsx)
 function NewServerWizard({
   onCreated,
 }: {
@@ -69,7 +66,6 @@ function NewServerWizard({
   }, [me]);
 
   const create = useCreateServer({
-    mode: "new",
     meta,
     changedProps: changedFrom(defaults, propsDraft),
     accessDraft,
@@ -87,7 +83,7 @@ function NewServerWizard({
 
   const stepContent = () => {
     if (step === 0) {
-      return <StepGeneral mode="new" meta={meta} />;
+      return <StepGeneral meta={meta} />;
     }
     if (step === 1) {
       return <StepProperties draft={propsDraft} onChange={setProp} />;
@@ -174,33 +170,20 @@ function NewServerWizard({
             create.phaseKey ? t(create.phaseKey) : t("wizard.overlayTitle")
           }
           description={t("wizard.overlayHint")}
-          progress={create.uploadPct}
         />
       )}
     </>
   );
 }
 
-function NewServerRoute() {
+export default function NewServerPage() {
   const t = useT();
   const me = useMe().data?.user;
   const router = useRouter();
-  const searchParams = useSearchParams();
   const setDashboardServerId = useSettingsStore((st) => st.setDashboardServerId);
-  const mode = searchParams.get("mode") === "import" ? "import" : "new";
 
   useSetBreadcrumbs(
-    React.useMemo(
-      () => [
-        {
-          label:
-            mode === "import"
-              ? t("wizard.importBreadcrumb")
-              : t("wizard.newBreadcrumb"),
-        },
-      ],
-      [mode, t],
-    ),
+    React.useMemo(() => [{ label: t("wizard.newBreadcrumb") }], [t]),
   );
 
   const onCreated = React.useCallback(
@@ -221,18 +204,5 @@ function NewServerRoute() {
     );
   }
 
-  return mode === "import" ? (
-    <ImportServerPage onImported={onCreated} />
-  ) : (
-    <NewServerWizard onCreated={onCreated} />
-  );
-}
-
-// useSearchParams ต้องอยู่ใน Suspense boundary ไม่งั้น build บ่น CSR bailout
-export default function NewServerPage() {
-  return (
-    <React.Suspense fallback={<PageLoader />}>
-      <NewServerRoute />
-    </React.Suspense>
-  );
+  return <NewServerWizard onCreated={onCreated} />;
 }

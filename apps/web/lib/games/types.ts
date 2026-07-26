@@ -1,17 +1,10 @@
 // GameProfile = ความรู้เฉพาะเกมทั้งหมดที่ **ฝั่ง web** ต้องใช้ รวมไว้ที่เดียวต่อเกม
 //
 // คู่ขนานกับ internal/games ของ control-plane/node-agent — ที่นี่เก็บเฉพาะสิ่งที่ backend
-// บอกไม่ได้ผ่าน API: การเดา variant/version จากไฟล์ก่อน upload, regex เช็คชื่อผู้เล่นฝั่ง client,
-// การลงสีบรรทัด console และคำเรียกที่โผล่ในข้อความ i18n (ชื่อเกม/ชื่อ license/ชื่อ metric)
+// บอกไม่ได้ผ่าน API: regex เช็คชื่อผู้เล่นฝั่ง client, การลงสีบรรทัด console
+// และคำเรียกที่โผล่ในข้อความ i18n (ชื่อเกม/ชื่อ license/ชื่อ metric)
 //
 // **ห้ามเขียน switch ตามชื่อเกม/variant ใน component** — เรียกผ่าน useGameProfile() เสมอ
-
-// DetectedInstance = ผลเดาจาก archive ที่ user เลือกตอน import (ทุก field เป็น best-effort)
-export interface DetectedInstance {
-  name?: string;
-  variant?: string;
-  gameVersion?: string;
-}
 
 export interface GameProfile {
   /** ต้องตรงกับ id ของ game definition ฝั่ง backend (servers.game) */
@@ -39,11 +32,6 @@ export interface GameProfile {
    * ยังโหลดไม่เสร็จเท่านั้น (ค่าจริงมาจาก field requires_license ของ backend)
    */
   variantRequiresLicense(variant: string): boolean;
-
-  /** เดา variant/version จาก .zip ที่ user เลือก (ล้มเหลว = คืน {} ไม่ block ฟอร์ม) */
-  detectFromZip(file: File): Promise<DetectedInstance>;
-  /** เดา variant/version จากโฟลเดอร์ที่ user เลือก */
-  detectFromFolder(files: File[], folderName: string): Promise<DetectedInstance>;
 
   /**
    * ลงสีเนื้อความของบรรทัด INFO ตามรูปแบบ log ของเกมนั้น (join/leave/chat/ready)

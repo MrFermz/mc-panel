@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { DownloadIcon, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { apiGet, apiSend, ApiError } from "@/lib/api";
 import {
   jobResponseSchema,
@@ -185,20 +185,12 @@ export default function AdminServersPage() {
   });
 
   const actions = canCreate && (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="outline" asChild>
-        <Link href="/servers/new?mode=import">
-          <DownloadIcon />
-          {t("import.button")}
-        </Link>
-      </Button>
-      <Button size="sm" asChild>
-        <Link href="/servers/new">
-          <PlusIcon />
-          {t("nav.newServer")}
-        </Link>
-      </Button>
-    </div>
+    <Button size="sm" asChild>
+      <Link href="/servers/new">
+        <PlusIcon />
+        {t("nav.newServer")}
+      </Link>
+    </Button>
   );
 
   return (

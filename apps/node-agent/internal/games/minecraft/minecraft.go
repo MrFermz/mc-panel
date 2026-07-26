@@ -29,13 +29,6 @@ func New() *games.Definition {
 		SeedFiles:     seedFiles,
 		Provision:     provision,
 		RuntimeImage:  runtimeImage,
-		Import: games.ImportSpec{
-			Ext: ".jar",
-			// เดา jar หลักจากชื่อที่คุ้น (server jar มักมีคำพวกนี้อยู่ในชื่อ)
-			NameHints:     []string{"paper", "purpur", "spigot", "vanilla", "fabric-server", "minecraft_server", "craftbukkit", "server"},
-			MainArtifact:  mainArtifact,
-			DetectVersion: detectVersion,
-		},
-		Console: consoleSpec(),
+		Console:       consoleSpec(),
 	}
 }

@@ -116,9 +116,6 @@ func (rc *ResultConsumer) handle(msg jetstream.Msg) {
 
 	rc.log.Info("job result applied", "job_id", jobID, "type", job.Type,
 		"success", res.Success, "error", res.Error)
-	if job.Type == "import_server" && res.Success && job.ServerID != nil {
-		rc.applyDetectedGameVersion(ctx, *job.ServerID, res.Detail)
-	}
 	rc.afterCommit(ctx, job, plan, changed, restartStart, deleted, res.Success, res.Error)
 	msg.Ack()
 }
@@ -131,7 +128,7 @@ func planTransition(job *store.Job, success bool) (store.TransitionPlan, bool) {
 	}
 
 	switch job.Type {
-	case "create_server", "import_server":
+	case "create_server":
 		if success {
 			return store.TransitionPlan{NewStatus: "stopped", GuardNotDeleting: true}, false
 		}
@@ -284,7 +281,7 @@ func (rc *ResultConsumer) reapOnce(ctx context.Context) {
 // reap ไปเป็น errored/stopped ถ้าจริง ๆ ยังรันอยู่ heartbeat reconcile (#3) จะพากลับ running
 func reapPlan(job *store.Job) store.TransitionPlan {
 	switch job.Type {
-	case "create_server", "import_server":
+	case "create_server":
 		return store.TransitionPlan{NewStatus: "errored", OnlyFromStatus: "provisioning"}
 	case "start_server":
 		return store.TransitionPlan{NewStatus: "errored", OnlyFromStatus: "starting"}
@@ -296,41 +293,6 @@ func reapPlan(job *store.Job) store.TransitionPlan {
 		return store.TransitionPlan{NewStatus: "errored", OnlyFromStatus: "deleting"}
 	}
 	return store.TransitionPlan{}
-}
-
-// applyDetectedGameVersion อ่านเวอร์ชันที่ agent detect (JobResult.Detail เป็น JSON
-// {"game_version":"..."}) แล้ว update game_version ของ server — ทำเฉพาะ import_server
-// สำเร็จ. detail ว่าง/parse ไม่ได้/เวอร์ชันไม่ผ่านกติกาของเกม → ข้ามเงียบ ๆ
-func (rc *ResultConsumer) applyDetectedGameVersion(ctx context.Context, serverID uuid.UUID, detail string) {
-	if detail == "" {
-		return
-	}
-	var d struct {
-		GameVersion string `json:"game_version"`
-	}
-	if err := json.Unmarshal([]byte(detail), &d); err != nil {
-		return
-	}
-	if d.GameVersion == "" {
-		return
-	}
-	// เวอร์ชันนี้ถูกเขียนทับของเดิมโดยไม่มีคนยืนยัน — ต้องผ่านกติกาของเกมนั้นก่อนเสมอ
-	srv, err := rc.st.GetServerByIDAny(ctx, serverID)
-	if err != nil {
-		rc.log.Warn("load server for detected version failed", "server_id", serverID, "error", err)
-		return
-	}
-	def, ok := rc.games.Resolve(srv.Game)
-	if !ok || def.Version.ValidDetected == nil || !def.Version.ValidDetected(d.GameVersion) {
-		return
-	}
-	if err := rc.st.UpdateServerGameVersion(ctx, serverID, d.GameVersion); err != nil {
-		rc.log.Error("update server game_version failed", "server_id", serverID,
-			"game_version", d.GameVersion, "error", err)
-		return
-	}
-	rc.log.Info("server game_version updated from import detection",
-		"server_id", serverID, "game_version", d.GameVersion)
 }
 
 // jobStatusOf แปลงผล JobResult เป็นค่า status ของ jobs table (ให้ตรงกับที่ CompleteJobTx เขียน)

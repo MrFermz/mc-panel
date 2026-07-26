@@ -1,14 +1,9 @@
 "use client";
 
-import * as React from "react";
-import { FileArchiveIcon, FolderIcon, Loader2Icon } from "lucide-react";
 import { formatMb } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { MemoryPresets } from "@/components/server/memory-presets";
 import type { ServerMetadata } from "@/components/server/new-server/use-server-metadata";
-import type { ImportSource } from "@/components/server/new-server/use-import-source";
-import type { WizardMode } from "@/components/server/new-server/steps";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,128 +25,9 @@ import { cn } from "@/lib/utils";
 import { gameProfile } from "@/lib/games";
 import { DEFAULT_GAME } from "@/lib/types";
 
-// ตัวเลือกไฟล์ต้นทาง — โผล่เฉพาะโหมด import
-function ImportSourcePicker({ source }: { source: ImportSource }) {
-  const t = useT();
-  const game = gameProfile(DEFAULT_GAME);
-  const zipInputRef = React.useRef<HTMLInputElement>(null);
-  const folderInputRef = React.useRef<HTMLInputElement>(null);
-  const { mode, setMode, detected, detecting } = source;
-
-  return (
-    <div className="grid gap-2">
-      <Label>{t("import.source")}</Label>
-      <div className="bg-muted grid grid-cols-2 gap-0.5 rounded-md p-0.5">
-        <button
-          type="button"
-          onClick={() => setMode("zip")}
-          className={cn(
-            "flex items-center justify-center gap-1.5 rounded-sm py-1.5 text-sm transition-colors",
-            mode === "zip"
-              ? "bg-background text-foreground shadow-xs"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <FileArchiveIcon className="size-4" />
-          {t("import.zipFile")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("folder")}
-          className={cn(
-            "flex items-center justify-center gap-1.5 rounded-sm py-1.5 text-sm transition-colors",
-            mode === "folder"
-              ? "bg-background text-foreground shadow-xs"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <FolderIcon className="size-4" />
-          {t("import.folder")}
-        </button>
-      </div>
-
-      {mode === "zip" ? (
-        <>
-          <input
-            ref={zipInputRef}
-            type="file"
-            accept=".zip"
-            className="hidden"
-            onChange={source.onZipChange}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => zipInputRef.current?.click()}
-          >
-            {t("import.selectZip")}
-          </Button>
-          {source.zipFile && (
-            <p className="text-muted-foreground truncate text-xs">
-              {t("import.selected", { name: source.zipFile.name })}
-            </p>
-          )}
-        </>
-      ) : (
-        <>
-          <input
-            ref={folderInputRef}
-            type="file"
-            className="hidden"
-            onChange={source.onFolderChange}
-            // webkitdirectory ไม่มีใน React types — ต้อง cast
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            {...({ webkitdirectory: "", directory: "" } as any)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => folderInputRef.current?.click()}
-          >
-            {t("import.selectFolder")}
-          </Button>
-          {source.folderFiles.length > 0 && (
-            <p className="text-muted-foreground truncate text-xs">
-              {t("import.selectedFolder", {
-                name: source.folderName,
-                count: source.folderFiles.length,
-              })}
-            </p>
-          )}
-        </>
-      )}
-      <p className="text-muted-foreground text-xs">{t("import.selectHint")}</p>
-      {detecting && (
-        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <Loader2Icon className="size-3.5 animate-spin" />
-          {t("wizard.detecting")}
-        </p>
-      )}
-      {!detecting && detected && (detected.variant || detected.gameVersion) && (
-        <p className="text-muted-foreground text-xs">
-          {t("wizard.detectedHint", {
-            game: game.label,
-            type: detected.variant ?? "—",
-            version: detected.gameVersion ?? "—",
-          })}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// step 1 — ข้อมูลพื้นฐานของ server (+ ไฟล์ต้นทางเมื่อเป็นโหมด import)
+// step 1 — ข้อมูลพื้นฐานของ server
 // เป็นด่านเดียวที่บังคับกรอกให้ครบ ที่เหลือข้ามได้
-export function StepGeneral({
-  mode,
-  meta,
-  importSource,
-}: {
-  mode: WizardMode;
-  meta: ServerMetadata;
-  // มีเฉพาะโหมด import — wizard สร้างใหม่ไม่มีไฟล์ต้นทางให้เลือก
-  importSource?: ImportSource;
-}) {
+export function StepGeneral({ meta }: { meta: ServerMetadata }) {
   const t = useT();
   const { budget } = meta;
   // ชื่อ/ลิงก์ license ของเกม — ไม่ hardcode ใน wizard
@@ -160,18 +36,10 @@ export function StepGeneral({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          {mode === "import" ? t("import.title") : t("new.title")}
-        </CardTitle>
-        <CardDescription>
-          {mode === "import" ? t("import.subtitle") : t("new.subtitle")}
-        </CardDescription>
+        <CardTitle>{t("new.title")}</CardTitle>
+        <CardDescription>{t("new.subtitle")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
-        {mode === "import" && importSource && (
-          <ImportSourcePicker source={importSource} />
-        )}
-
         <div className="grid gap-2">
           <Label htmlFor="wz-name">{t("new.name")}</Label>
           <Input

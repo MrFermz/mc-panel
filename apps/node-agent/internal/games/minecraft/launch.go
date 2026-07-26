@@ -83,15 +83,3 @@ func seedFiles(variant string, acceptLicense bool) []games.SeedFile {
 	}
 	return files
 }
-
-// mainArtifact = ชื่อ jar ที่ launch script รัน — forge ใช้ run.sh/forge-*.jar จึงไม่ normalize
-func mainArtifact(variant string) string {
-	switch variant {
-	case "forge":
-		return ""
-	case "velocity":
-		return "velocity.jar"
-	default:
-		return "server.jar"
-	}
-}

@@ -32,7 +32,6 @@ type JobEnvelope struct {
 	//	*JobEnvelope_StopServer
 	//	*JobEnvelope_KillServer
 	//	*JobEnvelope_DeleteServer
-	//	*JobEnvelope_ImportServer
 	Payload       isJobEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -134,15 +133,6 @@ func (x *JobEnvelope) GetDeleteServer() *DeleteServer {
 	return nil
 }
 
-func (x *JobEnvelope) GetImportServer() *ImportServer {
-	if x != nil {
-		if x, ok := x.Payload.(*JobEnvelope_ImportServer); ok {
-			return x.ImportServer
-		}
-	}
-	return nil
-}
-
 type isJobEnvelope_Payload interface {
 	isJobEnvelope_Payload()
 }
@@ -167,10 +157,6 @@ type JobEnvelope_DeleteServer struct {
 	DeleteServer *DeleteServer `protobuf:"bytes,14,opt,name=delete_server,json=deleteServer,proto3,oneof"`
 }
 
-type JobEnvelope_ImportServer struct {
-	ImportServer *ImportServer `protobuf:"bytes,15,opt,name=import_server,json=importServer,proto3,oneof"`
-}
-
 func (*JobEnvelope_CreateServer) isJobEnvelope_Payload() {}
 
 func (*JobEnvelope_StartServer) isJobEnvelope_Payload() {}
@@ -180,8 +166,6 @@ func (*JobEnvelope_StopServer) isJobEnvelope_Payload() {}
 func (*JobEnvelope_KillServer) isJobEnvelope_Payload() {}
 
 func (*JobEnvelope_DeleteServer) isJobEnvelope_Payload() {}
-
-func (*JobEnvelope_ImportServer) isJobEnvelope_Payload() {}
 
 // CreateServer = provision: สร้าง directory, โหลด artifact จาก official source ของเกม,
 // เขียน seed config / launch script — ยังไม่ start
@@ -257,85 +241,6 @@ func (x *CreateServer) GetGame() string {
 	return ""
 }
 
-// ImportServer = เหมือน CreateServer แต่ไม่โหลด artifact — แตก zip ที่ upload มา (staged ไว้ที่
-// archive_path ใน jail ผ่าน chunked file write) เข้า server dir แล้ว provision (seed/meta/launch) ต่อ
-// ทุก entry ใน zip ต้องผ่าน SafeJoin ก่อนเขียน (กัน zip-slip) + chown 1000:1000
-type ImportServer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Variant       string                 `protobuf:"bytes,1,opt,name=variant,proto3" json:"variant,omitempty"` // ชนิดของ server ภายในเกม เช่น vanilla | paper | proxy
-	GameVersion   string                 `protobuf:"bytes,2,opt,name=game_version,json=gameVersion,proto3" json:"game_version,omitempty"`
-	AcceptLicense bool                   `protobuf:"varint,3,opt,name=accept_license,json=acceptLicense,proto3" json:"accept_license,omitempty"`
-	ArchivePath   string                 `protobuf:"bytes,4,opt,name=archive_path,json=archivePath,proto3" json:"archive_path,omitempty"` // path relative ต่อ jail ของ zip ที่ staged ไว้ เช่น ".gamemanager/import.zip"
-	Game          string                 `protobuf:"bytes,5,opt,name=game,proto3" json:"game,omitempty"`                                  // game definition id — ว่าง = game default
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ImportServer) Reset() {
-	*x = ImportServer{}
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ImportServer) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ImportServer) ProtoMessage() {}
-
-func (x *ImportServer) ProtoReflect() protoreflect.Message {
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ImportServer.ProtoReflect.Descriptor instead.
-func (*ImportServer) Descriptor() ([]byte, []int) {
-	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ImportServer) GetVariant() string {
-	if x != nil {
-		return x.Variant
-	}
-	return ""
-}
-
-func (x *ImportServer) GetGameVersion() string {
-	if x != nil {
-		return x.GameVersion
-	}
-	return ""
-}
-
-func (x *ImportServer) GetAcceptLicense() bool {
-	if x != nil {
-		return x.AcceptLicense
-	}
-	return false
-}
-
-func (x *ImportServer) GetArchivePath() string {
-	if x != nil {
-		return x.ArchivePath
-	}
-	return ""
-}
-
-func (x *ImportServer) GetGame() string {
-	if x != nil {
-		return x.Game
-	}
-	return ""
-}
-
 type StartServer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MemoryMb      int32                  `protobuf:"varint,1,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`         // hard limit ของทั้ง container — definition เป็นคนแปลงเป็น heap เอง
@@ -347,7 +252,7 @@ type StartServer struct {
 
 func (x *StartServer) Reset() {
 	*x = StartServer{}
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[3]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -359,7 +264,7 @@ func (x *StartServer) String() string {
 func (*StartServer) ProtoMessage() {}
 
 func (x *StartServer) ProtoReflect() protoreflect.Message {
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[3]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -372,7 +277,7 @@ func (x *StartServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartServer.ProtoReflect.Descriptor instead.
 func (*StartServer) Descriptor() ([]byte, []int) {
-	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{3}
+	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StartServer) GetMemoryMb() int32 {
@@ -405,7 +310,7 @@ type StopServer struct {
 
 func (x *StopServer) Reset() {
 	*x = StopServer{}
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[4]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -417,7 +322,7 @@ func (x *StopServer) String() string {
 func (*StopServer) ProtoMessage() {}
 
 func (x *StopServer) ProtoReflect() protoreflect.Message {
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[4]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -430,7 +335,7 @@ func (x *StopServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopServer.ProtoReflect.Descriptor instead.
 func (*StopServer) Descriptor() ([]byte, []int) {
-	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{4}
+	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StopServer) GetGraceful() bool {
@@ -448,7 +353,7 @@ type KillServer struct {
 
 func (x *KillServer) Reset() {
 	*x = KillServer{}
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[5]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -460,7 +365,7 @@ func (x *KillServer) String() string {
 func (*KillServer) ProtoMessage() {}
 
 func (x *KillServer) ProtoReflect() protoreflect.Message {
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[5]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -473,7 +378,7 @@ func (x *KillServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillServer.ProtoReflect.Descriptor instead.
 func (*KillServer) Descriptor() ([]byte, []int) {
-	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{5}
+	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{4}
 }
 
 // DeleteServer: stop + ลบ container + ลบ directory ใต้ GM_DATA_DIR
@@ -486,7 +391,7 @@ type DeleteServer struct {
 
 func (x *DeleteServer) Reset() {
 	*x = DeleteServer{}
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[6]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -498,7 +403,7 @@ func (x *DeleteServer) String() string {
 func (*DeleteServer) ProtoMessage() {}
 
 func (x *DeleteServer) ProtoReflect() protoreflect.Message {
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[6]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -511,7 +416,7 @@ func (x *DeleteServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServer.ProtoReflect.Descriptor instead.
 func (*DeleteServer) Descriptor() ([]byte, []int) {
-	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{6}
+	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{5}
 }
 
 type JobResult struct {
@@ -527,7 +432,7 @@ type JobResult struct {
 
 func (x *JobResult) Reset() {
 	*x = JobResult{}
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[7]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +444,7 @@ func (x *JobResult) String() string {
 func (*JobResult) ProtoMessage() {}
 
 func (x *JobResult) ProtoReflect() protoreflect.Message {
-	mi := &file_gamemanager_job_v1_job_proto_msgTypes[7]
+	mi := &file_gamemanager_job_v1_job_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +457,7 @@ func (x *JobResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobResult.ProtoReflect.Descriptor instead.
 func (*JobResult) Descriptor() ([]byte, []int) {
-	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{7}
+	return file_gamemanager_job_v1_job_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *JobResult) GetJobId() string {
@@ -594,7 +499,7 @@ var File_gamemanager_job_v1_job_proto protoreflect.FileDescriptor
 
 const file_gamemanager_job_v1_job_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgamemanager/job/v1/job.proto\x12\x12gamemanager.job.v1\"\xf3\x03\n" +
+	"\x1cgamemanager/job/v1/job.proto\x12\x12gamemanager.job.v1\"\xb0\x03\n" +
 	"\vJobEnvelope\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x1b\n" +
 	"\tserver_id\x18\x02 \x01(\tR\bserverId\x12G\n" +
@@ -605,20 +510,13 @@ const file_gamemanager_job_v1_job_proto_rawDesc = "" +
 	"stopServer\x12A\n" +
 	"\vkill_server\x18\r \x01(\v2\x1e.gamemanager.job.v1.KillServerH\x00R\n" +
 	"killServer\x12G\n" +
-	"\rdelete_server\x18\x0e \x01(\v2 .gamemanager.job.v1.DeleteServerH\x00R\fdeleteServer\x12G\n" +
-	"\rimport_server\x18\x0f \x01(\v2 .gamemanager.job.v1.ImportServerH\x00R\fimportServerB\t\n" +
-	"\apayload\"\x86\x01\n" +
+	"\rdelete_server\x18\x0e \x01(\v2 .gamemanager.job.v1.DeleteServerH\x00R\fdeleteServerB\t\n" +
+	"\apayloadJ\x04\b\x0f\x10\x10\"\x86\x01\n" +
 	"\fCreateServer\x12\x18\n" +
 	"\avariant\x18\x01 \x01(\tR\avariant\x12!\n" +
 	"\fgame_version\x18\x02 \x01(\tR\vgameVersion\x12%\n" +
 	"\x0eaccept_license\x18\x03 \x01(\bR\racceptLicense\x12\x12\n" +
-	"\x04game\x18\x04 \x01(\tR\x04game\"\xa9\x01\n" +
-	"\fImportServer\x12\x18\n" +
-	"\avariant\x18\x01 \x01(\tR\avariant\x12!\n" +
-	"\fgame_version\x18\x02 \x01(\tR\vgameVersion\x12%\n" +
-	"\x0eaccept_license\x18\x03 \x01(\bR\racceptLicense\x12!\n" +
-	"\farchive_path\x18\x04 \x01(\tR\varchivePath\x12\x12\n" +
-	"\x04game\x18\x05 \x01(\tR\x04game\"j\n" +
+	"\x04game\x18\x04 \x01(\tR\x04game\"j\n" +
 	"\vStartServer\x12\x1b\n" +
 	"\tmemory_mb\x18\x01 \x01(\x05R\bmemoryMb\x12\x1b\n" +
 	"\thost_port\x18\x02 \x01(\x05R\bhostPort\x12!\n" +
@@ -648,29 +546,27 @@ func file_gamemanager_job_v1_job_proto_rawDescGZIP() []byte {
 	return file_gamemanager_job_v1_job_proto_rawDescData
 }
 
-var file_gamemanager_job_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_gamemanager_job_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_gamemanager_job_v1_job_proto_goTypes = []any{
 	(*JobEnvelope)(nil),  // 0: gamemanager.job.v1.JobEnvelope
 	(*CreateServer)(nil), // 1: gamemanager.job.v1.CreateServer
-	(*ImportServer)(nil), // 2: gamemanager.job.v1.ImportServer
-	(*StartServer)(nil),  // 3: gamemanager.job.v1.StartServer
-	(*StopServer)(nil),   // 4: gamemanager.job.v1.StopServer
-	(*KillServer)(nil),   // 5: gamemanager.job.v1.KillServer
-	(*DeleteServer)(nil), // 6: gamemanager.job.v1.DeleteServer
-	(*JobResult)(nil),    // 7: gamemanager.job.v1.JobResult
+	(*StartServer)(nil),  // 2: gamemanager.job.v1.StartServer
+	(*StopServer)(nil),   // 3: gamemanager.job.v1.StopServer
+	(*KillServer)(nil),   // 4: gamemanager.job.v1.KillServer
+	(*DeleteServer)(nil), // 5: gamemanager.job.v1.DeleteServer
+	(*JobResult)(nil),    // 6: gamemanager.job.v1.JobResult
 }
 var file_gamemanager_job_v1_job_proto_depIdxs = []int32{
 	1, // 0: gamemanager.job.v1.JobEnvelope.create_server:type_name -> gamemanager.job.v1.CreateServer
-	3, // 1: gamemanager.job.v1.JobEnvelope.start_server:type_name -> gamemanager.job.v1.StartServer
-	4, // 2: gamemanager.job.v1.JobEnvelope.stop_server:type_name -> gamemanager.job.v1.StopServer
-	5, // 3: gamemanager.job.v1.JobEnvelope.kill_server:type_name -> gamemanager.job.v1.KillServer
-	6, // 4: gamemanager.job.v1.JobEnvelope.delete_server:type_name -> gamemanager.job.v1.DeleteServer
-	2, // 5: gamemanager.job.v1.JobEnvelope.import_server:type_name -> gamemanager.job.v1.ImportServer
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	2, // 1: gamemanager.job.v1.JobEnvelope.start_server:type_name -> gamemanager.job.v1.StartServer
+	3, // 2: gamemanager.job.v1.JobEnvelope.stop_server:type_name -> gamemanager.job.v1.StopServer
+	4, // 3: gamemanager.job.v1.JobEnvelope.kill_server:type_name -> gamemanager.job.v1.KillServer
+	5, // 4: gamemanager.job.v1.JobEnvelope.delete_server:type_name -> gamemanager.job.v1.DeleteServer
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_gamemanager_job_v1_job_proto_init() }
@@ -684,7 +580,6 @@ func file_gamemanager_job_v1_job_proto_init() {
 		(*JobEnvelope_StopServer)(nil),
 		(*JobEnvelope_KillServer)(nil),
 		(*JobEnvelope_DeleteServer)(nil),
-		(*JobEnvelope_ImportServer)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -692,7 +587,7 @@ func file_gamemanager_job_v1_job_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gamemanager_job_v1_job_proto_rawDesc), len(file_gamemanager_job_v1_job_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

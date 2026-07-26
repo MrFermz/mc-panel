@@ -128,7 +128,6 @@ export const jobTypeSchema = z.enum([
   "stop_server",
   "kill_server",
   "delete_server",
-  "import_server",
 ]);
 
 export const jobStatusSchema = z.enum([

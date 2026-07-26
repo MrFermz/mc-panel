@@ -13,7 +13,6 @@ DEV_APP_COMPOSE := docker compose --env-file .env -f infra/docker-compose.dev.ym
 FULL_COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
 DB_URL        = postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?sslmode=disable
 BUF          ?= go run github.com/bufbuild/buf/cmd/buf@v1.47.2
-GOOSE        ?= go run github.com/pressly/goose/v3/cmd/goose@v3.24.1
 
 .PHONY: help
 help: ## Show all commands with descriptions
@@ -103,16 +102,6 @@ infra-down: ## Stop dev infra (data kept)
 .PHONY: infra-logs
 infra-logs: ## Tail all dev infra logs in real-time
 	$(DEV_COMPOSE) logs -f
-
-# ---------- database ----------
-
-.PHONY: migrate-up
-migrate-up: ## Run all pending migrations (dev — full stack runs them automatically on boot)
-	$(GOOSE) -dir apps/control-plane/migrations postgres "$(DB_URL)" up
-
-.PHONY: migrate-down
-migrate-down: ## Roll back the latest migration by one step
-	$(GOOSE) -dir apps/control-plane/migrations postgres "$(DB_URL)" down
 
 # ---------- proto ----------
 
@@ -207,8 +196,7 @@ reset: ## Wipe DB + all infra data and set up fresh (dev)
 	$(DEV_COMPOSE) down -v
 	$(DEV_COMPOSE) up -d
 	@until $(DEV_COMPOSE) exec -T postgres pg_isready -U $(POSTGRES_USER) > /dev/null 2>&1; do sleep 1; done
-	$(MAKE) migrate-up
-	@echo "Reset complete — ready to continue dev"
+	@echo "Reset complete — ready to continue dev (control-plane creates the schema on boot)"
 
 .PHONY: purge
 purge: ## Wipe everything (data, volumes, binaries, node_modules) — requires typed confirmation
@@ -233,9 +221,8 @@ purge: ## Wipe everything (data, volumes, binaries, node_modules) — requires t
 # ---------- bootstrap dev ----------
 
 .PHONY: bootstrap
-bootstrap: ## First-time dev setup (env -> infra -> migrate -> web deps)
+bootstrap: ## First-time dev setup (env -> infra -> web deps; schema is created by control-plane on boot)
 	@test -f .env || $(MAKE) env
 	$(MAKE) infra-up
-	$(MAKE) migrate-up
 	cd apps/web && pnpm install
 	@echo "bootstrap complete — open 3 terminals: make run-control-plane / make run-agent / make run-web"

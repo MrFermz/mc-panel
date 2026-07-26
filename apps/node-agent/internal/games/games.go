@@ -1,7 +1,7 @@
 // Package games นิยาม "เกม" ที่ node-agent รันได้ (game definition ฝั่ง runtime)
 //
 // ความรู้เฉพาะเกมทุกอย่างที่ agent ต้องใช้ — variant ที่ provision ได้, ที่มาของ artifact,
-// launch script, คำสั่งปิด, ไฟล์ config ที่ panel เขียนให้, การเดาเวอร์ชันจาก artifact,
+// launch script, คำสั่งปิด, ไฟล์ config ที่ panel เขียนให้,
 // และวิธีอ่านสถานะในเกมจาก console — อยู่ใน Definition ตัวเดียว ส่วนที่เหลือของ agent
 // (provision/runner/gamestate/jobs) ทำงานผ่าน Registry นี้เท่านั้น
 // **ห้าม switch ตามชื่อ variant กระจายอยู่ในโค้ดอื่นอีก**
@@ -47,9 +47,6 @@ type Definition struct {
 	// config ของ agent เพื่อให้ override ได้ ต้องให้ผลตรงกับที่ control-plane เลือกไว้
 	RuntimeImage func(prefix, variant, version string) string
 
-	// Import = กติกาการนำเข้า server เดิมจาก zip ของ user
-	Import ImportSpec
-
 	// Console = วิธีอ่านสถานะในเกม (ผู้เล่นออนไลน์/metric) จาก console
 	Console ConsoleSpec
 }
@@ -72,22 +69,6 @@ type SeedFile struct {
 	Mode    fs.FileMode
 	// Overwrite=false → เขียนเฉพาะเมื่อไฟล์ยังไม่มี (ห้ามทับ config ที่ user แก้ไว้)
 	Overwrite bool
-}
-
-// ---------- import ----------
-
-// ImportSpec = สิ่งที่ต้องรู้เพื่อรับ server เดิมของ user เข้ามาให้ launch script รันได้
-type ImportSpec struct {
-	// Ext = นามสกุลของ artifact หลักที่อยู่ root ของ server dir (minecraft = ".jar")
-	Ext string
-	// NameHints = ชื่อที่บอกใบ้ว่าไฟล์ไหนคือ artifact หลัก เรียงตามลำดับความมั่นใจ
-	NameHints []string
-	// MainArtifact = ชื่อไฟล์ที่ launch script คาดหวังสำหรับ variant นี้
-	// ("" = variant นี้ไม่ต้อง normalize เช่น variant ที่ใช้ run script)
-	MainArtifact func(variant string) string
-	// DetectVersion เดาเวอร์ชันจริงจาก artifact (artifactPath อาจว่างถ้าไม่มีไฟล์)
-	// originalName = ชื่อไฟล์เดิมใน zip ไว้ fallback. คืน "" เมื่อเดาไม่ได้
-	DetectVersion func(artifactPath, originalName string) string
 }
 
 // ---------- console ----------

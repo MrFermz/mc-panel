@@ -107,9 +107,6 @@ type VersionSpec struct {
 	// List ดึงรายการเวอร์ชันของ variant จาก upstream official (nil = เกมนี้ไม่มี catalog)
 	// คืน ErrUnknownVariant เมื่อ variant ไม่มีจริง
 	List func(ctx context.Context, variant string) ([]string, error)
-	// ValidDetected = เวอร์ชันที่ agent detect จาก artifact จริงแล้วส่งกลับมา อยู่ในรูปที่
-	// ยอมรับได้ไหม (เข้มกว่าค่าที่ user กรอก เพราะเอาไปเขียนทับของเดิมโดยไม่มีคนยืนยัน)
-	ValidDetected func(version string) bool
 	// RuntimeImage = image ที่ job start_server สั่งให้ agent ใช้กับ variant/version นี้
 	RuntimeImage func(variant, version string) string
 }

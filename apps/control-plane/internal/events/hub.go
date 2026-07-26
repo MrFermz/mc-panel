@@ -93,7 +93,7 @@ type serverJobsMsg struct {
 }
 
 // jobUpdateMsg = ความคืบหน้าของ lifecycle job ตัวหนึ่ง (start/stop/kill/restart/create/
-// import/delete) ตั้งแต่ dispatch จนจบ — ต่างจาก server_jobs ที่บอกแค่ "list เปลี่ยน
+// delete) ตั้งแต่ dispatch จนจบ — ต่างจาก server_jobs ที่บอกแค่ "list เปลี่ยน
 // ไป refetch เอง" อันนี้ carry ผลลัพธ์จริงรวม error ให้ UI แจ้ง user ได้ทันทีโดยไม่ต้อง
 // refetch. มี error text อยู่ในนั้นจึงต้อง fan-out แบบ filter ตามสิทธิ์เสมอ
 type jobUpdateMsg struct {
@@ -109,7 +109,7 @@ type jobUpdateMsg struct {
 }
 
 // serverListMsg = server_added/server_removed — แจ้ง browser ว่า list ของ server
-// เปลี่ยน (create/import/delete) ให้ refetch ["servers"]. carry แค่ server_id จึง
+// เปลี่ยน (create/delete) ให้ refetch ["servers"]. carry แค่ server_id จึง
 // broadcast แบบ unfiltered ได้ (ไม่มีข้อมูลรั่ว — refetch ฝั่ง web เช็คสิทธิ์เอง)
 type serverListMsg struct {
 	Type     string    `json:"type"`

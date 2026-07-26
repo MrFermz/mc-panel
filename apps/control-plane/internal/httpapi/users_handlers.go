@@ -13,7 +13,7 @@ import (
 )
 
 // username: ตัวพิมพ์เล็ก/ตัวเลข/`_.-` ยาว 3-64 (ต้องตรงกับ regex ฝั่ง web)
-// ไม่รับตัวพิมพ์ใหญ่ — canonical เป็น lowercase ตั้งแต่ชั้น DB (migration 00018 มี CHECK คุมอยู่)
+// ไม่รับตัวพิมพ์ใหญ่ — canonical เป็น lowercase ตั้งแต่ชั้น DB (CHECK `users_username_lowercase` คุมอยู่)
 var usernameRe = regexp.MustCompile(`^[a-z0-9_.-]{3,64}$`)
 
 // canonicalUsername: ทุกทางเข้าที่รับ username จากภายนอกต้องผ่านตัวนี้ก่อน validate/เทียบ/บันทึก
@@ -170,7 +170,7 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := a.st.CreateUser(r.Context(), req.Username, hash, req.IsAdmin, req.Capabilities)
-	// username unique ทั้งตาราง — บัญชีที่อยู่ในถังขยะก็ยังจองชื่อไว้ (ดู migration 00017)
+	// username unique ทั้งตาราง — บัญชีที่อยู่ในถังขยะก็ยังจองชื่อไว้
 	if store.IsUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "username_exists",
 			"this username is taken — it may belong to a deleted account, which still reserves its username")
@@ -335,7 +335,7 @@ func (a *API) handleRestoreUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "user_not_found", "no deleted user with this id")
 		return
 	}
-	// safety net: username unique ทั้งตารางตั้งแต่ 00017 ชื่อจึงถูกจองไว้ตลอดที่อยู่ในถังขยะ
+	// safety net: username unique ทั้งตาราง ชื่อจึงถูกจองไว้ตลอดที่อยู่ในถังขยะ
 	// เคสนี้เกิดไม่ได้กับ constraint ปัจจุบัน — ดักไว้เผื่อ index กลับไปเป็น partial อีก
 	if store.IsUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "username_exists",

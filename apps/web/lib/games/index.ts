@@ -6,7 +6,7 @@
 import { minecraft } from "@/lib/games/minecraft";
 import type { GameProfile } from "@/lib/games/types";
 
-export type { DetectedInstance, GameProfile } from "@/lib/games/types";
+export type { GameProfile } from "@/lib/games/types";
 
 const PROFILES: Record<string, GameProfile> = {
   [minecraft.id]: minecraft,

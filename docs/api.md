@@ -30,7 +30,7 @@ WS: ตรวจ `Origin` header ตอน handshake เสมอ
 
 | Method | Path | ใคร | Body → Response |
 |---|---|---|---|
-| POST | `/api/auth/login` | public (rate limit 10/นาที/IP ผ่าน redis) | `{username, password}` → `{user}` + Set-Cookie; 401 `invalid_credentials`. `username` ถูก lower ก่อนเทียบเสมอ (เก็บใน DB เป็นตัวพิมพ์เล็กล้วน — ดู migration 00018) |
+| POST | `/api/auth/login` | public (rate limit 10/นาที/IP ผ่าน redis) | `{username, password}` → `{user}` + Set-Cookie; 401 `invalid_credentials`. `username` ถูก lower ก่อนเทียบเสมอ (เก็บใน DB เป็นตัวพิมพ์เล็กล้วน — มี CHECK `users_username_lowercase` คุมอยู่) |
 | POST | `/api/auth/logout` | ทุกคน | → 204 + ลบ cookie |
 | GET | `/api/auth/me` | ทุกคน | → `{user}` |
 | POST | `/api/auth/change-password` | ทุกคน | `{current_password, new_password}` → `{user}` + Set-Cookie ใหม่ (bump token_version) |
@@ -72,7 +72,7 @@ route เดียวใน `internal/httpapi/api.go`
 | `nodes.create` | `POST /api/nodes` |
 | `nodes.delete` | `DELETE /api/nodes/{id}` |
 | `servers.view_all` | `GET /api/servers?scope=all` (เห็นทุก server รวมที่อยู่ในถังขยะ — หน้า `/admin/servers`) |
-| `servers.create` | `POST /api/servers`, `POST /api/servers/import` |
+| `servers.create` | `POST /api/servers` |
 | `servers.edit` | `PATCH /api/servers/{id}` |
 | `servers.delete` | `DELETE /api/servers/{id}` (soft delete — ย้ายเข้าถังขยะ) |
 | `servers.restore` | `POST /api/servers/{id}/restore` |
@@ -154,7 +154,7 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 ตอนนี้มีเกมเดียวคือ `minecraft` (ดู `GET /api/meta/games`) — field `game` จึง **optional ทุกที่**:
 ไม่ส่ง/ส่งค่าว่าง = `minecraft` เสมอ, ส่ง id ที่ไม่รู้จัก = 400 `invalid_game`
 
-ชื่อ field ที่ยังเป็นศัพท์ Minecraft ด้วยเหตุผลเรื่อง contract (ห้ามเปลี่ยนโดยไม่มี migration ฝั่ง web):
+ชื่อ field ที่ยังเป็นศัพท์ Minecraft ด้วยเหตุผลเรื่อง contract (ห้ามเปลี่ยนโดยไม่แก้ฝั่ง web พร้อมกัน):
 `game_version` = เวอร์ชันของเกม, `variant` = variant, `allowlist_enabled` = allowlist ของเกมเปิดอยู่ไหม,
 `tick_rate` ใน `stats` = metric ประจำเกมที่อ่านจาก console, error code `identity_unavailable` = identity
 service ของเกมติดต่อไม่ได้
@@ -180,7 +180,6 @@ user ที่มี capability `servers.create` (หรือ is_admin) สร�
 |---|---|---|---|
 | GET | `/api/servers` | login แล้ว | `?scope=mine` (default) → `{servers: [server]}` เฉพาะที่มี `server_permissions` row ของตัวเอง (admin ก็เหมือนกัน) — server ในถังขยะไม่โผล่. `?scope=all` ต้องมี `servers.view_all` (ไม่งั้น 403 `forbidden`) → ทุก server รวมที่ `deleted_at != null`; `scope` ค่าอื่น → 400 `invalid_request` |
 | POST | `/api/servers` | login แล้ว | `{name, node_id, game?, variant, game_version, memory_mb, host_port?, accept_license}` → 201 `{server, job}` — `game` ไม่ส่ง = `minecraft` (id ที่ไม่รู้จัก → 400 `invalid_game`), `variant` ต้องเป็น variant ของเกมนั้น; ต้อง accept_license=true เว้น variant ที่ไม่ต้องยอมรับ (minecraft: velocity); 400 `insufficient_memory` เมื่อ RAM เกิน (ดู admission control ล่าง) |
-| POST | `/api/servers/import` | `servers.create` | `multipart/form-data` (ดูด้านล่าง) → 201 `{server, job}` — import server เดิมจาก .zip; 400 `insufficient_memory` เหมือน create |
 | GET | `/api/servers/{id}` | มี access | → `{server, permissions: [permission+user]}` — คืน permission list ให้ทุกคนที่มี access (web หา row ของตัวเองไป gate แท็บ/ปุ่มด้วย effective cap) |
 | PATCH | `/api/servers/{id}` | `servers.edit` | `{name?, memory_mb?, host_port?}` → `{server}` (มีผลตอน start ครั้งถัดไป); `memory_mb`/`host_port` แก้ได้เฉพาะตอน stopped/errored (409 `invalid_state`); ขยาย `memory_mb` เกิน RAM node → 400 `insufficient_memory` |
 | DELETE | `/api/servers/{id}` | `servers.delete` | → `{server}` — **soft delete**: set `deleted_at` แล้วจบทันที (ไม่มี job, ไม่แตะไฟล์/container บน node); ต้อง stopped/errored เท่านั้น (409 `invalid_state` — หยุด server ก่อนถึงจะลบได้) |
@@ -217,9 +216,9 @@ server หายจากทุก view ทันที (ทุก endpoint ร�
 audit `server_deleted`, event `server_removed`). purge ทำได้เฉพาะกับ server ที่ soft delete แล้ว
 จึงบังคับลำดับ **stop → delete → purge** เสมอ; purge ล้ม → status `errored` แต่ยังอยู่ในถังขยะ retry ได้
 
-### RAM admission control (create / import / grow)
+### RAM admission control (create / grow)
 
-ตอน create, import และตอนขยาย `memory_mb` (PATCH) control-plane กัน RAM overcommit: ผลรวม
+ตอน create และตอนขยาย `memory_mb` (PATCH) control-plane กัน RAM overcommit: ผลรวม
 `memory_mb` ของทุก server บน node นั้น (`SumServerMemoryMBOnNode` — **นับ server ที่อยู่ในถังขยะด้วย**)
 + memory ที่ขอ ต้องไม่เกิน
 `node.memory_total_mb`. ถ้าเกิน → `400 insufficient_memory` โดย body มี field พิเศษเพิ่มจาก
@@ -227,32 +226,6 @@ audit `server_deleted`, event `server_removed`). purge ทำได้เฉพ�
 (`used_mb` = ที่จองอยู่แล้วบน node ไม่รวม instance ที่กำลังเพิ่ม/ขยาย). ตอน PATCH เช็คเฉพาะเมื่อ
 ค่าใหม่ > ค่าเดิม และไม่นับ memory เดิมของ server ตัวเอง. ถ้า node ยังไม่รายงาน `memory_total_mb`
 (=0/ไม่รู้) → ข้ามเช็ค ไม่บล็อก
-
-### Import server (`POST /api/servers/import`)
-
-รับ server instance เดิม (โลกเดิม/config/plugin) เป็น `.zip` แล้วสร้าง server ใหม่โดย**ไม่โหลด jar**
-— body เป็น `multipart/form-data` streaming (control-plane ไม่ buffer ทั้ง zip):
-
-- text parts: `name`, `node_id`, `game?`, `variant`, `game_version`, `memory_mb`, `host_port?`, `accept_license`
-  (validate เหมือน `POST /api/servers` ทุกกฎ ด้วย game definition ตัวเดียวกัน: memory_mb ≥ ขั้นต่ำของเกม
-  (minecraft = 256), host_port ว่าง=ไม่ expose ไม่งั้น 1024-65535, accept_license ต้อง true เว้น variant
-  ที่ไม่ต้องยอมรับ; `game` ไม่ส่ง = `minecraft`)
-- file part **ชื่อ `archive`** (ต้องเป็น part สุดท้าย): ไฟล์ `.zip` ของ server เดิม (เพดาน 2 GiB)
-
-Flow: control-plane อ่าน zip ทีละก้อน stream เข้า agent เป็น chunked file-write (`FileWriteChunk`)
-ไปไว้ที่ `.gamemanager/import.zip` ใน jail ของ server → dispatch NATS job `import_server` ให้ agent
-แตก zip (ผ่าน `SafeJoin`/กัน zip-slip) เขียน eula/launch script แล้ว success → status `stopped`
-(semantics เดียวกับ `create_server`). staged bytes เป็น file I/O ปกติ, lifecycle command เป็น NATS job.
-agent อาจ detect เวอร์ชันจริงจากไฟล์ที่ import แล้วรายงานกลับใน `JobResult.Detail` เป็น JSON
-`{"game_version":"..."}` — เมื่อ import สำเร็จ control-plane จะ update `game_version` ของ server ตามนั้น
-(ถ้าเวอร์ชันผ่านการ validate) ดังนั้น `game_version` ของ server row อาจเปลี่ยนหลัง import (fetch ใหม่จะเห็น)
-
-- 201 → `{server, job}` (shape เดียวกับ create)
-- errors: `invalid_game`/`invalid_name`/`invalid_variant`/`invalid_game_version`/`invalid_memory`/`invalid_host_port`
-  (400), `license_required` (400), `empty_archive` (400, zip ว่าง), `archive_too_large` (413, เกิน 2 GiB),
-  `node_not_found` (404), `host_port_taken` (409), `node_offline` (503, agent ไม่ออนไลน์),
-  `agent_timeout` (504), `import_failed` (502, agent ปัด chunk), `dispatch_failed` (502)
-- audit action: `server_import`
 
 ## File manager (per-action cap: `files.view` อ่าน, `files.write` เขียน/สร้าง/rename, `files.delete` ลบ — คู่กับ owner/admin)
 
@@ -417,7 +390,7 @@ Authorization scope (filter ต่อ event ตาม connection):
 - **node event** (`node_stats`): เฉพาะ admin หรือ `nodes.view` — คนอื่นไม่ได้รับ
 - **server list event** (`server_added`, `server_removed`): broadcast **ไม่ filter** ไปทุก connection
   (payload มีแค่ `server_id` ไม่มีข้อมูล server จริง จึงไม่รั่ว) — client ใช้ signal ว่า list ของ server
-  เปลี่ยน (create/import/delete) แล้ว refetch `GET /api/servers` (ซึ่งเช็คสิทธิ์เองอยู่แล้ว)
+  เปลี่ยน (create/delete) แล้ว refetch `GET /api/servers` (ซึ่งเช็คสิทธิ์เองอยู่แล้ว)
 
 server → client (JSON, field `type` เป็นตัวแยกชนิด):
 ```json
@@ -442,7 +415,7 @@ server → client (JSON, field `type` เป็นตัวแยกชนิด
   ต่างจาก `server_jobs` ตรงที่ carry ผลลัพธ์มาด้วย ใช้แจ้ง user ได้เลยโดยไม่ต้อง refetch —
   จำเป็นเพราะ start/stop ที่ล้มบางเคสไม่มี `server_status` ตามมา (รอ heartbeat reconcile)
 - `server_added` / `server_removed`: signal ว่า list ของ server เปลี่ยน — `server_added` ส่งตอน
-  create/import (row เกิดแล้ว) และตอน **restore**, `server_removed` ส่งตอน **soft delete**
+  create (row เกิดแล้ว) และตอน **restore**, `server_removed` ส่งตอน **soft delete**
   (row ยังอยู่แต่หายจากทุก view ยกเว้น `scope=all`) และตอน purge job สำเร็จ (row ถูกลบจริง);
   client refetch `GET /api/servers` (ส่งแบบ unfiltered ทุก connection — ดู scope ด้านบน)
 - `node_stats`: `node` เป็น object รูปแบบเดียวกับ item ของ `GET /api/nodes` แบบ field-for-field
@@ -454,7 +427,7 @@ Pattern การใช้ฝั่ง web: โหลด state เริ่ม�
 
 `login_success`, `login_failed`, `password_changed`, `profile_updated`, `avatar_updated`, `avatar_removed`,
 `user_created`, `user_updated`, `user_delete`, `password_reset`,
-`node_created`, `node_deleted`, `server_created`, `server_import`, `server_updated`,
+`node_created`, `node_deleted`, `server_created`, `server_updated`,
 `server_soft_deleted` (ย้ายเข้าถังขยะ), `server_restored`, `server_deleted` (purge สำเร็จ — ไฟล์หายจริง),
 `server_action` (detail: start/stop/restart/kill), `permission_updated`, `permission_removed`, `console_command`,
 `file_write`, `file_mkdir`, `file_rename`, `file_delete`, `config_update`, `player_add`, `player_remove`

@@ -19,7 +19,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/pressly/goose/v3"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -39,7 +38,7 @@ import (
 	"github.com/game-manager/control-plane/internal/seed"
 	"github.com/game-manager/control-plane/internal/serverstats"
 	"github.com/game-manager/control-plane/internal/store"
-	"github.com/game-manager/control-plane/migrations"
+	"github.com/game-manager/control-plane/schema"
 )
 
 func main() {
@@ -102,7 +101,7 @@ func runResetAdminPassword(cfg *config.Config, log *slog.Logger, username string
 	if username == "" {
 		username = cfg.AdminUsername
 	}
-	// `-username=Admin` ต้องเจอบัญชี `admin` และถ้าต้องสร้างใหม่ต้องผ่าน CHECK ของ DB (00018)
+	// `-username=Admin` ต้องเจอบัญชี `admin` และถ้าต้องสร้างใหม่ต้องผ่าน CHECK ของ DB
 	username = strings.ToLower(strings.TrimSpace(username))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -159,8 +158,8 @@ func runResetAdminPassword(cfg *config.Config, log *slog.Logger, username string
 }
 
 func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
-	if err := runMigrations(ctx, cfg.DatabaseURL, log); err != nil {
-		return fmt.Errorf("migrations: %w", err)
+	if err := applySchema(ctx, cfg.DatabaseURL, log); err != nil {
+		return fmt.Errorf("schema: %w", err)
 	}
 
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
@@ -332,7 +331,9 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	return nil
 }
 
-func runMigrations(ctx context.Context, dsn string, log *slog.Logger) error {
+// applySchema รัน schema.sql ทั้งก้อน (idempotent) ตอน boot — ยังไม่มีระบบ migration
+// ในเฟสนี้ จึงไม่มีการ migrate ข้อมูลเดิม: schema ที่เปลี่ยนหลังตารางถูกสร้างแล้วต้องล้าง DB เอง
+func applySchema(ctx context.Context, dsn string, log *slog.Logger) error {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return err
@@ -357,14 +358,10 @@ func runMigrations(ctx context.Context, dsn string, log *slog.Logger) error {
 		}
 	}
 
-	goose.SetBaseFS(migrations.FS)
-	if err := goose.SetDialect("postgres"); err != nil {
+	if _, err := db.ExecContext(ctx, schema.SQL); err != nil {
 		return err
 	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		return err
-	}
-	log.Info("migrations applied")
+	log.Info("schema applied")
 	return nil
 }
 
