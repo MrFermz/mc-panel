@@ -4,18 +4,17 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, getNextPort } from "@/lib/api";
 import {
-  metaGamesResponseSchema,
   metaNodesResponseSchema,
   metaVariantsResponseSchema,
   nodesResponseSchema,
   serversResponseSchema,
   versionsResponseSchema,
-  type MetaGame,
   type MetaNode,
   type MetaVariant,
 } from "@/lib/types";
 import { CAPABILITY, hasCapability } from "@/lib/capabilities";
 import { gameProfile } from "@/lib/games";
+import { useMetaGames } from "@/components/server/new-server/use-meta-games";
 import { useMe } from "@/lib/use-me";
 
 // งบ RAM ของโหนดที่เลือก — advisory ล้วน (backend เป็นคนปฏิเสธจริงด้วย insufficient_memory)
@@ -28,7 +27,7 @@ export interface RamBudget {
 
 export interface ServerMetadata {
   name: string;
-  // game = เกมที่กำลังจะสร้าง — "" จนกว่ารายการเกมจะโหลดเสร็จ (ไม่มี default ตายตัวใน web)
+  // game = เกมที่กำลังจะสร้าง — เลือกมาจากหน้าก่อนหน้า (/servers/new) และคงที่ตลอด wizard
   game: string;
   nodeId: string;
   variant: string;
@@ -38,7 +37,6 @@ export interface ServerMetadata {
   acceptLicense: boolean;
 
   setName: (v: string) => void;
-  setGame: (v: string) => void;
   setNodeId: (v: string) => void;
   setVariant: (v: string) => void;
   setGameVersion: (v: string) => void;
@@ -51,8 +49,6 @@ export interface ServerMetadata {
   minMemoryMb: number;
   valid: boolean;
 
-  games: MetaGame[];
-  gamesPending: boolean;
   nodes: MetaNode[];
   nodesPending: boolean;
   types: MetaVariant[];
@@ -67,10 +63,12 @@ export interface ServerMetadata {
 // state + query ของฟอร์ม metadata (name/node/type/version/memory/port/eula)
 // เรียกที่ตัว wizard เพื่อให้ค่าที่กรอกอยู่รอดตอนเดินหน้า/ถอยหลัง step
 // คืนเฉพาะ "ข้อมูล" — การ render อยู่ที่ step-general.tsx
-export function useServerMetadata(): ServerMetadata {
+//
+// `game` มาจาก route (/servers/new/{game}) ไม่ใช่ state ของฟอร์ม — เปลี่ยนเกม = เปลี่ยนหน้า
+// เพราะฟอร์ม/ลำดับ step ของแต่ละเกมไม่เหมือนกัน
+export function useServerMetadata(game: string): ServerMetadata {
   const me = useMe().data?.user;
   const [name, setName] = React.useState("");
-  const [game, setGame] = React.useState("");
   const [nodeId, setNodeId] = React.useState("");
   const [variant, setVariant] = React.useState("");
   const [gameVersion, setGameVersion] = React.useState("");
@@ -80,20 +78,8 @@ export function useServerMetadata(): ServerMetadata {
   const [portEdited, setPortEdited] = React.useState(false);
   const [acceptLicense, setAcceptLicense] = React.useState(false);
 
-  // รายการเกมมาจาก backend เสมอ — web ไม่ได้ตัดสินใจเองว่ารองรับเกมอะไรบ้าง
-  const gamesQuery = useQuery({
-    queryKey: ["meta", "games"],
-    queryFn: () => apiGet("/api/meta/games", metaGamesResponseSchema),
-  });
-  const gamesList = React.useMemo(
-    () => gamesQuery.data?.games ?? [],
-    [gamesQuery.data],
-  );
-  // เลือกเกมแรกให้อัตโนมัติ (registry ฝั่ง backend เรียงตามลำดับที่อยากให้เห็น)
-  React.useEffect(() => {
-    const first = gamesList[0];
-    if (game === "" && first) setGame(first.id);
-  }, [game, gamesList]);
+  // ข้อมูลของเกมที่เลือก (min_memory_mb ต่างกันต่อเกม) — แชร์ cache กับหน้าเลือกเกม
+  const { games: gamesList } = useMetaGames();
 
   const nodesQuery = useQuery({
     queryKey: ["meta", "nodes"],
@@ -133,13 +119,6 @@ export function useServerMetadata(): ServerMetadata {
   // (บังคับล้างที่นี่ ไม่ฝากไว้กับคนเรียก)
   const onVariantChange = React.useCallback((v: string) => {
     setVariant(v);
-    setGameVersion("");
-  }, []);
-
-  // เปลี่ยนเกม = variant/version ชุดเดิมใช้ไม่ได้อีกแล้ว ต้องล้างทั้งคู่
-  const onGameChange = React.useCallback((v: string) => {
-    setGame(v);
-    setVariant("");
     setGameVersion("");
   }, []);
 
@@ -234,7 +213,6 @@ export function useServerMetadata(): ServerMetadata {
     hostPort,
     acceptLicense,
     setName,
-    setGame: onGameChange,
     setNodeId,
     setVariant: onVariantChange,
     setGameVersion,
@@ -244,8 +222,6 @@ export function useServerMetadata(): ServerMetadata {
     requiresLicense,
     minMemoryMb,
     valid,
-    games: gamesList,
-    gamesPending: gamesQuery.isPending,
     nodes,
     nodesPending: nodesQuery.isPending,
     types: typesQuery.data?.types ?? [],

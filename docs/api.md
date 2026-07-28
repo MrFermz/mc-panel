@@ -60,6 +60,10 @@ key เป็นรูป `{feature}.{action}` เสมอ — catalog (source 
 `apps/control-plane/internal/httpapi/capabilities.go`, map endpoint → capability อยู่ในตาราง
 route เดียวใน `internal/httpapi/api.go`
 
+กลุ่ม **`games`** เป็นกลุ่มเดียวที่รายการไม่คงที่: มี 1 key ต่อเกมที่ registry ลงทะเบียนไว้
+(`games.{game_id}`, action = id ของเกม) และต่อท้าย catalog ตอน runtime — เพิ่มเกมใหม่จึงได้
+capability ใหม่มาเองโดยไม่ต้องแก้ catalog. key เหล่านี้เป็น global-only (grant ในชั้น server ไม่ได้)
+
 | key | endpoint ที่คุม |
 |---|---|
 | `users.view` | `GET /api/users`, `GET /api/users/{id}` (หน้า/เมนู Users) |
@@ -90,6 +94,7 @@ route เดียวใน `internal/httpapi/api.go`
 | `settings.edit` | `PUT /api/servers/{id}/config` |
 | `access.view` | `GET /api/servers/{id}/permissions`, `GET /api/users/{id}/servers` |
 | `access.manage` | `POST /api/servers/{id}/permissions`, `DELETE .../permissions/{user_id}`, `POST /api/users/{id}/servers`, `DELETE /api/users/{id}/servers/{server_id}` |
+| `games.{game_id}` | `POST /api/servers` ของเกมนั้น — 1 key ต่อเกมที่ลงทะเบียนไว้ (`games.minecraft`, `games.zomboid`, ...) |
 
 ⚠️ capability ที่คุม endpoint ระดับ server (`console.*`, `files.*`, `players.*`, `settings.*`,
 `servers.edit/delete/power`) เป็นชั้น **เพิ่มเติม** จาก `server_permissions` —
@@ -181,12 +186,12 @@ service ของเกมติดต่อไม่ได้
 web มี role preset ต่อ server (owner/operator/moderator/viewer/custom) เป็นทางลัด UI —
 backend รู้จักแค่ role + capabilities[]
 
-user ที่มี capability `servers.create` (หรือ is_admin) สร้าง server ได้ — คนสร้างได้ role `owner` อัตโนมัติ
+user ที่มี capability `servers.create` **และ** `games.{game}` ของเกมนั้น (หรือ is_admin) สร้าง server ได้ — คนสร้างได้ role `owner` อัตโนมัติ
 
 | Method | Path | ใคร | Body → Response |
 |---|---|---|---|
 | GET | `/api/servers` | login แล้ว | `?scope=mine` (default) → `{servers: [server]}` เฉพาะที่มี `server_permissions` row ของตัวเอง (admin ก็เหมือนกัน) — server ในถังขยะไม่โผล่. `?scope=all` ต้องมี `servers.view_all` (ไม่งั้น 403 `forbidden`) → ทุก server รวมที่ `deleted_at != null`; `scope` ค่าอื่น → 400 `invalid_request` |
-| POST | `/api/servers` | login แล้ว | `{name, node_id, game?, variant, game_version, memory_mb, host_port?, accept_license}` → 201 `{server, job}` — `game` ไม่ส่ง = `minecraft` (id ที่ไม่รู้จัก → 400 `invalid_game`), `variant` ต้องเป็น variant ของเกมนั้น; ต้อง accept_license=true เว้น variant ที่ไม่ต้องยอมรับ (minecraft: velocity); 400 `insufficient_memory` เมื่อ RAM เกิน (ดู admission control ล่าง) |
+| POST | `/api/servers` | `servers.create` + `games.{game}` | `{name, node_id, game?, variant, game_version, memory_mb, host_port?, accept_license}` → 201 `{server, job}` — `game` ไม่ส่ง = `minecraft` (id ที่ไม่รู้จัก → 400 `invalid_game`), ไม่มี capability ของเกมนั้น → 403 `forbidden`, `variant` ต้องเป็น variant ของเกมนั้น; ต้อง accept_license=true เว้น variant ที่ไม่ต้องยอมรับ (minecraft: velocity); 400 `insufficient_memory` เมื่อ RAM เกิน (ดู admission control ล่าง) |
 | GET | `/api/servers/{id}` | มี access | → `{server, permissions: [permission+user]}` — คืน permission list ให้ทุกคนที่มี access (web หา row ของตัวเองไป gate แท็บ/ปุ่มด้วย effective cap) |
 | PATCH | `/api/servers/{id}` | `servers.edit` | `{name?, memory_mb?, host_port?}` → `{server}` (มีผลตอน start ครั้งถัดไป); `memory_mb`/`host_port` แก้ได้เฉพาะตอน stopped/errored (409 `invalid_state`); ขยาย `memory_mb` เกิน RAM node → 400 `insufficient_memory` |
 | DELETE | `/api/servers/{id}` | `servers.delete` | → `{server}` — **soft delete**: set `deleted_at` แล้วจบทันที (ไม่มี job, ไม่แตะไฟล์/container บน node); ต้อง stopped/errored เท่านั้น (409 `invalid_state` — หยุด server ก่อนถึงจะลบได้) |
@@ -357,7 +362,7 @@ web ประกอบเป็นชื่อที่แสดงเองด�
 | Method | Path | ใคร | Response |
 |---|---|---|---|
 | GET | `/api/jobs/{id}` | ผู้มีสิทธิ์เห็น server นั้น | → `{job}` — web ใช้ poll สถานะงาน |
-| GET | `/api/meta/games` | login แล้ว | → `{games: [{id, label, min_memory_mb, license_name}]}` — เกมที่ instance นี้รองรับ ตามลำดับที่อยากให้ UI แสดง — id ที่ใช้กับ `?game=` ของ endpoint meta อื่นและ field `game` ตอนสร้าง server (`license_name` ว่าง = เกมนี้ไม่มีอะไรให้ยอมรับ) |
+| GET | `/api/meta/games` | login แล้ว | → `{games: [{id, label, min_memory_mb, license_name, can_create}]}` — เกมที่ instance นี้รองรับ ตามลำดับที่อยากให้ UI แสดง — id ที่ใช้กับ `?game=` ของ endpoint meta อื่นและ field `game` ตอนสร้าง server (`license_name` ว่าง = เกมนี้ไม่มีอะไรให้ยอมรับ). `can_create` = user คนนี้สร้าง server ของเกมนี้ได้ไหม (`servers.create` AND `games.{id}`) — รายการไม่ถูกกรองตามสิทธิ์ |
 | GET | `/api/meta/variants?game=minecraft` | login แล้ว | → `{types: [{id, label, requires_license}]}` — variant ของเกมที่ระบุ (`game` ไม่ส่ง = `minecraft`, id ที่ไม่รู้จัก → 400 `invalid_game`) |
 | GET | `/api/meta/versions?type=paper&game=minecraft` | login แล้ว | → `{versions: [string]}` ใหม่→เก่า (proxy + cache 10 นาทีจาก upstream official ของเกม; minecraft: Mojang/PaperMC/Fabric API, forge ใช้ promoted builds); `type` ที่ไม่ใช่ variant ของเกมนั้น → 400 `invalid_variant`. เกมที่ไม่ได้ปักหมุดเวอร์ชัน (zomboid) คืนรายชื่อ Steam branch แทน |
 | GET | `/api/meta/nodes` | login แล้ว | → `{nodes: [{id, name, status}]}` — ข้อมูลขั้นต่ำสำหรับ dropdown ตอนสร้าง server (ตัวเต็มดูได้เฉพาะ admin ที่ `/api/nodes`) |

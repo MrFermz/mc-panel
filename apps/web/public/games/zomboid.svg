@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180" role="img" aria-hidden="true">
+  <!-- ภาพปกของเกมในหน้าเลือกเกม — วาดเองทั้งหมด (ห้ามใช้ logo/asset ของเกมจริง) -->
+  <defs>
+    <linearGradient id="pz-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#31221d" />
+      <stop offset="0.55" stop-color="#7a3a25" />
+      <stop offset="1" stop-color="#c07440" />
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#pz-sky)" />
+  <circle cx="70" cy="52" r="22" fill="#e8823f" opacity="0.85" />
+
+  <!-- เส้นขอบฟ้าเมืองร้าง: ตึกทึบซ้อนกันสองชั้น -->
+  <g fill="#1a1210" opacity="0.85">
+    <rect x="18" y="92" width="42" height="66" />
+    <rect x="70" y="74" width="34" height="84" />
+    <rect x="114" y="102" width="48" height="56" />
+    <rect x="172" y="66" width="38" height="92" />
+    <rect x="220" y="96" width="30" height="62" />
+    <rect x="258" y="80" width="44" height="78" />
+  </g>
+  <g fill="#e8b04b" opacity="0.55">
+    <rect x="28" y="102" width="7" height="9" />
+    <rect x="44" y="120" width="7" height="9" />
+    <rect x="80" y="88" width="7" height="9" />
+    <rect x="92" y="112" width="7" height="9" />
+    <rect x="126" y="114" width="7" height="9" />
+    <rect x="182" y="80" width="7" height="9" />
+    <rect x="196" y="108" width="7" height="9" />
+    <rect x="268" y="94" width="7" height="9" />
+    <rect x="284" y="122" width="7" height="9" />
+  </g>
+
+  <!-- พื้นถนนตัดหน้า + รั้วกั้น -->
+  <rect y="158" width="320" height="22" fill="#120c0b" />
+  <g stroke="#7a4030" stroke-width="4" opacity="0.9">
+    <line x1="0" y1="164" x2="320" y2="164" />
+  </g>
+</svg>

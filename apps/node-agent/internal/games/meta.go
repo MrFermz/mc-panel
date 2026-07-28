@@ -77,6 +77,14 @@ func (l InstanceLookup) ConsoleSpecFor(serverID string) (ConsoleSpec, bool) {
 	return def.Console, true
 }
 
+// HasInstanceMeta = instance นี้ provision จนจบแล้วหรือยัง (meta.json เป็นไฟล์สุดท้าย
+// ที่ provision เขียนพร้อม launch.sh) — dir มีอยู่แต่ไม่มีไฟล์นี้ = job create ล้มกลางทาง
+// caller ที่ต้องรู้ว่า instance เป็นเกมอะไรต้องเช็คก่อน ห้ามปล่อยให้ตกไปใช้เกม default
+func HasInstanceMeta(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, PanelDir, MetaFileName))
+	return err == nil
+}
+
 // ReadInstanceMeta อ่าน meta ของ instance — อ่านไม่ได้/ไฟล์เก่าที่ยังไม่มี field ไหน
 // จะได้ zero value ของ field นั้น (caller ต้อง resolve ค่าว่างเป็น default เอง)
 func ReadInstanceMeta(dir string) InstanceMeta {

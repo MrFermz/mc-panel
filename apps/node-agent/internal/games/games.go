@@ -95,6 +95,11 @@ type ImageSource struct {
 	// Dockerfile = เนื้อ Dockerfile ที่ agent build เป็น ref ของเราเอง — ใช้กับ runtime
 	// ที่ไม่มี image สำเร็จรูปจาก upstream ให้ pull (เช่น image ที่ต้องมี SteamCMD ในตัว)
 	Dockerfile string
+	// Platform = platform ที่ image นี้ต้องเป็น เช่น "linux/amd64" ("" = ตามเครื่องของ node)
+	// จำเป็นกับเกมที่ artifact/เครื่องมือมีเฉพาะสถาปัตยกรรมเดียว (SteamCMD เป็น x86 เท่านั้น) —
+	// บน node ARM ถ้าไม่บังคับไว้ image จะ build/pull เป็น arm64 แล้วพังตั้งแต่ตอน build
+	// (repo i386 ไม่มีบน arm) ส่วน container ที่ใช้ image นี้ต้องถูกสร้างด้วย platform เดียวกัน
+	Platform string
 }
 
 // SeedFile = ไฟล์ที่ panel เขียนให้ตอน provision

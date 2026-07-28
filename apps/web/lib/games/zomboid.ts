@@ -29,6 +29,11 @@ function highlightConsoleMessage(msg: string): string | null {
 export const zomboid: GameProfile = {
   id: "zomboid",
   label: "Project Zomboid",
+  descriptionKey: "game.zomboid.description",
+  coverSrc: "/games/zomboid.svg",
+  // ไม่มี step ผู้เล่น — PZ เก็บบัญชีผู้เล่นไว้ใน DB ของตัวเกม panel เขียนรายชื่อล่วงหน้าไม่ได้
+  // (POST /players ตอบ 409 unsupported อยู่แล้ว)
+  wizardSteps: ["general", "properties", "access"],
   // dedicated server เป็น app ที่ Steam เปิดให้โหลดแบบ anonymous — ไม่มีอะไรให้กดยอมรับ
   licenseName: "",
   licenseUrl: "",

@@ -66,11 +66,18 @@ type gameMeta struct {
 	MinMemoryMB int `json:"min_memory_mb"`
 	// LicenseName = ข้อตกลงที่ต้องยอมรับก่อนสร้าง ("" = เกมนี้ไม่มี)
 	LicenseName string `json:"license_name"`
+	// CanCreate = user คนนี้สร้าง server ของเกมนี้ได้ไหม (`servers.create` AND `games.{id}`)
+	// — ให้หน้าเลือกเกมล็อกการ์ดที่กดไม่ได้ไว้แต่แรก แทนที่จะไปเจอ 403 ตอนกดสร้าง
+	CanCreate bool `json:"can_create"`
 }
 
 // handleGames: เกมทั้งหมดที่ instance นี้รองรับ (มาจาก registry) — endpoint meta
 // อื่น ๆ รับ `?game=` ที่หยิบมาจากรายการนี้ได้ทุกเส้น ว่างไว้ = เกม default
+// รายการไม่ถูกกรองตามสิทธิ์ (เห็นได้ว่ามีเกมอะไรเสมอ) — สิทธิ์อยู่ที่ can_create ต่อแถว
 func (a *API) handleGames(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	canCreateAny := hasCapability(user, capServersCreate)
+
 	defs := a.games.All()
 	views := make([]gameMeta, 0, len(defs))
 	for _, d := range defs {
@@ -79,6 +86,7 @@ func (a *API) handleGames(w http.ResponseWriter, r *http.Request) {
 			Label:       d.Label,
 			MinMemoryMB: d.MinMemoryMB,
 			LicenseName: d.LicenseName,
+			CanCreate:   canCreateAny && hasCapability(user, gameCapKey(d.ID)),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"games": views})
@@ -165,9 +173,10 @@ func (a *API) nextFreeHostPort(def *games.Definition, usage []store.HostPortUsag
 	return maxPort
 }
 
-// handleCapabilities: catalog global capability คงที่สำหรับหน้า admin (login required)
+// handleCapabilities: catalog global capability สำหรับหน้า admin (login required) —
+// กลุ่ม `games` ต่อท้ายตาม registry ของ instance นี้ จึงไม่ใช่ค่าคงที่ของ web
 func (a *API) handleCapabilities(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"capabilities": capabilityCatalog})
+	writeJSON(w, http.StatusOK, map[string]any{"capabilities": a.capabilityCatalog()})
 }
 
 type metaNodeView struct {

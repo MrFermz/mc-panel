@@ -5,7 +5,9 @@ import { en } from "@/lib/i18n/en";
 import { useT, type TranslateFn, type TranslationKey } from "@/lib/i18n";
 import { ROLE_LABEL_KEYS, ROLE_PRESETS, matchPreset } from "@/lib/user-roles";
 import type { Capability } from "@/lib/types";
+import { CAPABILITY_GROUP_GAMES, isGameCapability } from "@/lib/capabilities";
 import { CheckIcon, MinusIcon } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 // capability key มาจาก catalog ของ backend (dynamic) — หา i18n key แบบ runtime
@@ -46,6 +48,73 @@ export function groupCapabilities(catalog: Capability[]): CapabilityGroup[] {
   return groups;
 }
 
+// สิทธิ์ต่อเกม = "สร้าง server ของเกมไหนได้บ้าง" เป็นมิติที่ **ตั้งฉากกับ role preset**
+// (role บอกว่าทำอะไรได้, เกมบอกว่ากับเกมไหน) จึงเป็นส่วนเดียวที่ติ๊กได้เอง —
+// ที่เหลือยังมาจาก preset ล้วนตามเดิม (PermissionGroups เป็น read-only ห้ามเติม onToggle)
+export function GameAccessFields({
+  catalog,
+  isAdmin,
+  capabilities,
+  disabled,
+  onChange,
+}: {
+  catalog: Capability[];
+  isAdmin: boolean;
+  capabilities: string[];
+  disabled?: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  const t = useT();
+  const games = React.useMemo(
+    () => catalog.filter((c) => c.group === CAPABILITY_GROUP_GAMES),
+    [catalog],
+  );
+
+  if (games.length === 0) return null;
+
+  const toggle = (key: string, on: boolean) => {
+    onChange(
+      on
+        ? [...capabilities.filter((k) => k !== key), key]
+        : capabilities.filter((k) => k !== key),
+    );
+  };
+
+  return (
+    <div className="grid gap-2">
+      {games.map((cap) => {
+        // admin ได้ทุกเกมโดยปริยาย — โชว์ติ๊กไว้แต่แก้ไม่ได้ (ถอดไปก็ไม่มีผล)
+        const granted = isAdmin || capabilities.includes(cap.key);
+        const locked = disabled || isAdmin;
+        return (
+          <label
+            key={cap.key}
+            className={cn(
+              "flex items-center gap-3 rounded-lg border px-4 py-3",
+              locked ? "cursor-not-allowed opacity-70" : "cursor-pointer",
+            )}
+          >
+            <Checkbox
+              checked={granted}
+              disabled={locked}
+              onCheckedChange={(v) => toggle(cap.key, v === true)}
+            />
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium">{cap.label}</span>
+              <span className="text-muted-foreground text-xs">
+                {permDescription(t, cap)}
+              </span>
+            </span>
+          </label>
+        );
+      })}
+      <p className="text-muted-foreground text-xs">
+        {isAdmin ? t("users.adminAllPermissions") : t("users.gameAccessHint")}
+      </p>
+    </div>
+  );
+}
+
 export function FieldGroupLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
@@ -67,6 +136,8 @@ export function RolePresetPicker({
 }) {
   const t = useT();
   const selected = matchPreset(isAdmin, capabilities);
+  // สิทธิ์ต่อเกมไม่ได้อยู่ใน preset (คนละมิติกัน) — เลือก preset ทับต้องไม่ล้างทิ้ง
+  const gameCaps = capabilities.filter(isGameCapability);
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {ROLE_PRESETS.map((preset) => {
@@ -79,7 +150,7 @@ export function RolePresetPicker({
             onClick={() =>
               onSelect({
                 isAdmin: preset.isAdmin,
-                capabilities: preset.capabilities,
+                capabilities: [...preset.capabilities, ...gameCaps],
               })
             }
             className={cn(
@@ -101,6 +172,7 @@ export function RolePresetPicker({
 // รายการสิทธิ์แบบจัดกลุ่มตาม feature — 1 แถว = 1 action (CRUD ของฟีเจอร์นั้น)
 // **read-only ล้วน**: สิทธิ์มาจาก role preset ที่เลือกเท่านั้น (ไม่มี role custom แล้ว)
 // ที่นี่คือหน้าต่างส่องว่า preset นั้นให้อะไรบ้าง ไม่ใช่ที่แก้ทีละข้อ
+// กลุ่ม `games` ไม่โผล่ที่นี่ — แก้ได้เองที่ GameAccessFields (คนละมิติกับ preset)
 export function PermissionGroups({
   catalog,
   isAdmin,
@@ -111,7 +183,13 @@ export function PermissionGroups({
   capabilities: string[];
 }) {
   const t = useT();
-  const groups = React.useMemo(() => groupCapabilities(catalog), [catalog]);
+  const groups = React.useMemo(
+    () =>
+      groupCapabilities(
+        catalog.filter((c) => c.group !== CAPABILITY_GROUP_GAMES),
+      ),
+    [catalog],
+  );
 
   if (groups.length === 0) {
     return (

@@ -38,7 +38,8 @@ runtime-images: ## Build runtime images ล่วงหน้า (ออปช�
 	docker build -t game-manager/runtime-java:25 --build-arg JAVA_VERSION=25 infra/runtime-java
 	# runtime-steam: Dockerfile อยู่ใน game definition ของเกมที่ใช้ SteamCMD (agent embed
 	# ไฟล์เดียวกันนี้แล้ว build เองถ้ายังไม่มีบน node) — tag ต้องตรงกับ zomboid/runtime.go
-	docker build -t game-manager/runtime-steam:1 \
+	# --platform ต้องตรงกับ imagePlatform ใน zomboid/runtime.go (SteamCMD มีแค่ x86)
+	docker build -t game-manager/runtime-steam:1 --platform linux/amd64 \
 		-f apps/node-agent/internal/games/zomboid/runtime.Dockerfile \
 		apps/node-agent/internal/games/zomboid
 

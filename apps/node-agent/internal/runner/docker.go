@@ -99,6 +99,13 @@ func (r *DockerRunner) Start(ctx context.Context, cfg ServerConfig) error {
 	if _, err := os.Stat(cfg.WorkDir); err != nil {
 		return fmt.Errorf("server directory %s not found (server not provisioned?): %w", cfg.WorkDir, err)
 	}
+	// dir มีแต่ยังไม่มี meta.json = job create ล้มกลางทาง (dir ถูกสร้างแล้วแต่ provision ไม่จบ)
+	// ต้องหยุดตรงนี้ ไม่งั้น DefinitionFor ตกไปใช้เกม default แล้วไปเตรียม image ของเกมผิดตัว
+	// ทำให้ error ที่ user เห็นไม่เกี่ยวกับสาเหตุจริงเลย
+	if !games.HasInstanceMeta(cfg.WorkDir) {
+		return fmt.Errorf("server %s is not fully provisioned (missing %s/%s) — re-create it or run provisioning again",
+			cfg.ID, games.PanelDir, games.MetaFileName)
+	}
 
 	// วิธีเตรียม image เมื่อ node ยังไม่มีใน cache เป็นความรู้ของเกม (JVM = pull temurin,
 	// เกมที่ต้อง SteamCMD = build image ของเราเอง) — runner แค่ส่งต่อ

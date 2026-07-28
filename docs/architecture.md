@@ -68,8 +68,8 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
 | `apps/control-plane/internal/games/minecraft` | ค่าจริงของ Minecraft: variant + EULA, รายการเวอร์ชัน, Java image mapping, `server.properties`, `whitelist.json`, `op/kick/ban`, **Mojang identity (`identity.go`) และการ crop หน้าจาก skin (`avatar.go`)** |
 | `apps/node-agent/internal/games` | Registry + `Definition` ฝั่งรันจริง: ที่มาของ artifact, launch script, env, คำสั่ง stop, seed config, port ใน container, การอ่านสถานะในเกมจาก console + `.gamemanager/meta.json` (instance บน disk บอกเองว่าเป็นเกมอะไร) |
 | `apps/node-agent/internal/games/minecraft` | ค่าจริงของ Minecraft ฝั่ง agent (ที่มาของ jar, launch script/heap, forge installer, parser ของ console) |
-| `apps/*/internal/games/zomboid` | ค่าจริงของ Project Zomboid: ติดตั้งผ่าน **SteamCMD** (app 380870, login anonymous), `game_version` = Steam branch, ไฟล์ ini ใน cache dir ของเกม, **Dockerfile ของ runtime image ที่มี SteamCMD** (agent embed ไว้แล้ว build เอง) |
-| `apps/web/lib/games` | Registry + `GameProfile` ฝั่ง web: เดา variant/version จาก archive, กติกาชื่อผู้เล่นฝั่ง client, การลงสีบรรทัด console, ชื่อเกม/license/metric ที่โผล่ในข้อความ |
+| `apps/*/internal/games/zomboid` | ค่าจริงของ Project Zomboid: ติดตั้งผ่าน **SteamCMD** (app 380870, login anonymous), `game_version` = Steam branch, ไฟล์ ini ใน cache dir ของเกม, **Dockerfile ของ runtime image ที่มี SteamCMD** (agent embed ไว้แล้ว build เอง) — image pin `linux/amd64` และ **ต้องรันบน node x86_64 เท่านั้น** (SteamCMD เป็น binary 32-bit x86, agent cross-build ไม่ได้เพราะ Engine API มีแค่ classic builder) |
+| `apps/web/lib/games` | Registry + `GameProfile` ฝั่ง web: เดา variant/version จาก archive, กติกาชื่อผู้เล่นฝั่ง client, การลงสีบรรทัด console, ชื่อเกม/license/metric ที่โผล่ในข้อความ, **ลำดับ step ของ wizard สร้าง server (`wizardSteps`) + ปก/คำอธิบายบนการ์ดหน้าเลือกเกม** |
 
 - สอง app แยก module กันจึง **ไม่ import ข้ามกัน** — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
   ซึ่งเดินทางผ่าน job payload (`CreateServer.game`) และ `.gamemanager/meta.json`
@@ -133,6 +133,8 @@ server ทุกตัวผูกกับ **เกม** หนึ่งเก�
   - ระดับ panel (`users.capabilities` TEXT[]) — admin ตั้งต่อ user ให้เข้าถึงหน้า/เมนู + CRUD:
     key รูป `{feature}.{action}` ครอบทุกฟีเจอร์ (`users.*`, `nodes.*`, `servers.*`, `console.*`,
     `files.*`, `players.*`, `settings.*`, `access.*` — catalog เต็มใน docs/api.md)
+  - **สิทธิ์ต่อเกม** (`games.{game_id}`) เป็นกลุ่มที่ catalog สร้างจาก registry ตอน runtime:
+    การสร้าง server ต้องผ่าน `servers.create` **และ** capability ของเกมนั้น
   - endpoint ระดับ server ต้องผ่าน **ทั้งสองชั้น** (capability AND สิทธิ์ต่อ server นั้น)
   - is_admin = superuser ข้ามได้ทุกด่านทั้งสองชั้น
 - **EULA**: user ต้องติ๊กยอมรับเองตอนสร้าง ระบบห้าม default เป็น true

@@ -24,6 +24,7 @@ import { RoleBadge } from "@/components/user/role-badge";
 import { matchPreset } from "@/lib/user-roles";
 import {
   FieldGroupLabel,
+  GameAccessFields,
   PermissionGroups,
   RolePresetPicker,
 } from "@/components/user/permission-fields";
@@ -205,6 +206,16 @@ export function CreateUserDialog({
               <p className="text-muted-foreground mt-2 text-xs">
                 {t("users.presetHint")}
               </p>
+            </div>
+
+            <div>
+              <FieldGroupLabel>{t("users.gameAccess")}</FieldGroupLabel>
+              <GameAccessFields
+                catalog={catalog}
+                isAdmin={isAdmin}
+                capabilities={caps}
+                onChange={setCaps}
+              />
             </div>
 
             <div>

@@ -268,19 +268,32 @@ storage — จำกัด 512KB, ชนิดตัดสินจาก conte
 NATS เป็นแค่ job transport ไม่เกี่ยวกับ auth. ทั้ง Postgres/Redis/NATS อยู่ network `core` (internal)
 เข้าจากภายนอกไม่ได้ ต้อง `docker compose exec` เข้า container หรือใช้ CLI ข้างบนที่รันในวงเดียวกัน
 
-**สร้าง server**: POST /api/servers (รับ `game` เป็น optional — ว่าง = เกม default;
+**สร้าง server**: POST /api/servers (ต้องมี **ทั้ง** cap `servers.create` และ `games.{game}`
+ของเกมนั้น ไม่งั้น 403 `forbidden` — ดูหัวข้อ "สิทธิ์สร้างต่อเกม" ด้านล่าง; รับ `game` เป็น optional — ว่าง = เกม default;
 `game_version` ของเกมที่ค่านี้เดินทางไปเป็น argument ของเครื่องมือฝั่ง agent เช่น Steam branch
 ของ zomboid ต้องผ่าน `Version.Valid` ซึ่งเป็น allow-list — และ agent เช็คซ้ำเองอีกชั้นเสมอ)
 → insert แถว (status=provisioning) + job `create_server` → agent
 โหลด artifact + เขียน seed config/launch script → JobResult → status=stopped → user สั่ง start ต่อ
 
-**Wizard `/servers/new` สร้าง instance ที่ step สุดท้ายเท่านั้น** — **1 step = 1 component**
+**`/servers/new` = หน้าเลือกเกมก่อน แล้วค่อยเข้า wizard ของเกมนั้นที่ `/servers/new/{game}`** —
+เกมไม่ใช่ field ในฟอร์มอีกแล้ว (ไม่มี dropdown ใน step general) เพราะ **ลำดับ step ของแต่ละเกมไม่เท่ากัน**
+เปลี่ยนเกม = เปลี่ยนหน้า. หน้าเลือกเกมเป็นการ์ดต่อเกม (`components/server/new-server/game-card.tsx`)
+= ปก + ชื่อ + คำอธิบายสั้น โดยรายการมาจาก `GET /api/meta/games` (**ไม่ถูกกรองตามสิทธิ์** — เกมที่
+`can_create=false` โชว์การ์ดล็อกไว้ กดไม่ได้ ดีกว่าซ่อนจนดูเหมือนระบบไม่รองรับ) ส่วนปก/คำอธิบายมาจาก
+`GameProfile` ฝั่ง web (`coverSrc` ชี้ไฟล์ใน `public/games/` ที่ **วาดเอง — ห้ามใช้ logo/asset ของเกมจริง**,
+`descriptionKey` เป็น i18n key)
+
+**Wizard สร้าง instance ที่ step สุดท้ายเท่านั้น** — **1 step = 1 component**
 ใน `components/server/new-server/` (`step-general` / `step-properties` / `step-access` / `step-players`,
-`step-indicator`, `steps.ts` = ลำดับ step) โดย state อยู่ในฮุก: `use-server-metadata`
-(ฟอร์มพื้นฐาน — คืนค่า+setter ไม่คืน JSX), `use-create-server` (ลำดับการสร้างทั้งหมด) — `page.tsx` เหลือแค่ประกอบร่าง
-+ ถือ draft state. เพิ่ม step ใหม่ = เพิ่มไฟล์ `step-*.tsx` + แถวใน `WIZARD_STEPS`:
-4 step — general / properties / access / players — สาม step แรกเป็น **draft ในหน้าเว็บล้วน ยังไม่ยิง API
-สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step 2–3 ข้ามได้ (step 1 บังคับกรอกให้ครบ),
+`step-indicator`, `steps.ts` = catalog ของ step ที่ระบบรู้จัก) โดย state อยู่ในฮุก: `use-server-metadata`
+(ฟอร์มพื้นฐาน — คืนค่า+setter ไม่คืน JSX; รับ `game` เป็น argument ไม่ใช่ state), `use-create-server`
+(ลำดับการสร้างทั้งหมด) — `page.tsx` เหลือแค่ประกอบร่าง + ถือ draft state.
+**ลำดับ step เป็นของเกม ไม่ใช่ของ wizard** — `GameProfile.wizardSteps` เป็นคนบอก (minecraft:
+general/properties/access/players, zomboid: ไม่มี players เพราะ panel เขียนรายชื่อผู้เล่นไม่ได้)
+เพิ่ม step ใหม่ = เพิ่มไฟล์ `step-*.tsx` + key ใน `WizardStepKey` + แถวใน `STEP_TITLE_KEYS`
++ ใส่ key ลงใน `wizardSteps` ของเกมที่ต้องใช้ + `case` ใน `stepContent()`:
+step แรกต้องเป็น `general` เสมอ และทุก step เป็น **draft ในหน้าเว็บล้วน ยังไม่ยิง API
+สร้างอะไรทั้งนั้น** จึงถอยกลับไปแก้ได้ทุก step, step หลัง general ข้ามได้ (general บังคับกรอกให้ครบ),
 มี node เดียวเลือกให้อัตโนมัติ. ปุ่ม create อยู่ที่ step สุดท้ายที่เดียว แล้วรันตามลำดับ:
 POST `/api/servers` → POST permission ตาม access draft → รอ job provisioning จบ →
 PUT `/config` **เฉพาะ key ที่ต่างจาก default** (ไฟล์ยังไม่มีตอนนั้น merge จะ append ให้ ที่เหลือตัวเกม
@@ -311,6 +324,9 @@ agent **ensure runtime image** ตาม `ImageSource` ของเกม (ม�
 → docker events → agent ส่ง `ServerStatus RUNNING` ผ่าน gRPC → DB + broadcast WS
 - ถ้า start ล้มหลังสร้าง container / container crash (die exit≠0 ที่ไม่ได้สั่ง stop) → agent **ลบ container
   ที่ค้างทิ้งทันที + push console line แจ้ง user** ว่ากำลังเอาออก (ไม่ปล่อยให้ค้างเป็น dead container)
+- instance ที่ dir มีแต่ยังไม่มี `.gamemanager/meta.json` = job create ล้มกลางทาง → agent **ปฏิเสธ
+  การ start ทันที** (`games.HasInstanceMeta`) แทนที่จะให้ `DefinitionFor` ตกไปใช้เกม default
+  แล้วไปเตรียม image ของเกมผิดตัว
 - runtime image cache: `game-manager/runtime-java:{8|17|21|25}` + `game-manager/runtime-steam:1`
   build เองด้วย `make runtime-images` ก็ได้ (hardened) หรือปล่อยให้ agent เตรียมเองครั้งแรก
   ที่ต้องใช้ — reuse ตัวที่มีเสมอ ไม่ทำซ้ำ
@@ -348,6 +364,7 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
 `users.view/create/edit/delete/reset_password`, `nodes.view/create/delete`,
 `servers.view_all/create/edit/delete/restore/purge/power`, `console.view/write`, `files.view/write/delete`,
 `players.view/manage/moderate`, `settings.view/edit`, `access.view/manage`
+**+ `games.{game_id}` หนึ่ง key ต่อเกม** (ดู "สิทธิ์สร้างต่อเกม" ข้างล่าง)
 (ตารางเต็ม + endpoint ที่คุมอยู่ใน docs/api.md). is_admin ครอบทุก capability
 - **source of truth ของ catalog** = `apps/control-plane/internal/httpapi/capabilities.go`,
   **map endpoint → capability** = ตาราง route เดียวใน `internal/httpapi/api.go` (`requireCap`)
@@ -371,6 +388,20 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   key `custom` ใน `RoleKey`/`ServerRoleKey` เหลือไว้เป็น fallback ของ **ข้อมูลเก่า** ที่เคยติ๊กรายข้อ
   ไว้ตอน UI ยังให้แก้ได้ (จงใจไม่ล้างข้อมูลให้ — เขียนทับสิทธิ์ user เงียบ ๆ อันตรายกว่า)
   เลือก preset ทับเมื่อไหร่ก็หายไปเอง; เพิ่ม preset ใหม่ = แก้ที่ `ROLE_PRESETS`/`SERVER_ROLE_PRESETS`
+
+**สิทธิ์สร้างต่อเกม (`games.{game_id}`)**: "สร้าง server ได้ไหม" กับ "เกมไหนได้บ้าง" เป็นคนละคำถาม —
+`servers.create` ตอบข้อแรก, `games.{game_id}` ตอบข้อสอง และ `POST /api/servers` ต้องผ่าน **ทั้งคู่**
+(ไม่ผ่าน = 403 `forbidden`). กติกาที่ต้องรักษาไว้:
+- **catalog ของกลุ่มนี้ dynamic** — `API.capabilityCatalog()` = `baseCapabilityCatalog` + 1 แถวต่อเกม
+  ใน registry (label/description มาจาก `Definition` ไม่มีชื่อเกมฝังใน httpapi) เพิ่มเกมใหม่จึงได้
+  capability ใหม่มาเองโดยไม่ต้องแก้ catalog — **อย่าฮาร์ดโค้ด `games.minecraft` กลับเข้าไป**
+- เป็น **global-only** เหมือน `servers.create` (ไม่อยู่ใน `serverScopedCaps` — grant ต่อ server ไม่ได้)
+- ฝั่ง web เป็น **มิติที่ตั้งฉากกับ role preset**: ติ๊กเองได้ที่ `GameAccessFields` (ส่วนเดียวที่แก้ทีละข้อได้ —
+  `PermissionGroups` ยัง read-only และซ่อนกลุ่ม `games` ทิ้ง), `matchPreset()` ไม่นับ `games.*` (ไม่งั้น
+  แค่เพิ่มเกมให้ก็กลายเป็น role custom) และเลือก preset ทับต้อง **ไม่ล้างสิทธิ์เกมเดิม** (`RolePresetPicker`
+  merge ให้แล้ว)
+- `GET /api/meta/games` มี `can_create` ต่อแถว (= `servers.create` AND `games.{id}`) ให้หน้าเลือกเกม
+  ล็อกการ์ดไว้แต่แรก — **ห้ามกรองรายการเกมตามสิทธิ์** (ซ่อนแล้วดูเหมือนระบบไม่รองรับเกมนั้น)
 
 **Game definition (abstraction ของ "เกม") — อ่านก่อนแตะอะไรที่เป็นของเกมใดเกมหนึ่ง**
 
@@ -399,12 +430,24 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
   ใน package ของเกม เพราะไม่มี image ที่มี SteamCMD จาก upstream ให้ pull และเราไม่ใช้ของ third-party)
   — ทั้งสองทางตั้ง tag เดียวกันเสมอเพื่อ share cache; namespace มาจาก `GM_RUNTIME_IMAGE_NAMESPACE`
   (default `game-manager`) **ตั้งแล้วต้องตรงกับที่ control-plane เลือกใน definition**
+  - `ImageSource.Platform` = image นี้ต้องเป็น arch ไหน ("" = ตาม node) — zomboid pin
+    `linux/amd64` เพราะ SteamCMD ของ Valve เป็น binary **32-bit x86** ตัวเดียว
+    ⚠️ **agent cross-build ไม่ได้**: Engine API เรียกได้แค่ classic builder ซึ่ง **ไม่สนใจ platform**
+    (BuildKit อยู่ใน buildx ที่เป็น CLI plugin) — `EnsureRuntimeImage` จึงเช็ค arch ของ node
+    ก่อน build แล้ว error บอกให้ไปสร้างบน node ที่ arch ตรง แทนที่จะ build ผิด arch ทิ้งไว้
+    (image ที่ cache ไว้ก็ถูกเช็ค arch ซ้ำก่อน reuse) → **เกมที่ติดตั้งผ่าน SteamCMD ใช้ได้เฉพาะ
+    node x86_64** (ARM รันไม่ได้แม้จะ build image ข้าม arch มาให้ — steamcmd segfault ใต้ emulation)
+  - ⚠️ `ImageSource(imageRef)` ของแต่ละเกม **ต้องรับเฉพาะ ref ของ runtime image ตัวเอง** —
+    ref ที่ไม่ใช่ของตัวเองให้คืน zero value (เคยมีบั๊ก: minecraft แปลง tag ของ `runtime-steam:1`
+    เป็น `eclipse-temurin:1-jre` แล้ว error ที่ user เห็นไม่เกี่ยวกับสาเหตุจริงเลย)
 - **สอง app ไม่ import ข้ามกัน** (คนละ module) — สิ่งที่ต้องตรงกันคือ **id ของเกมและ variant**
   ซึ่งเดินทางผ่าน job payload (`CreateServer.game` ใน proto) และ `.gamemanager/meta.json`
   ⚠️ การ map เวอร์ชัน → Java image มีสองที่ (control-plane เลือก image ให้ job, agent เลือกให้
   forge installer) — **แก้ที่หนึ่งต้องแก้อีกที่เสมอ** มี test คุมทั้งสองฝั่ง
-- `apps/web/lib/games` — `GameProfile` + registry ฝั่ง web (`gameProfile(server.game)`):
-  `isValidPlayerName`, `allowlistEnabledKey`, `highlightConsoleMessage`, `label`/`licenseName`/`licenseUrl`/`metricLabel`
+- `apps/web/lib/games` — `GameProfile` + registry ฝั่ง web (`gameProfile(server.game)` /
+  `knownGameProfile(id)` ที่คืน undefined เมื่อ web ยังไม่รู้จักเกมนั้น):
+  `isValidPlayerName`, `allowlistEnabledKey`, `highlightConsoleMessage`, `label`/`licenseName`/`licenseUrl`/`metricLabel`,
+  **`wizardSteps`** (ลำดับ step ของฟอร์มสร้าง server), **`coverSrc`/`descriptionKey`** (การ์ดในหน้าเลือกเกม)
   → ค่าจริงของ Minecraft อยู่ใน `lib/games/minecraft.ts`, ของ PZ อยู่ใน `lib/games/zomboid.ts`
   **component ห้าม import `lib/games/minecraft` ตรง ๆ** — เรียกผ่าน `gameProfile()` เสมอ
 - ชั้นอื่นทั้งหมดทำงานผ่าน definition: httpapi ใช้ `a.gameOf(w, srv)` / `a.gameFromQuery(w, r)`,
@@ -424,10 +467,14 @@ console ที่ user เห็น** (console.Manager มี `Observer` hook �
    ลงทะเบียนใน `games.NewRegistry(...)` ที่ `apps/control-plane/cmd/server/main.go` และ
    `apps/node-agent/cmd/agent/main.go`
 3. web: เพิ่ม `lib/games/<เกม>.ts` (implement `GameProfile`) แล้วลงทะเบียนใน `PROFILES`
-   ที่ `lib/games/index.ts`. `DEFAULT_GAME_ID` เป็น **fallback ตอนไม่รู้ว่า instance เป็นเกมอะไร
-   เท่านั้น** — wizard ถือเกมเป็น state (`useServerMetadata().game`) และดึงรายการจริงจาก
-   `GET /api/meta/games` แล้วทุก query ของ wizard (variants/versions/config/next-port) ผูกกับเกมนั้น
+   ที่ `lib/games/index.ts` + วาดปกไว้ที่ `public/games/<เกม>.svg` (ห้ามใช้ asset ของเกมจริง)
+   + เพิ่ม i18n `game.<เกม>.description` ทั้ง `en.ts`/`th.ts`. `DEFAULT_GAME_ID` เป็น **fallback
+   ตอนไม่รู้ว่า instance เป็นเกมอะไรเท่านั้น** — การสร้าง server เลือกเกมจากหน้า `/servers/new`
+   (รายการจริงจาก `GET /api/meta/games`) แล้วทุก query ของ wizard (variants/versions/config/next-port)
+   ผูกกับเกมนั้นผ่าน route param
 4. **ไม่ต้องแตะ schema** เพื่อรองรับ variant ใหม่ — schema ไม่มี CHECK รายชื่อ (ดูกฎเหล็กข้อ 0)
+   และ **ไม่ต้องเพิ่ม capability เอง** — `games.{id}` ของเกมใหม่โผล่ใน catalog อัตโนมัติ
+   (ต้องไปติ๊กให้ user ที่ `/admin/users/{id}/permissions` เอง ไม่มี backfill)
 5. `docs/api.md` + `docs/architecture.md` (หัวข้อ Game definition)
 
 **เพิ่ม feature ใหม่ → ต้องแตะ permission (เช็คลิสต์บังคับ)**

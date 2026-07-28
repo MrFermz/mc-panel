@@ -32,4 +32,9 @@ func TestImageSourceBuildsLocally(t *testing.T) {
 	if !strings.Contains(src.Dockerfile, "lib32gcc-s1") {
 		t.Error("embedded Dockerfile must install the 32-bit libs SteamCMD needs")
 	}
+	// ต้องบังคับ platform เสมอ — Dockerfile เปิด i386 ซึ่ง build บน node ARM ไม่ผ่าน
+	// (apt ไม่มี repo i386 บน arm) และ SteamCMD/artifact ของเกมเป็น x86 ล้วน
+	if src.Platform != "linux/amd64" {
+		t.Errorf("Platform = %q, want linux/amd64", src.Platform)
+	}
 }

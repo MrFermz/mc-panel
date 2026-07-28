@@ -151,7 +151,7 @@ func (a *API) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			"this username is reserved by the system and cannot be used")
 		return
 	}
-	if !validateCapabilities(req.Capabilities) {
+	if !a.validateCapabilities(req.Capabilities) {
 		writeError(w, http.StatusBadRequest, "invalid_capability", "capabilities must be keys from the catalog")
 		return
 	}
@@ -211,7 +211,7 @@ func (a *API) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Capabilities != nil && !validateCapabilities(*req.Capabilities) {
+	if req.Capabilities != nil && !a.validateCapabilities(*req.Capabilities) {
 		writeError(w, http.StatusBadRequest, "invalid_capability", "capabilities must be keys from the catalog")
 		return
 	}

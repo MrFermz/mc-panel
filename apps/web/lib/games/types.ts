@@ -6,11 +6,28 @@
 //
 // **ห้ามเขียน switch ตามชื่อเกม/variant ใน component** — เรียกผ่าน useGameProfile() เสมอ
 
+import type { TranslationKey } from "@/lib/i18n";
+
+// step ของ wizard สร้าง server — เกมเป็นคนบอกว่าตัวเองมี step ไหนบ้าง (GameProfile.wizardSteps)
+// เพราะบาง step ไม่มีความหมายกับบางเกม (เช่น allowlist ของเกมที่ panel เขียนรายชื่อไม่ได้)
+// component ของแต่ละ step + ลำดับที่ยอมให้เรียง อยู่ที่ components/server/new-server/steps.ts
+export type WizardStepKey = "general" | "properties" | "access" | "players";
+
 export interface GameProfile {
   /** ต้องตรงกับ id ของ game definition ฝั่ง backend (servers.game) */
   id: string;
   /** ชื่อเกมที่โผล่ใน UI */
   label: string;
+  /** คำอธิบายสั้น ๆ ที่โผล่บนการ์ดในหน้าเลือกเกม (i18n key — แปลได้ทั้ง en/th) */
+  descriptionKey: TranslationKey;
+  /** ภาพปกบนการ์ดเลือกเกม (path ใน public/) — วาดเอง ห้ามใช้ asset ของเกมจริง */
+  coverSrc: string;
+
+  /**
+   * step ของ wizard สร้าง server ของเกมนี้ ตามลำดับที่ต้องเดิน — ต้องขึ้นต้นด้วย "general"
+   * เสมอ (step บังคับกรอก) ที่เหลือข้ามได้ และ step สุดท้ายคือตัวสั่งสร้างจริง
+   */
+  wizardSteps: readonly WizardStepKey[];
   /** ชื่อข้อตกลงที่ user ต้องยอมรับก่อนสร้าง ("" = เกมนี้ไม่มี license ให้ยอมรับ) */
   licenseName: string;
   /** URL ของ license (ปล่อยว่าง = แสดงเป็น text ไม่ใช่ลิงก์) */

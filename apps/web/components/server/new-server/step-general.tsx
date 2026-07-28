@@ -22,21 +22,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { gameProfile } from "@/lib/games";
+import type { GameProfile } from "@/lib/games";
 
 // step 1 — ข้อมูลพื้นฐานของ server
 // เป็นด่านเดียวที่บังคับกรอกให้ครบ ที่เหลือข้ามได้
-export function StepGeneral({ meta }: { meta: ServerMetadata }) {
+// เกมถูกเลือกมาแล้วจากหน้าก่อนหน้า (ไม่มีช่องให้เปลี่ยนที่นี่) — ชื่อ/ลิงก์ license
+// และกติกาอื่น ๆ ของเกมมาจาก profile ที่ส่งเข้ามา ไม่ hardcode ใน wizard
+export function StepGeneral({
+  meta,
+  profile,
+}: {
+  meta: ServerMetadata;
+  profile: GameProfile;
+}) {
   const t = useT();
   const { budget } = meta;
-  // ชื่อ/ลิงก์ license ของเกมที่เลือกไว้ — ไม่ hardcode ใน wizard
-  const game = gameProfile(meta.game);
+  const game = profile;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{t("new.title")}</CardTitle>
-        <CardDescription>{t("new.subtitle")}</CardDescription>
+      <CardHeader className="flex-row items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element -- ปกเป็น SVG static ใน public/ */}
+        <img
+          src={game.coverSrc}
+          alt=""
+          className="h-11 w-16 shrink-0 rounded-md border object-cover"
+        />
+        <div className="grid gap-1">
+          <CardTitle>{t("new.titleForGame", { game: game.label })}</CardTitle>
+          <CardDescription>{t(game.descriptionKey)}</CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-5">
         <div className="grid gap-2">
@@ -50,31 +65,6 @@ export function StepGeneral({ meta }: { meta: ServerMetadata }) {
             onChange={(e) => meta.setName(e.target.value)}
           />
         </div>
-
-        {/* มีเกมเดียวก็ไม่มีอะไรให้เลือก — ซ่อนทิ้งแทนที่จะโชว์ dropdown ตัวเลือกเดียว */}
-        {meta.games.length > 1 && (
-          <div className="grid gap-2">
-            <Label>{t("new.game")}</Label>
-            <Select value={meta.game} onValueChange={meta.setGame}>
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    meta.gamesPending
-                      ? t("new.loadingGames")
-                      : t("new.selectGame")
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {meta.games.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         <div className="grid gap-2">
           <Label>{t("new.node")}</Label>

@@ -24,13 +24,21 @@ func runtimeImage(namespace, variant, version string) string {
 // imageSource = games.Definition.ImageSource — เกมนี้รันบน JVM ล้วน ไม่ต้อง build image เอง:
 // pull JRE ของ Adoptium ตาม java version ที่อยู่ใน tag ท้าย ':' แล้ว tag ซ้ำเป็นชื่อของเรา
 // (ผลลัพธ์เท่ากับ image ที่ build ด้วย make runtime-images เว้นแต่ HOME/CMD ที่ runner ตั้งเองอยู่แล้ว)
+//
+// ⚠️ รับเฉพาะ ref ที่เป็น runtime image **ของเกมนี้จริง ๆ** (`{ns}/runtime-java:{เลข java}`) —
+// ref ของเกมอื่นที่หลุดมาถึงที่นี่ (เช่นตอนหา definition ของ instance ไม่เจอแล้วตกมาที่เกม default)
+// ต้องคืน zero value เพื่อให้ EnsureRuntimeImage บอกตรง ๆ ว่าเตรียม image ให้ไม่ได้
+// ไม่ใช่ไปลาก tag ของเกมอื่นมาต่อเป็นชื่อ image ของ Adoptium (เช่น `eclipse-temurin:1-jre`)
 func imageSource(imageRef string) games.ImageSource {
-	idx := strings.LastIndex(imageRef, ":")
-	if idx < 0 || idx == len(imageRef)-1 {
+	repo, tag, ok := strings.Cut(imageRef, ":")
+	if !ok || tag == "" || !strings.HasSuffix(repo, "/"+imageName) {
+		return games.ImageSource{}
+	}
+	if _, err := strconv.Atoi(tag); err != nil {
 		return games.ImageSource{}
 	}
 	return games.ImageSource{
-		PullFrom: "docker.io/library/eclipse-temurin:" + imageRef[idx+1:] + "-jre",
+		PullFrom: "docker.io/library/eclipse-temurin:" + tag + "-jre",
 	}
 }
 

@@ -60,8 +60,18 @@ const (
 	capAccessManage = "access.manage"
 )
 
-// capabilityCatalog รายการ capability ที่ระบบรู้จักทั้งหมด (ลำดับคงที่สำหรับ UI)
-var capabilityCatalog = []capabilityMeta{
+// capGamesGroup = กลุ่ม capability "สร้าง server ของเกมนี้ได้ไหม" — action คือ **id ของเกม**
+// จึงเป็นกลุ่มเดียวใน catalog ที่รายการไม่คงที่: มาจาก registry ตอน runtime
+// (เพิ่มเกมใหม่ = ได้ capability ใหม่เองโดยไม่ต้องแก้ catalog — ดู CLAUDE.md กฎข้อ 0)
+const capGamesGroup = "games"
+
+// gameCapKey คืน key ของสิทธิ์สร้าง server สำหรับเกมหนึ่ง (เช่น "games.minecraft")
+func gameCapKey(gameID string) string { return capGamesGroup + "." + gameID }
+
+// baseCapabilityCatalog = capability ที่ไม่ผูกกับเกม (ลำดับคงที่สำหรับ UI)
+// catalog ตัวเต็มที่ใช้ validate/ส่งให้ web คือ API.capabilityCatalog() ซึ่งต่อท้ายด้วย
+// capability ต่อเกมจาก registry
+var baseCapabilityCatalog = []capabilityMeta{
 	{capUsersView, "users", "view", "View users", "Open the Users page and see panel accounts"},
 	{capUsersCreate, "users", "create", "Create users", "Create new panel accounts"},
 	{capUsersEdit, "users", "edit", "Edit users", "Change role, permissions and status of accounts"},
@@ -97,6 +107,24 @@ var capabilityCatalog = []capabilityMeta{
 
 	{capAccessView, "access", "view", "View access", "See who a server is shared with"},
 	{capAccessManage, "access", "manage", "Manage access", "Share a server with users and revoke access"},
+}
+
+// capabilityCatalog = catalog ตัวเต็มของ instance นี้ = base + 1 entry ต่อเกมที่ลงทะเบียนไว้
+// (label/description ของแถวเกมมาจาก Definition — ไม่มีชื่อเกมฝังอยู่ใน httpapi)
+func (a *API) capabilityCatalog() []capabilityMeta {
+	defs := a.games.All()
+	out := make([]capabilityMeta, 0, len(baseCapabilityCatalog)+len(defs))
+	out = append(out, baseCapabilityCatalog...)
+	for _, d := range defs {
+		out = append(out, capabilityMeta{
+			Key:         gameCapKey(d.ID),
+			Group:       capGamesGroup,
+			Action:      d.ID,
+			Label:       d.Label,
+			Description: "Create " + d.Label + " servers",
+		})
+	}
+	return out
 }
 
 // serverScopedCaps คือ subset ของ catalog ที่มีความหมาย "ต่อ server ตัวหนึ่ง" —
@@ -145,8 +173,8 @@ func dedupStrings(in []string) []string {
 	return out
 }
 
-func isKnownCapability(key string) bool {
-	for _, c := range capabilityCatalog {
+func (a *API) isKnownCapability(key string) bool {
+	for _, c := range a.capabilityCatalog() {
 		if c.Key == key {
 			return true
 		}
@@ -155,9 +183,9 @@ func isKnownCapability(key string) bool {
 }
 
 // validateCapabilities: ทุก key ต้องอยู่ใน catalog ไม่งั้น reject (400 invalid_capability)
-func validateCapabilities(keys []string) bool {
+func (a *API) validateCapabilities(keys []string) bool {
 	for _, k := range keys {
-		if !isKnownCapability(k) {
+		if !a.isKnownCapability(k) {
 			return false
 		}
 	}

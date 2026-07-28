@@ -278,14 +278,32 @@ export const en = {
   "files.errAgentTimeout": "The agent did not respond in time.",
   "files.errGeneric": "File operation failed.",
 
+  // ---------- game picker (หน้าก่อนเข้า wizard) ----------
+  "gamePicker.title": "Which game?",
+  "gamePicker.subtitle":
+    "Pick a game to set up — each one has its own setup steps.",
+  "gamePicker.minMemory": "From {mb} MB of memory",
+  "gamePicker.locked": "No access",
+  "gamePicker.lockedHint":
+    "You do not have permission to create servers for this game.",
+  "gamePicker.noGameAccess":
+    "No game is available to you yet — ask an admin for access to one.",
+  "gamePicker.changeGame": "Pick another game",
+  "gamePicker.backToGames": "Back to games",
+  "gamePicker.unknownGame": "This panel does not support that game.",
+  "gamePicker.failedLoad": "Failed to load the game list.",
+  "gamePicker.empty": "No game is registered on this panel.",
+  "game.minecraft.description":
+    "Sandbox survival and building. Vanilla, Paper, Fabric, Forge or a Velocity proxy.",
+  "game.zomboid.description":
+    "Isometric zombie survival sandbox. Installed from Steam, players are kept by the game itself.",
+
   // ---------- new server wizard ----------
   "new.title": "Create a new server",
+  "new.titleForGame": "New {game} server",
   "new.subtitle":
     "The server is provisioned on the node you pick and starts out stopped.",
   "new.name": "Server name",
-  "new.game": "Game",
-  "new.selectGame": "Select a game",
-  "new.loadingGames": "Loading games...",
   "new.node": "Node",
   "new.selectNode": "Select a node",
   "new.loadingNodes": "Loading nodes...",
@@ -430,6 +448,9 @@ export const en = {
   "users.accessCount": "{count} of {total} permissions",
   "users.statusSuspended": "Suspended",
   "users.permissions": "Permissions",
+  "users.gameAccess": "Games",
+  "users.gameAccessHint":
+    "Which games this account may create servers for — independent of the role preset (it also needs the Create servers permission).",
   "users.account": "Account",
   "users.rolePreset": "Role preset",
   "users.role.admin": "Admin",
@@ -556,6 +577,7 @@ export const en = {
   "permGroup.players": "Players",
   "permGroup.settings": "Settings",
   "permGroup.access": "Access",
+  "permGroup.games": "Games",
 
   "permAction.view": "View",
   "permAction.view_all": "View all",

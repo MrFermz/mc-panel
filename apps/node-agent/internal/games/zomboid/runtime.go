@@ -28,7 +28,13 @@ func runtimeImage(namespace, _, _ string) string {
 	return namespace + "/" + imageName + ":" + imageTag
 }
 
+// imagePlatform = สถาปัตยกรรมที่ image นี้ต้องเป็นเสมอ: SteamCMD ของ Valve เป็น binary x86
+// อย่างเดียว (ไม่เคยมี build ของ ARM) และ artifact ของเกมที่มันโหลดมาก็เป็น x86_64 —
+// node ที่เป็น ARM (Apple Silicon ฯลฯ) ต้อง build/รัน image นี้ผ่าน emulation
+// ไม่งั้น `dpkg --add-architecture i386` + apt-get update จะล้มตั้งแต่ตอน build
+const imagePlatform = "linux/amd64"
+
 // imageSource = games.Definition.ImageSource — ไม่มี base ให้ pull จึงให้ agent build เอง
 func imageSource(string) games.ImageSource {
-	return games.ImageSource{Dockerfile: runtimeDockerfile}
+	return games.ImageSource{Dockerfile: runtimeDockerfile, Platform: imagePlatform}
 }

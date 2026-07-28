@@ -43,6 +43,18 @@ export const CAPABILITY = {
 
 export type CapabilityKey = (typeof CAPABILITY)[keyof typeof CAPABILITY];
 
+// สิทธิ์ "สร้าง server ของเกมนี้" — key เป็น `games.{id}` โดย id มาจาก registry ฝั่ง backend
+// จึงเป็นกลุ่มเดียวที่ web ระบุรายการล่วงหน้าไม่ได้ (ต้องอ่านจาก /api/meta/capabilities)
+export const CAPABILITY_GROUP_GAMES = "games";
+
+export function gameCapability(gameId: string): string {
+  return `${CAPABILITY_GROUP_GAMES}.${gameId}`;
+}
+
+export function isGameCapability(key: string): boolean {
+  return key.startsWith(`${CAPABILITY_GROUP_GAMES}.`);
+}
+
 // effective capability = is_admin ครอบทุกอย่าง ไม่งั้นเช็คใน list
 export function hasCapability(
   user: Pick<User, "is_admin" | "capabilities"> | null | undefined,

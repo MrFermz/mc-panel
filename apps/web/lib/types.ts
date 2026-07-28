@@ -244,6 +244,8 @@ export const metaGameSchema = z.object({
   label: z.string(),
   min_memory_mb: z.number(),
   license_name: z.string(),
+  // can_create = สิทธิ์ของ user คนนี้กับเกมนี้ (servers.create AND games.{id})
+  can_create: z.boolean(),
 });
 export type MetaGame = z.infer<typeof metaGameSchema>;
 

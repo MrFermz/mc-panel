@@ -280,6 +280,13 @@ func (a *API) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_game", "unknown game: "+req.Game)
 		return
 	}
+	// สิทธิ์สร้างมีสองชั้น: `servers.create` (route ผูกไว้แล้ว) คือ "สร้าง server ได้ไหม"
+	// ส่วน `games.{id}` คือ "เกมไหนบ้าง" — ต้องผ่านทั้งคู่
+	if !hasCapability(user, gameCapKey(def.ID)) {
+		writeError(w, http.StatusForbidden, "forbidden",
+			"you do not have permission to create "+def.Label+" servers")
+		return
+	}
 
 	if req.Name == "" || len(req.Name) > 100 {
 		writeError(w, http.StatusBadRequest, "invalid_name", "name is required (max 100 characters)")

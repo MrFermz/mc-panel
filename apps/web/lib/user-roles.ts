@@ -1,4 +1,4 @@
-import { CAPABILITY } from "@/lib/capabilities";
+import { CAPABILITY, isGameCapability } from "@/lib/capabilities";
 import type { TranslationKey } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
@@ -89,13 +89,16 @@ function sameSet(a: string[], b: string[]): boolean {
 }
 
 // role ที่แสดง = preset ที่ตรงเป๊ะ ไม่งั้น custom (มีสิทธิ์แต่ไม่ตรง preset) / none (ไม่มีเลย)
+// สิทธิ์ต่อเกม (`games.*`) ไม่นับ — เป็นมิติที่ตั้งฉากกับ preset (ติ๊กแยกที่ GameAccessFields)
+// ไม่งั้นแค่ให้สิทธิ์เกมเพิ่มก็กลายเป็น "custom" ทั้งที่ role ยังเป็น operator อยู่
 export function matchPreset(isAdmin: boolean, capabilities: string[]): RoleKey {
   if (isAdmin) return "admin";
+  const featureCaps = capabilities.filter((k) => !isGameCapability(k));
   const match = ROLE_PRESETS.find(
-    (p) => !p.isAdmin && sameSet(p.capabilities, capabilities),
+    (p) => !p.isAdmin && sameSet(p.capabilities, featureCaps),
   );
   if (match) return match.key;
-  return capabilities.length === 0 ? "none" : "custom";
+  return featureCaps.length === 0 ? "none" : "custom";
 }
 
 export function detectRole(

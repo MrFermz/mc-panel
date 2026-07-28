@@ -1,12 +1,25 @@
 import type { TranslationKey } from "@/lib/i18n";
+import type { GameProfile, WizardStepKey } from "@/lib/games";
 
-// ลำดับ step ของ wizard — index ตรงกับ state `step` ของหน้า
-// step สุดท้ายเป็นตัวสั่งสร้างจริง: ก่อนหน้านั้นทุกอย่างเป็น draft ในหน้าเว็บล้วน
-export const WIZARD_STEPS = [
-  { key: "general", titleKey: "wizard.tabGeneral" },
-  { key: "properties", titleKey: "wizard.tabProperties" },
-  { key: "access", titleKey: "wizard.tabAccess" },
-  { key: "players", titleKey: "wizard.tabPlayers" },
-] as const satisfies ReadonlyArray<{ key: string; titleKey: TranslationKey }>;
+// catalog ของ step ที่ wizard รู้จัก — **ลำดับจริงเป็นของแต่ละเกม** (GameProfile.wizardSteps)
+// ที่นี่บอกแค่ว่าแต่ละ step ชื่ออะไร เพิ่ม step ใหม่ = เพิ่มไฟล์ step-*.tsx + แถวที่นี่
+// แล้วใส่ key ลงใน wizardSteps ของเกมที่ต้องใช้
+export const STEP_TITLE_KEYS: Record<WizardStepKey, TranslationKey> = {
+  general: "wizard.tabGeneral",
+  properties: "wizard.tabProperties",
+  access: "wizard.tabAccess",
+  players: "wizard.tabPlayers",
+};
 
-export const LAST_STEP = WIZARD_STEPS.length - 1;
+export interface WizardStep {
+  key: WizardStepKey;
+  titleKey: TranslationKey;
+}
+
+// step ของเกมหนึ่ง ตามลำดับที่ profile กำหนด — step สุดท้ายคือตัวสั่งสร้างจริง
+export function wizardSteps(profile: GameProfile): WizardStep[] {
+  return profile.wizardSteps.map((key) => ({
+    key,
+    titleKey: STEP_TITLE_KEYS[key],
+  }));
+}

@@ -3,24 +3,25 @@
 import * as React from "react";
 import { CheckIcon } from "lucide-react";
 import { useT } from "@/lib/i18n";
-import {
-  LAST_STEP,
-  WIZARD_STEPS,
-} from "@/components/server/new-server/steps";
+import type { WizardStep } from "@/components/server/new-server/steps";
 import { cn } from "@/lib/utils";
 
 // ตัวบอกลำดับ step — horizontal บน desktop (โชว์ชื่อ), compact บน mobile (โชว์เลข)
+// รายการ step มาจากเกมที่เลือกไว้ ไม่ใช่ค่าคงที่ของ wizard
 export function StepIndicator({
+  steps,
   current,
   onSelect,
 }: {
+  steps: WizardStep[];
   current: number;
   onSelect: (step: number) => void;
 }) {
   const t = useT();
+  const last = steps.length - 1;
   return (
     <ol className="flex items-center">
-      {WIZARD_STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const done = i < current;
         const active = i === current;
         return (
@@ -53,7 +54,7 @@ export function StepIndicator({
                 </span>
               </button>
             </li>
-            {i < LAST_STEP && (
+            {i < last && (
               <span
                 className={cn(
                   "mx-2 h-px flex-1 sm:mx-3",

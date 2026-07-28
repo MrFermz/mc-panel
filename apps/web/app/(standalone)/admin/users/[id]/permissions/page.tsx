@@ -25,6 +25,7 @@ import { UserIdentity } from "@/components/user/user-identity";
 import { UserDetailTabs } from "@/components/user/user-detail-tabs";
 import {
   FieldGroupLabel,
+  GameAccessFields,
   PermissionGroups,
   RolePresetPicker,
 } from "@/components/user/permission-fields";
@@ -181,6 +182,17 @@ export default function UserPermissionsPage() {
             <p className="text-muted-foreground mt-2 text-xs">
               {isAdmin ? t("users.adminAllPermissions") : t("users.presetHint")}
             </p>
+          </div>
+
+          <div>
+            <FieldGroupLabel>{t("users.gameAccess")}</FieldGroupLabel>
+            <GameAccessFields
+              catalog={catalog}
+              isAdmin={isAdmin}
+              capabilities={selected}
+              disabled={locked}
+              onChange={setSelected}
+            />
           </div>
 
           <div>

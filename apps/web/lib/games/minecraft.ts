@@ -37,6 +37,10 @@ function highlightConsoleMessage(msg: string): string | null {
 export const minecraft: GameProfile = {
   id: "minecraft",
   label: "Minecraft",
+  descriptionKey: "game.minecraft.description",
+  coverSrc: "/games/minecraft.svg",
+  // เกมนี้มีครบทุก step: ไฟล์ config แก้ผ่าน UI ได้ และ panel เป็นเจ้าของ whitelist.json
+  wizardSteps: ["general", "properties", "access", "players"],
   licenseName: "Minecraft EULA",
   licenseUrl: "https://www.minecraft.net/en-us/eula",
   // ต้อง white-list=true ใน server.properties ถึงจะ enforce จริง

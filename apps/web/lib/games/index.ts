@@ -7,7 +7,7 @@ import { minecraft } from "@/lib/games/minecraft";
 import { zomboid } from "@/lib/games/zomboid";
 import type { GameProfile } from "@/lib/games/types";
 
-export type { GameProfile } from "@/lib/games/types";
+export type { GameProfile, WizardStepKey } from "@/lib/games/types";
 
 const PROFILES: Record<string, GameProfile> = {
   [minecraft.id]: minecraft,
@@ -23,4 +23,11 @@ export const DEFAULT_GAME_ID = minecraft.id;
 // แทนที่จะพัง เพราะ UI ส่วนใหญ่ยังใช้งานได้โดยไม่ต้องรู้จักเกม
 export function gameProfile(gameId?: string | null): GameProfile {
   return (gameId ? PROFILES[gameId] : undefined) ?? minecraft;
+}
+
+// knownGameProfile คืน undefined เมื่อ web ยังไม่รู้จักเกมนั้น — ใช้ที่ซึ่ง fallback เงียบ ๆ
+// เป็นข้อมูลผิด (หน้าเลือกเกมจะโชว์ปก/คำอธิบายของ Minecraft ให้เกมอื่น) และที่ซึ่งต้องรู้ว่า
+// เดินฟอร์มของเกมนี้ได้จริงไหม
+export function knownGameProfile(gameId: string): GameProfile | undefined {
+  return PROFILES[gameId];
 }

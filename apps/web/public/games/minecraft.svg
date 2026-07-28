@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180" role="img" aria-hidden="true">
+  <!-- ภาพปกของเกมในหน้าเลือกเกม — วาดเองทั้งหมด (ห้ามใช้ logo/asset ของเกมจริง) -->
+  <defs>
+    <linearGradient id="mc-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d79b8" />
+      <stop offset="1" stop-color="#9ed0ea" />
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#mc-sky)" />
+  <circle cx="264" cy="40" r="16" fill="#fdf6cf" opacity="0.9" />
+  <g fill="#ffffff" opacity="0.35">
+    <rect x="36" y="34" width="46" height="9" rx="4" />
+    <rect x="52" y="47" width="34" height="9" rx="4" />
+    <rect x="228" y="80" width="40" height="9" rx="4" />
+  </g>
+
+  <!-- ก้อนบล็อก isometric เรียงเป็นที่ราบ 2x2: หน้าบนหญ้า ด้านข้างดิน -->
+  <g>
+    <!-- แถวหลัง -->
+    <path d="M120 70l40-20 40 20-40 20z" fill="#7cb257" />
+    <path d="M120 70l40 20v26l-40-20z" fill="#8a5a33" />
+    <path d="M200 70l-40 20v26l40-20z" fill="#6d4526" />
+    <!-- ซ้าย -->
+    <path d="M80 90l40-20 40 20-40 20z" fill="#6aa84f" />
+    <path d="M80 90l40 20v26l-40-20z" fill="#7d5130" />
+    <path d="M160 90l-40 20v26l40-20z" fill="#603c22" />
+    <!-- ขวา -->
+    <path d="M160 90l40-20 40 20-40 20z" fill="#6aa84f" />
+    <path d="M160 90l40 20v26l-40-20z" fill="#7d5130" />
+    <path d="M240 90l-40 20v26l40-20z" fill="#603c22" />
+    <!-- แถวหน้า -->
+    <path d="M120 110l40-20 40 20-40 20z" fill="#7cb257" />
+    <path d="M120 110l40 20v26l-40-20z" fill="#8a5a33" />
+    <path d="M200 110l-40 20v26l40-20z" fill="#6d4526" />
+  </g>
+</svg>

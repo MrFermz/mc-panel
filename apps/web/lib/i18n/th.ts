@@ -279,13 +279,29 @@ export const th: Dictionary = {
   "files.errAgentTimeout": "เอเจนต์ไม่ตอบสนองภายในเวลาที่กำหนด",
   "files.errGeneric": "ดำเนินการกับไฟล์ไม่สำเร็จ",
 
+  // ---------- game picker (หน้าก่อนเข้า wizard) ----------
+  "gamePicker.title": "จะสร้างเซิร์ฟเวอร์เกมอะไร",
+  "gamePicker.subtitle": "เลือกเกมก่อน — แต่ละเกมมีขั้นตอนการตั้งค่าไม่เหมือนกัน",
+  "gamePicker.minMemory": "เริ่มที่ {mb} MB",
+  "gamePicker.locked": "ไม่มีสิทธิ์",
+  "gamePicker.lockedHint": "คุณไม่มีสิทธิ์สร้างเซิร์ฟเวอร์ของเกมนี้",
+  "gamePicker.noGameAccess":
+    "ยังไม่มีเกมไหนที่คุณสร้างได้ — ขอสิทธิ์เกมที่ต้องการจากผู้ดูแลระบบ",
+  "gamePicker.changeGame": "เลือกเกมอื่น",
+  "gamePicker.backToGames": "กลับไปหน้าเลือกเกม",
+  "gamePicker.unknownGame": "ระบบนี้ไม่รองรับเกมดังกล่าว",
+  "gamePicker.failedLoad": "โหลดรายการเกมไม่สำเร็จ",
+  "gamePicker.empty": "ยังไม่มีเกมที่ลงทะเบียนไว้ในระบบนี้",
+  "game.minecraft.description":
+    "เกมแซนด์บ็อกซ์เอาชีวิตรอดและสร้างสิ่งก่อสร้าง เลือกได้ทั้ง Vanilla, Paper, Fabric, Forge หรือพร็อกซี Velocity",
+  "game.zomboid.description":
+    "เกมเอาชีวิตรอดจากซอมบี้มุมมองไอโซเมตริก ติดตั้งผ่าน Steam และตัวเกมเก็บบัญชีผู้เล่นไว้เอง",
+
   // ---------- new server wizard ----------
   "new.title": "สร้างเซิร์ฟเวอร์ใหม่",
+  "new.titleForGame": "สร้างเซิร์ฟเวอร์ {game}",
   "new.subtitle": "เซิร์ฟเวอร์จะถูกจัดเตรียมบนโหนดที่เลือกและเริ่มต้นในสถานะหยุด",
   "new.name": "ชื่อเซิร์ฟเวอร์",
-  "new.game": "เกม",
-  "new.selectGame": "เลือกเกม",
-  "new.loadingGames": "กำลังโหลดรายการเกม...",
   "new.node": "โหนด",
   "new.selectNode": "เลือกโหนด",
   "new.loadingNodes": "กำลังโหลดโหนด...",
@@ -429,6 +445,9 @@ export const th: Dictionary = {
   "users.accessCount": "{count} จาก {total} สิทธิ์",
   "users.statusSuspended": "ระงับใช้งาน",
   "users.permissions": "สิทธิ์",
+  "users.gameAccess": "เกม",
+  "users.gameAccessHint":
+    "บัญชีนี้สร้างเซิร์ฟเวอร์ของเกมไหนได้บ้าง — แยกจากบทบาทที่เลือก (ต้องมีสิทธิ์สร้างเซิร์ฟเวอร์ด้วย)",
   "users.account": "ข้อมูลบัญชี",
   "users.rolePreset": "บทบาทสำเร็จรูป",
   "users.role.admin": "ผู้ดูแลระบบ",
@@ -550,6 +569,7 @@ export const th: Dictionary = {
   "permGroup.players": "ผู้เล่น",
   "permGroup.settings": "ตั้งค่า",
   "permGroup.access": "สิทธิ์เข้าถึง",
+  "permGroup.games": "เกม",
 
   "permAction.view": "ดู",
   "permAction.view_all": "ดูทั้งหมด",
