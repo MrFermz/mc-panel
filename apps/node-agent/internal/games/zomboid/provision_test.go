@@ -1,6 +1,7 @@
 package zomboid
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -47,6 +48,20 @@ func TestSteamCmdNeverLogsIn(t *testing.T) {
 				t.Fatalf("steamcmd must only log in anonymously, got %q", args[i+1])
 			}
 		}
+	}
+}
+
+// steamcmd มีบั๊กที่รู้จักแล้ว (login anonymous ผ่านแต่ app_update ตอบ "Missing configuration")
+// runSteamCmd ต้องรีทรายเฉพาะ error ที่มี signature นี้ — error อื่น (ดิสก์เต็ม ฯลฯ) ห้ามรีทราย
+func TestSteamCmdTransientSignature(t *testing.T) {
+	transient := fmt.Errorf("steamcmd exited with code 8: ERROR! Failed to install app '380870' (Missing configuration)")
+	if !strings.Contains(transient.Error(), steamCmdTransientSignature) {
+		t.Errorf("known transient steamcmd error must match signature %q: %v", steamCmdTransientSignature, transient)
+	}
+
+	permanent := fmt.Errorf("steamcmd exited with code 1: No space left on device")
+	if strings.Contains(permanent.Error(), steamCmdTransientSignature) {
+		t.Errorf("unrelated steamcmd error must not match transient signature: %v", permanent)
 	}
 }
 

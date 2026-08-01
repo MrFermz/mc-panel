@@ -39,7 +39,19 @@ const (
 
 	// steamInstallTimeout — app นี้ใหญ่หลาย GB. เพดานนี้ต้องไม่เกิน reapThreshold ของ
 	// control-plane (30 นาที) ไม่งั้น job ถูก reap เป็น failed ทั้งที่ agent ยังโหลดอยู่
+	// (ครอบทุก retry ด้านล่างรวมกัน ไม่ใช่ต่อครั้ง)
 	steamInstallTimeout = 29 * time.Minute
+
+	// steamCmdMaxAttempts/steamCmdRetryDelay — steamcmd มีบั๊กที่รู้กันว่าล้มเทียม (login
+	// anonymous สำเร็จแต่ตามด้วย "Missing configuration" ตอน app_update) แล้วรันซ้ำก็ผ่านทันที
+	// (ยืนยันจาก AMP/CubeCoders support: "hit update again, it's a steamcmd bug") — ต้องรีทราย
+	// เฉพาะ error ที่ตรง signature นี้เท่านั้น ไม่ใช่ทุก error (ดิสก์เต็ม/เน็ตเวิร์คพังจริงต้อง fail ตรง ๆ)
+	// retry ราคาถูกเพราะ ~/Steam อยู่ใน bind mount เดิม (env.Dir) ครั้งถัดไปจึง resume ไม่โหลดซ้ำ
+	steamCmdMaxAttempts = 3
+	steamCmdRetryDelay  = 5 * time.Second
+
+	// steamCmdTransientSignature = ข้อความจาก steamcmd เวลาเจอบั๊กข้างบน
+	steamCmdTransientSignature = "Missing configuration"
 )
 
 // branches = Steam branch ที่ยอมให้เลือกเป็น `game_version` — ต้องเป็น allow-list เสมอ
@@ -96,10 +108,37 @@ func steamCmdArgs(branch string) []string {
 	return append(args, "validate", "+quit")
 }
 
-// runSteamCmd รัน steamcmd ใน one-off container ที่ bind เฉพาะ dir ของ server ตัวนี้
+// runSteamCmd รัน steamcmd ใน one-off container ที่ bind เฉพาะ dir ของ server ตัวนี้ —
+// รีทรายอัตโนมัติเมื่อเจอบั๊กที่รู้จักแล้วของ steamcmd (ดู steamCmdTransientSignature)
 func runSteamCmd(ctx context.Context, env games.ProvisionEnv, image string) error {
 	name := "gm-provision-" + env.ServerID
-	// container ค้างจากรอบก่อนที่ crash — ลบทิ้งก่อน (idempotent)
+
+	wctx, cancel := context.WithTimeout(ctx, steamInstallTimeout)
+	defer cancel()
+
+	var lastErr error
+	for attempt := 1; attempt <= steamCmdMaxAttempts; attempt++ {
+		lastErr = runSteamCmdOnce(ctx, wctx, env, image, name)
+		if lastErr == nil {
+			return nil
+		}
+		if attempt == steamCmdMaxAttempts || !strings.Contains(lastErr.Error(), steamCmdTransientSignature) {
+			return lastErr
+		}
+		log.Printf("steamcmd hit known transient bug, retrying (%d/%d): server=%s app=%s",
+			attempt, steamCmdMaxAttempts, env.ServerID, steamAppID)
+		select {
+		case <-time.After(steamCmdRetryDelay):
+		case <-wctx.Done():
+			return lastErr
+		}
+	}
+	return lastErr
+}
+
+// runSteamCmdOnce = หนึ่งรอบของ container ที่รัน steamcmd แล้วรอจนจบ
+func runSteamCmdOnce(ctx, wctx context.Context, env games.ProvisionEnv, image, name string) error {
+	// container ค้างจากรอบก่อน (crash หรือ attempt ก่อนหน้าที่ล้ม) — ลบทิ้งก่อนเสมอ (idempotent)
 	if err := env.Docker.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); err != nil && !client.IsErrNotFound(err) {
 		return fmt.Errorf("remove stale provision container: %w", err)
 	}
@@ -137,8 +176,6 @@ func runSteamCmd(ctx context.Context, env games.ProvisionEnv, image string) erro
 	log.Printf("steamcmd running: server=%s app=%s branch=%s image=%s",
 		env.ServerID, steamAppID, env.Version, image)
 
-	wctx, cancel := context.WithTimeout(ctx, steamInstallTimeout)
-	defer cancel()
 	waitCh, errCh := env.Docker.ContainerWait(wctx, name, container.WaitConditionNotRunning)
 	select {
 	case res := <-waitCh:
